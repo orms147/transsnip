@@ -1,0 +1,45 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+
+build/
+dist/
+*.egg-info/
+*.egg
+
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+.vscode/
+.idea/
+*.swp
+
+# Local config (API keys are in keyring, but cache/logs/settings persist locally)
+%APPDATA%/transsnip/
+.transsnip-local/
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Claude Code local overrides (user-specific permission cache, not shared)
+.claude/settings.local.json
+
+# Mentor docs — keep local only, not pushed to the public/team repo
+docs/
+
+# Secrets — keys, env files (we use Windows Credential Manager via keyring,
+# but ignore these belt-and-braces in case a dev paste-tests with a .env)
+.env
+.env.*
+*.pem
+*.key
+secrets.json

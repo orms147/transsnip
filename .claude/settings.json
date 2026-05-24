@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Edit(/.claude/skills/add-translator-provider/**)",
+      "Edit(/.claude/skills/add-ocr-engine/**)",
+      "Edit(/.claude/skills/debug-overlay/**)",
+      "Edit(/.claude/skills/test-mode-flow/**)",
+      "Edit(/.claude/skills/translate-prompt-tuning/**)",
+      "Edit(/.claude/skills/write-mentor-doc/**)",
+      "Bash(python -c ' *)"
+    ]
+  }
+}
