@@ -32,7 +32,9 @@ def main() -> int:
 
     hotkeys = HotkeyManager(parent=app)
     hotkeys.triggered.connect(controller.handle_hotkey)
-    hotkeys.apply_defaults()
+    # Hand the manager to the controller so it can rebind on settings-save.
+    controller.set_hotkey_manager(hotkeys)
+    hotkeys.apply_from_settings(controller.settings.hotkeys)
     app.aboutToQuit.connect(hotkeys.unbind_all)
 
     return app.exec()

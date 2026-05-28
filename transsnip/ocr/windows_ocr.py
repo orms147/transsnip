@@ -115,7 +115,15 @@ class WindowsOCR(OCREngine):
             if engine is None:
                 raise OCRError(f"Failed to create OcrEngine for '{lang_tag}'")
 
-        bitmap = await self._pil_to_software_bitmap(_preprocess(image))
+        preprocessed = _preprocess(image)
+        # _preprocess upscales the image (≥2000px wide) to help recognition,
+        # so winsdk's bounding rects come back in PREPROCESSED-image coords.
+        # The caller passed `image` and expects bboxes relative to THAT —
+        # otherwise downstream features (fullscreen overlay placing boxes on
+        # screen) would draw at the wrong location. Scale every coordinate
+        # back by the same ratio we upscaled by.
+        scale = preprocessed.width / image.width if image.width else 1.0
+        bitmap = await self._pil_to_software_bitmap(preprocessed)
         result = await engine.recognize_async(bitmap)
 
         # Emit ONE block per detected line, with the words within each line
@@ -136,10 +144,11 @@ class WindowsOCR(OCREngine):
             for word in words:
                 rect = word.bounding_rect
                 texts.append(word.text or "")
-                xs.append(int(rect.x))
-                ys.append(int(rect.y))
-                x_rights.append(int(rect.x + rect.width))
-                y_bots.append(int(rect.y + rect.height))
+                # Scale each corner back to original image coords.
+                xs.append(int(rect.x / scale))
+                ys.append(int(rect.y / scale))
+                x_rights.append(int((rect.x + rect.width) / scale))
+                y_bots.append(int((rect.y + rect.height) / scale))
             line_text = _join_blocks_smart(texts).strip()
             if not line_text:
                 continue

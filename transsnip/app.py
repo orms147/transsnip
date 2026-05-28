@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 import logging
+import re
 
 from PIL import Image
 from PySide6.QtCore import QObject, QRect, QThreadPool, QTimer, Slot
+from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from transsnip.capture.region_selector import RegionSelector
-from transsnip.capture.screen import capture_rect
-from transsnip.config.settings import load_settings
+from transsnip.capture.screen import active_monitor_logical_rect, capture_rect
+from transsnip.config.settings import Settings, get_preset, load_settings
 from transsnip.display.floating_popup import FloatingPopup
-from transsnip.ocr.base import OCRResult
+from transsnip.display.inline_overlay import InlineOverlay
+from transsnip.ocr.base import OCRBlock, OCRResult
 from transsnip.ocr.registry import OCRPipeline
 from transsnip.ocr.registry import default_pipeline as default_ocr_pipeline
 from transsnip.ocr.worker import OCRWorker
@@ -53,11 +56,7 @@ class AppController(QObject):
         self._translation_pipeline = translation_pipeline or build_pipeline(
             self._settings.translate.provider
         )
-        self._translation_ctx = TranslationContext(
-            target_lang=self._settings.translate.target_lang,
-            source_lang=self._settings.translate.source_lang,
-            preset_name=self._settings.translate.preset_name,
-        )
+        self._translation_ctx = _build_translation_ctx(self._settings)
 
         self._region_selector = RegionSelector()
         self._region_selector.selected.connect(self._on_region_selected)
@@ -66,7 +65,29 @@ class AppController(QObject):
         self._popup = FloatingPopup()
         self._popup.settings_requested.connect(self._open_settings)
 
+        self._overlay = InlineOverlay()
+        # Per-fullscreen-session state: kept on `self` because OCR/translation
+        # workers report back via signals, and we need to remember which blocks
+        # and which monitor to paint when the translation eventually lands.
+        self._fullscreen_blocks: list[OCRBlock] = []
+        self._fullscreen_monitor_rect: QRect | None = None
+
+        # Set later via `set_hotkey_manager()` — main() owns the manager so it
+        # can wire `triggered` to `handle_hotkey` before we get a reference. We
+        # only need it to rebind on settings-save.
+        self._hotkey_manager = None
+
         self._tray.settings_requested.connect(self._open_settings)
+
+    @property
+    def settings(self):
+        """Public accessor for the loaded settings — main() uses this to bind
+        initial hotkeys without having to re-call load_settings() itself."""
+        return self._settings
+
+    def set_hotkey_manager(self, manager) -> None:
+        """Wire the HotkeyManager so settings-save can rebind hotkeys."""
+        self._hotkey_manager = manager
 
     # ── Hotkey dispatch ─────────────────────────────────────────────────────
 
@@ -79,7 +100,15 @@ class AppController(QObject):
             self._popup.hide_popup()
             self._region_selector.start()
         elif action_id == "fullscreen_translate":
-            self._notify("Full-screen translate chưa wire — sẽ build ở milestone 8.")
+            # Alt+F toggles the inline overlay: if one is visible, dismiss it;
+            # otherwise start a fresh capture-OCR-translate cycle.
+            if self._overlay.isVisible():
+                self._overlay.close_overlay()
+                return
+            # Same reason as region mode: hide the region popup if it's open
+            # so its pixels can't end up in the fullscreen screenshot.
+            self._popup.hide_popup()
+            self._start_fullscreen_translate()
         elif action_id == "video_subtitle_translate":
             self._notify("Video subtitle chưa wire — Phase 2.")
         else:
@@ -179,6 +208,126 @@ class AppController(QObject):
     def _on_translation_failed(self, error: str) -> None:
         self._popup.show_error(f"Translation — {error}")
 
+    # ── Full-screen translate flow ──────────────────────────────────────────
+    #
+    # Flow: hotkey → capture active monitor → OCR (multi-block) → batch all
+    # block texts into one prompt with numeric prefixes [1], [2], ... → submit
+    # to text translator → parse output back per index → render InlineOverlay
+    # with one opaque box per OCR bbox.
+    #
+    # We deliberately stay on the TEXT translation path (`pipeline.translate`)
+    # even if the active provider supports vision: vision providers return a
+    # single blob with no bbox info, so we couldn't position overlay boxes.
+    # Forcing text mode keeps the bbox→overlay coordinate chain intact for
+    # every provider.
+
+    def _start_fullscreen_translate(self) -> None:
+        monitor_rect = active_monitor_logical_rect()
+        log.info("Fullscreen translate on monitor %s", monitor_rect)
+        self._tray.showMessage(
+            "TransSnip",
+            "Đang OCR + dịch toàn màn hình…",
+            QSystemTrayIcon.MessageIcon.Information,
+            1500,
+        )
+        try:
+            image = capture_rect(monitor_rect)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("Fullscreen capture failed")
+            self._notify(f"Capture lỗi: {exc}")
+            return
+        log.debug("Fullscreen captured: %dx%d", image.width, image.height)
+        self._fullscreen_monitor_rect = monitor_rect
+        self._submit_fullscreen_ocr(image, lang=self._settings.translate.source_lang)
+
+    def _submit_fullscreen_ocr(self, image: Image.Image, *, lang: str | None) -> None:
+        worker = OCRWorker(image, lang, self._ocr_pipeline)
+        worker.signals.done.connect(self._on_fullscreen_ocr_done)
+        worker.signals.failed.connect(self._on_fullscreen_ocr_failed)
+        QThreadPool.globalInstance().start(worker)
+
+    @Slot(object)
+    def _on_fullscreen_ocr_done(self, result: OCRResult) -> None:
+        blocks = [b for b in result.blocks if b.text.strip()]
+        if not blocks:
+            self._notify("Fullscreen: không tìm thấy text trên màn hình.")
+            self._fullscreen_monitor_rect = None
+            return
+        log.info(
+            "Fullscreen OCR (%s): %d blocks, %d chars total",
+            result.engine, len(blocks), sum(len(b.text) for b in blocks),
+        )
+        self._fullscreen_blocks = blocks
+
+        # Numbered batch — one API call for the whole screen. Robust if the
+        # translator preserves the [N] markers (Claude/OpenRouter/Gemini do
+        # this fine; Google Translate sometimes re-orders the brackets but
+        # `_parse_numbered_batch` salvages whatever it gets back).
+        batch = "\n".join(f"[{i + 1}] {b.text}" for i, b in enumerate(blocks))
+        self._submit_fullscreen_translation(batch)
+
+    @Slot(str)
+    def _on_fullscreen_ocr_failed(self, error: str) -> None:
+        log.warning("Fullscreen OCR failed: %s", error)
+        self._notify(f"OCR fullscreen lỗi: {error}")
+        self._fullscreen_blocks = []
+        self._fullscreen_monitor_rect = None
+
+    def _submit_fullscreen_translation(self, batch: str) -> None:
+        worker = TranslationWorker(batch, self._translation_ctx, self._translation_pipeline)
+        worker.signals.done.connect(self._on_fullscreen_translation_done)
+        worker.signals.failed.connect(self._on_fullscreen_translation_failed)
+        QThreadPool.globalInstance().start(worker)
+
+    @Slot(object)
+    def _on_fullscreen_translation_done(self, result: TranslationResult) -> None:
+        blocks = self._fullscreen_blocks
+        monitor_rect = self._fullscreen_monitor_rect
+        self._fullscreen_blocks = []
+        self._fullscreen_monitor_rect = None
+        if not blocks or monitor_rect is None:
+            log.debug("Fullscreen translation arrived but state was cleared")
+            return
+
+        translations = _parse_numbered_batch(result.translated_text, len(blocks))
+
+        # Convert each block's bbox from CAPTURED-image pixel coords (which the
+        # OCR engine returned and we already de-scaled for the preprocessor)
+        # into LOGICAL coords relative to the monitor's top-left. The overlay's
+        # geometry IS the monitor rect, so monitor-local = overlay-local.
+        screen = QGuiApplication.screenAt(monitor_rect.center()) \
+            or QGuiApplication.primaryScreen()
+        dpr = screen.devicePixelRatio() if screen is not None else 1.0
+
+        overlay_blocks: list[tuple[QRect, str]] = []
+        for block, text in zip(blocks, translations):
+            text = text.strip()
+            if not text:
+                continue
+            x, y, w, h = block.bbox
+            overlay_blocks.append((
+                QRect(int(x / dpr), int(y / dpr), int(w / dpr), int(h / dpr)),
+                text,
+            ))
+
+        if not overlay_blocks:
+            log.warning("Fullscreen: translation returned nothing usable")
+            self._notify("Fullscreen: kết quả dịch rỗng, vui lòng thử lại.")
+            return
+
+        log.info(
+            "Fullscreen translate done (%s, cached=%s): %d/%d blocks rendered",
+            result.provider, result.cached, len(overlay_blocks), len(blocks),
+        )
+        self._overlay.show_for_monitor(monitor_rect, overlay_blocks)
+
+    @Slot(str)
+    def _on_fullscreen_translation_failed(self, error: str) -> None:
+        log.warning("Fullscreen translation failed: %s", error)
+        self._notify(f"Dịch fullscreen lỗi: {error}")
+        self._fullscreen_blocks = []
+        self._fullscreen_monitor_rect = None
+
     # ── Settings ────────────────────────────────────────────────────────────
 
     @Slot()
@@ -194,11 +343,12 @@ class AppController(QObject):
     def _on_settings_saved(self) -> None:
         self._settings = load_settings()
         self._translation_pipeline = build_pipeline(self._settings.translate.provider)
-        self._translation_ctx = TranslationContext(
-            target_lang=self._settings.translate.target_lang,
-            source_lang=self._settings.translate.source_lang,
-            preset_name=self._settings.translate.preset_name,
-        )
+        self._translation_ctx = _build_translation_ctx(self._settings)
+        # Rebind hotkeys in case the user changed them. The manager unbinds the
+        # old combo before binding the new one, so this is safe to call even
+        # when nothing changed.
+        if self._hotkey_manager is not None:
+            self._hotkey_manager.apply_from_settings(self._settings.hotkeys)
         log.info(
             "Settings reloaded — provider=%s target=%s",
             self._settings.translate.provider,
@@ -221,3 +371,55 @@ class AppController(QObject):
             QSystemTrayIcon.MessageIcon.Information,
             timeout_ms,
         )
+
+
+def _build_translation_ctx(settings: Settings) -> TranslationContext:
+    """Flatten `settings.translate` + active preset into a single
+    TranslationContext object the providers consume.
+
+    The active preset's `system_prompt` + `glossary` get injected here — that
+    way all callers (region popup, fullscreen overlay, vision worker) share
+    the same context without each having to look up the preset themselves.
+    `get_preset()` returns a blank preset if `preset_name` is stale, so the
+    fallback is "translate plainly" instead of crashing.
+    """
+    preset = get_preset(settings, settings.translate.preset_name)
+    return TranslationContext(
+        target_lang=settings.translate.target_lang,
+        source_lang=settings.translate.source_lang,
+        preset_name=preset.name,
+        system_prompt=preset.system_prompt,
+        glossary=preset.glossary,
+    )
+
+
+_BATCH_MARKER = re.compile(r"\[(\d+)\]\s*", re.MULTILINE)
+
+
+def _parse_numbered_batch(output: str, n: int) -> list[str]:
+    """Split a `[1] ... [2] ... [3] ...` batch translation back into n strings.
+
+    We feed the translator a single prompt with each OCR block prefixed by a
+    `[N]` marker so we can keep N→1 (one API call, single context window) and
+    still map results back to their bbox. The translator MOSTLY preserves the
+    markers, but real providers misbehave in predictable ways:
+
+    - Google Free occasionally re-wraps `[N]` as `( N )` or `「N」` — we won't
+      match these and the affected block gets dropped from the overlay.
+    - Some LLMs add commentary before the first marker (e.g. "Sure, here are
+      the translations:") — anything before `[1]` is ignored.
+    - Numbering can come back out of order; we map by the integer, not order.
+
+    Output: list of length `n` where index `i` holds the translation of input
+    block `i` (or empty string if the translator skipped that index).
+    """
+    matches = list(_BATCH_MARKER.finditer(output))
+    result = [""] * n
+    for i, m in enumerate(matches):
+        idx = int(m.group(1)) - 1
+        if not (0 <= idx < n):
+            continue
+        start = m.end()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(output)
+        result[idx] = output[start:end].strip()
+    return result

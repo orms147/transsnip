@@ -71,3 +71,22 @@ class HotkeyManager(QObject):
     def apply_defaults(self) -> None:
         for action_id, hotkey in DEFAULT_BINDINGS.items():
             self.bind(action_id, hotkey)
+
+    def apply_from_settings(self, hotkeys) -> None:
+        """Rebind every action from a `HotkeySettings` instance.
+
+        Replaces all existing bindings — call this on app start and again
+        whenever the user saves new bindings in Settings. Empty strings are
+        skipped so a user can deliberately disable a hotkey.
+
+        `hotkeys` is typed loosely (no `HotkeySettings` import here) to avoid
+        a circular import between the hotkeys and config layers.
+        """
+        self.unbind_all()
+        for action_id in DEFAULT_BINDINGS:
+            value = getattr(hotkeys, action_id, "") or ""
+            value = value.strip().lower()
+            if not value:
+                log.info("Hotkey %s left unbound (user-disabled)", action_id)
+                continue
+            self.bind(action_id, value)
