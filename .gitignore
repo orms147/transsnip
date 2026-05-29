@@ -12,6 +12,10 @@ dist/
 *.egg-info/
 *.egg
 
+# PyInstaller / packaging build logs
+build_log.txt
+*.log
+
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
