@@ -45,6 +45,11 @@ class TranslateSettings(BaseModel):
     preset_name: str = "default"
     openrouter_model: str = "google/gemini-2.0-flash-001"
 
+    # English-source enhancements: IPA shown inline under each word + a 🔊
+    # button next to source text using Edge TTS. Off by default to avoid
+    # surprising users; only kicks in when source_lang == "en" anyway.
+    phonetic_audio_en: bool = False
+
 
 class PresetSettings(BaseModel):
     """A named translation context — system prompt + glossary applied on top of
@@ -105,13 +110,54 @@ def _default_presets() -> list[PresetSettings]:
     ]
 
 
+class DisplaySettings(BaseModel):
+    """Theme + popup + overlay visual preferences (Settings → Display tab).
+
+    All optional from the user's standpoint — defaults match the Cobalt
+    design's recommended values. Theme `auto` follows Windows registry
+    `AppsUseLightTheme` (see `ui/theme.py`).
+    """
+
+    theme_mode: str = "auto"            # "dark" / "light" / "auto"
+    popup_default_width: int = 460       # px, used by FloatingPopup
+    popup_font_scale_max: float = 2.0    # cap on font scaling when user resizes
+    click_outside_close: bool = True
+    pin_persist: bool = False            # restore pinned popup next session
+    show_footer_hint: bool = True
+    # Fullscreen overlay only supports the simple "opaque box" style now
+    # (per user feedback the per-block accent border / numbered badges /
+    # toolbar were too busy for this view). The previous overlay_style /
+    # overlay_show_badges / overlay_toolbar_auto_hide fields were removed;
+    # existing settings.json files load fine because Pydantic ignores
+    # extra keys by default.
+
+
+class VoiceSettings(BaseModel):
+    """Edge TTS preferences (Settings → Voice tab).
+
+    Voice id matches `edge-tts` naming (e.g. `en-US-AriaNeural`). Auto-speak
+    only kicks in when source lang resolves to English AND phonetic_audio_en
+    is on in TranslateSettings — two switches keep accidental loud playback
+    rare on shared machines.
+    """
+
+    voice: str = "en-US-AriaNeural"
+    rate: float = 1.0
+    volume: float = 0.8
+    autoplay_en: bool = False
+    cache_audio: bool = True
+    cache_max_mb: int = 100
+
+
 class Settings(BaseModel):
     """Top-level settings. New tabs (display, voice) become new sub-models here."""
 
     translate: TranslateSettings = Field(default_factory=TranslateSettings)
     hotkeys: HotkeySettings = Field(default_factory=HotkeySettings)
     presets: list[PresetSettings] = Field(default_factory=_default_presets)
-    schema_version: int = 3  # bump when migrating settings.json shape
+    display: DisplaySettings = Field(default_factory=DisplaySettings)
+    voice: VoiceSettings = Field(default_factory=VoiceSettings)
+    schema_version: int = 4  # bump when migrating settings.json shape
 
 
 def get_preset(settings: Settings, name: str) -> PresetSettings:

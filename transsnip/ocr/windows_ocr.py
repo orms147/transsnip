@@ -18,6 +18,34 @@ log = logging.getLogger(__name__)
 _OCR_TARGET_WIDTH = 2000
 
 
+def _resolve_installed_tag(requested: str) -> str | None:
+    """Map a Settings-supplied BCP-47 tag like 'en' or 'ja' to a tag actually
+    present in `OcrEngine.available_recognizer_languages` (typically 'en-US',
+    'ja-JP', 'vi-VN'). Returns None if no installed pack matches.
+
+    Tries an exact match first, then primary-subtag match. Returning the
+    installed tag verbatim (rather than the user's request) avoids relying
+    on `is_language_supported(Language('en'))`, which is inconsistent across
+    Windows builds.
+    """
+    if not requested:
+        return None
+    try:
+        from winsdk.windows.media.ocr import OcrEngine
+    except ImportError:
+        return None
+    requested_lc = requested.lower()
+    requested_primary = requested_lc.split("-")[0]
+    available = [lang.language_tag for lang in OcrEngine.available_recognizer_languages]
+    for tag in available:
+        if tag.lower() == requested_lc:
+            return tag
+    for tag in available:
+        if tag.lower().split("-")[0] == requested_primary:
+            return tag
+    return None
+
+
 def _preprocess(image: Image.Image) -> Image.Image:
     """Upscale + light enhancement so Windows OCR sees crisper glyph boundaries.
 
@@ -82,6 +110,11 @@ class WindowsOCR(OCREngine):
         except Exception as exc:  # winsdk raises various OSError / RuntimeError types
             raise OCRError(f"Windows OCR failed: {exc}") from exc
 
+    @staticmethod
+    def _list_installed_tags() -> list[str]:
+        from winsdk.windows.media.ocr import OcrEngine
+        return [lang.language_tag for lang in OcrEngine.available_recognizer_languages]
+
     async def _recognize_async(self, image: Image.Image, lang_tag: str | None) -> OCRResult:
         from winsdk.windows.globalization import Language
         from winsdk.windows.media.ocr import OcrEngine
@@ -99,21 +132,27 @@ class WindowsOCR(OCREngine):
                     "Settings → Time & Language → Languages → Optical character recognition."
                 )
         else:
-            language = Language(lang_tag)
-            if not OcrEngine.is_language_supported(language):
+            # Resolve to an actually-installed pack: user typically stores
+            # primary subtags in Settings ("en", "ja"), Windows reports the
+            # regional ones ("en-US", "ja-JP"). is_language_supported("en")
+            # is true on some builds and false on others — picking from
+            # available_recognizer_languages is more reliable across machines.
+            resolved_tag = _resolve_installed_tag(lang_tag)
+            if resolved_tag is None:
                 installed = sorted(
                     lang.language_tag for lang in OcrEngine.available_recognizer_languages
                 )
                 raise OCRError(
-                    f"Windows OCR pack '{lang_tag}' chưa cài. "
+                    f"Windows OCR pack cho '{lang_tag}' chưa cài. "
                     f"Đang có: {installed or '(none)'}. "
                     f"Cách cài: Windows Settings → Time & Language → Languages → "
                     f"chọn ngôn ngữ → Options → bật 'Optical character recognition' "
                     f"trong Optional features. RapidOCR fallback sẽ tự kick in."
                 )
+            language = Language(resolved_tag)
             engine = OcrEngine.try_create_from_language(language)
             if engine is None:
-                raise OCRError(f"Failed to create OcrEngine for '{lang_tag}'")
+                raise OCRError(f"Failed to create OcrEngine for '{resolved_tag}'")
 
         preprocessed = _preprocess(image)
         # _preprocess upscales the image (≥2000px wide) to help recognition,

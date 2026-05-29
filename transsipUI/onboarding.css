@@ -1,0 +1,494 @@
+/* onboarding.css — First-run wizard (720×520 frameless modal) */
+
+.onb {
+  position: relative;
+  width: 720px;
+  height: 520px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-popup);
+  box-shadow: var(--shadow-popup);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  color: var(--text-1);
+}
+
+/* Top accent hairline */
+.onb::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--accent) 30%, var(--accent) 70%, transparent);
+  opacity: 0.7;
+}
+
+.onb-skip {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  z-index: 3;
+  background: transparent;
+  border: none;
+  color: var(--text-3);
+  font-family: var(--font-ui);
+  font-size: 11.5px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--r-btn);
+  transition: color 120ms ease, background 120ms ease;
+}
+.onb-skip:hover { color: var(--text-1); background: var(--bg-2); }
+
+.onb-body {
+  flex: 1;
+  min-height: 0;
+  padding: 40px 44px 16px;
+  display: flex;
+  flex-direction: column;
+}
+.onb-body--center { align-items: center; justify-content: center; text-align: center; }
+
+.onb-step { display: flex; flex-direction: column; gap: 16px; }
+
+/* ── Titles ─────────────────────────────────────────────────────────── */
+.onb-title {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: var(--letter-tight);
+  color: var(--text-1);
+  margin: 0;
+  text-wrap: balance;
+}
+.onb-title--sm { font-size: 20px; }
+.onb-lede {
+  font-size: 13.5px;
+  color: var(--text-2);
+  line-height: 1.55;
+  margin: 0;
+  text-wrap: pretty;
+}
+.onb-lede--sm { font-size: 12.5px; margin-top: -8px; }
+.onb-lede kbd { margin: 0 2px; }
+
+/* ── Step 1 · Welcome ───────────────────────────────────────────────── */
+.onb-welcome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+.onb-welcome-icon {
+  filter: drop-shadow(var(--shadow-card));
+  margin-bottom: 4px;
+}
+.onb-welcome .onb-title { margin-top: 2px; }
+.onb-welcome .onb-lede { max-width: 460px; }
+
+.onb-feature-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 18px;
+  width: 100%;
+}
+.onb-feature {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 18px 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-card);
+  text-align: center;
+}
+.onb-feature-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in oklab, var(--accent) 28%, transparent);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.onb-feature-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+  letter-spacing: var(--letter-tight);
+}
+.onb-feature-auto {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: var(--letter-caps);
+  text-transform: uppercase;
+  color: var(--text-3);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+}
+.onb-feature-desc {
+  font-size: 11px;
+  color: var(--text-3);
+  line-height: 1.5;
+  text-wrap: pretty;
+}
+
+/* ── Step 2 · Provider ──────────────────────────────────────────────── */
+.onb-provider-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.onb-radio-card {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 12px 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-card);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.onb-radio-card:hover { border-color: var(--border-strong); }
+.onb-radio-card.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.onb-radio-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.onb-radio-card.is-active .onb-radio-dot { border-color: var(--accent); }
+.onb-radio-fill {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: scale(0);
+  transition: transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.onb-radio-card.is-active .onb-radio-fill { transform: scale(1); }
+.onb-radio-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-btn);
+  background: var(--bg-1);
+  border: 1px solid var(--border-1);
+  color: var(--text-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.onb-radio-card.is-active .onb-radio-icon { color: var(--accent); border-color: color-mix(in oklab, var(--accent) 30%, transparent); }
+.onb-radio-main { flex: 1; min-width: 0; }
+.onb-radio-name {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-1);
+  letter-spacing: var(--letter-tight);
+}
+.onb-radio-desc {
+  font-size: 11px;
+  color: var(--text-3);
+  margin-top: 1px;
+}
+.onb-radio-tag {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  color: var(--text-3);
+  background: var(--bg-1);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-pill);
+  padding: 2px 7px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.onb-radio-tag.is-free { color: var(--success); border-color: color-mix(in oklab, var(--success) 30%, transparent); }
+
+.onb-apikey {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-card);
+  margin-top: 2px;
+}
+.onb-apikey-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.onb-apikey-head .field-label { font-size: 11.5px; }
+.onb-apikey-head .link { font-size: 11px; }
+.onb-apikey-row { display: flex; gap: 8px; align-items: stretch; }
+.onb-apikey-row .input { flex: 1; height: 34px; }
+.onb-apikey-row .btn { white-space: nowrap; }
+
+/* ── Step 3 · Language ──────────────────────────────────────────────── */
+.onb-lang-big {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  margin-top: 4px;
+}
+.onb-langchip {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 16px 18px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-card);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--font-ui);
+  transition: border-color 120ms ease;
+}
+.onb-langchip:hover { border-color: var(--accent); }
+.onb-langchip-label {
+  font-size: 10px;
+  letter-spacing: var(--letter-caps);
+  text-transform: uppercase;
+  color: var(--text-3);
+}
+.onb-langchip-code {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--accent);
+  line-height: 1;
+}
+.onb-langchip-name {
+  font-size: 12px;
+  color: var(--text-2);
+}
+.onb-langchip-caret {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  color: var(--text-3);
+}
+.onb-lang-arrow {
+  display: flex;
+  align-items: center;
+  color: var(--text-3);
+}
+
+.onb-quickpick {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.onb-quickpick-label {
+  font-size: 11px;
+  color: var(--text-3);
+  letter-spacing: 0.01em;
+}
+.onb-quickpick-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.onb-pair-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 11px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font-size: 11.5px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+  transition: all 120ms ease;
+}
+.onb-pair-chip .mono { font-size: 11px; color: var(--text-1); }
+.onb-pair-chip svg { color: var(--text-3); }
+.onb-pair-chip:hover { border-color: var(--border-strong); }
+.onb-pair-chip.is-active {
+  background: var(--accent-soft);
+  border-color: color-mix(in oklab, var(--accent) 35%, transparent);
+}
+.onb-pair-chip.is-active .mono { color: var(--accent); }
+
+/* ── Step 4 · Hotkey ────────────────────────────────────────────────── */
+.onb-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--text-3);
+  padding: 0 2px;
+}
+.onb-note svg { color: var(--text-3); flex-shrink: 0; }
+.onb-note b { color: var(--text-2); font-weight: 600; }
+
+/* ── Step 5 · Ready ─────────────────────────────────────────────────── */
+.onb-ready {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+.onb-check {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--success) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--success) 35%, transparent);
+  color: var(--success);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: ts-fade-in 320ms ease both;
+}
+.onb-ready .onb-lede { color: var(--text-2); }
+.onb-demo {
+  position: relative;
+  width: 360px;
+  height: 150px;
+  margin-top: 10px;
+  border-radius: var(--r-card);
+  border: 1px solid var(--border-2);
+  background:
+    repeating-linear-gradient(135deg, var(--bg-2) 0 10px, var(--bg-1) 10px 20px);
+  overflow: hidden;
+}
+.onb-demo-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: var(--letter-caps);
+  text-transform: uppercase;
+  color: var(--text-2);
+  background: var(--bg-elev);
+  border: 1px solid var(--border-1);
+  border-radius: var(--r-pill);
+  padding: 3px 9px;
+}
+.onb-demo-screen { position: absolute; inset: 0; }
+.onb-demo-sel {
+  position: absolute;
+  left: 70px;
+  top: 54px;
+  width: 180px;
+  height: 52px;
+  border: 1.5px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+  animation: ts-fade-in 400ms ease both;
+}
+.onb-demo-cursor {
+  position: absolute;
+  left: 238px;
+  top: 96px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--bg-elev);
+  border: 1px solid var(--border-2);
+  box-shadow: var(--shadow-card);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Footer ─────────────────────────────────────────────────────────── */
+.onb-footer {
+  flex-shrink: 0;
+  height: 64px;
+  padding: 0 24px;
+  border-top: 1px solid var(--border-1);
+  background: var(--bg-1);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.onb-dots { display: inline-flex; gap: 7px; align-items: center; }
+.onb-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--bg-3);
+  border: 1px solid var(--border-2);
+  transition: all 200ms ease;
+}
+.onb-dot.is-done { background: color-mix(in oklab, var(--accent) 50%, var(--bg-3)); border-color: transparent; }
+.onb-dot.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  width: 20px;
+  border-radius: var(--r-pill);
+}
+.onb-footer-btns { display: inline-flex; gap: 8px; align-items: center; }
+.onb-footer-btns--ready { width: 100%; justify-content: center; }
+.onb-footer .btn { padding: 8px 16px; font-size: 12.5px; }
+
+/* ── Esc confirm dialog ─────────────────────────────────────────────── */
+.onb-confirm {
+  width: 380px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-popup);
+  box-shadow: var(--shadow-popup);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-family: var(--font-ui);
+}
+.onb-confirm-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--r-card);
+  background: color-mix(in oklab, var(--warning) 14%, transparent);
+  border: 1px solid color-mix(in oklab, var(--warning) 30%, transparent);
+  color: var(--warning);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.onb-confirm-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-1);
+  letter-spacing: var(--letter-tight);
+}
+.onb-confirm-desc {
+  font-size: 12px;
+  color: var(--text-2);
+  line-height: 1.55;
+}
+.onb-confirm-desc b { color: var(--text-1); font-weight: 600; }
+.onb-confirm-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}

@@ -16,6 +16,7 @@ from transsnip.display.inline_overlay import InlineOverlay
 from transsnip.ocr.base import OCRBlock, OCRResult
 from transsnip.ocr.registry import OCRPipeline
 from transsnip.ocr.registry import default_pipeline as default_ocr_pipeline
+from transsnip.ocr.segment import segment_english_runon
 from transsnip.ocr.worker import OCRWorker
 from transsnip.translate.base import TranslationContext, TranslationResult
 from transsnip.translate.registry import TranslationPipeline, build_pipeline
@@ -64,8 +65,23 @@ class AppController(QObject):
 
         self._popup = FloatingPopup()
         self._popup.settings_requested.connect(self._open_settings)
+        # New Cobalt-design signals from the rebuilt popup.
+        self._popup.retry_requested.connect(self._on_popup_retry)
+        self._popup.switch_provider_requested.connect(self._open_settings)
 
         self._overlay = InlineOverlay()
+        self._overlay.refresh_requested.connect(self._on_overlay_refresh)
+        # AboutDialog instance — created lazily on first open so app start
+        # stays snappy (it's never needed during the snipe-and-translate flow).
+        # Typed as the actual AboutDialog via a TYPE_CHECKING-guarded import to
+        # avoid pulling the UI module just for an annotation.
+        from typing import TYPE_CHECKING
+        if TYPE_CHECKING:
+            from transsnip.ui.about_dialog import AboutDialog  # noqa: F401
+        self._about_dialog: "AboutDialog | None" = None  # type: ignore[name-defined]
+        # Last region cached so the popup's error-state Retry button can
+        # re-run the same capture flow without forcing the user to re-snipe.
+        self._last_region_for_retry: QRect | None = None
         # Per-fullscreen-session state: kept on `self` because OCR/translation
         # workers report back via signals, and we need to remember which blocks
         # and which monitor to paint when the translation eventually lands.
@@ -78,6 +94,14 @@ class AppController(QObject):
         self._hotkey_manager = None
 
         self._tray.settings_requested.connect(self._open_settings)
+        # Tray menu actions from the redesigned context menu.
+        self._tray.about_requested.connect(self._open_about)
+        self._tray.region_translate_triggered.connect(
+            lambda: self.handle_hotkey("region_translate")
+        )
+        self._tray.fullscreen_translate_triggered.connect(
+            lambda: self.handle_hotkey("fullscreen_translate")
+        )
 
     @property
     def settings(self):
@@ -118,14 +142,12 @@ class AppController(QObject):
 
     @Slot(QRect)
     def _on_region_selected(self, rect: QRect) -> None:
-        # Defer BOTH popup show and capture by _CAPTURE_DELAY_MS:
-        #   - the delay lets the RegionSelector overlay disappear from the
-        #     framebuffer before we grab pixels (otherwise its dim tint and
-        #     rubber-band rectangle end up in the screenshot)
-        #   - showing the popup AFTER capture (inside _capture_and_ocr) ensures
-        #     the popup's own pixels can never bleed into the OCR input. We
-        #     previously saw the popup status text "Đang nhận diện…" show up in
-        #     the OCR result when popup ended up overlaying the captured area.
+        # Cache the rect so the popup's error-state Retry button can re-run
+        # the same flow without forcing the user to re-snipe.
+        self._last_region_for_retry = rect
+        # Defer BOTH popup show and capture by _CAPTURE_DELAY_MS — see the
+        # mentor doc 90 postmortem for why showing the popup before capture
+        # leaks "Đang nhận diện…" pixels into the OCR input.
         QTimer.singleShot(_CAPTURE_DELAY_MS, lambda: self._capture_and_ocr(rect))
 
     @Slot()
@@ -181,8 +203,19 @@ class AppController(QObject):
         if not text:
             self._popup.show_error("Không tìm thấy text trong vùng đã chọn.")
             return
+        source_lang = self._settings.translate.source_lang
+        # Stylized English titles (YouTube thumbnails, logos) often come back
+        # from Windows OCR as one giant run-on token. wordninja inserts spaces
+        # back; we only do this for explicit English source, since segmenting
+        # CJK or other scripts would be nonsense.
+        if source_lang == "en":
+            text = segment_english_runon(text)
         log.info("OCR result (%s, %d blocks): %r", result.engine, len(result.blocks), text[:120])
-        self._popup.update_source(text)
+        self._popup.update_source(
+            text,
+            source_lang=source_lang,
+            show_phonetic=self._settings.translate.phonetic_audio_en,
+        )
         self._submit_translation(text)
 
     @Slot(str)
@@ -340,13 +373,41 @@ class AppController(QObject):
         self._settings_window.activateWindow()
 
     @Slot()
+    def _open_about(self) -> None:
+        # Lazy: the About widget is heavy to build (paints app icon, three
+        # panes of content) but rarely opened.
+        if self._about_dialog is None:
+            from transsnip.ui.about_dialog import AboutDialog
+            self._about_dialog = AboutDialog()
+        self._about_dialog.show()
+        self._about_dialog.raise_()
+        self._about_dialog.activateWindow()
+
+    @Slot()
+    def _on_popup_retry(self) -> None:
+        """Error-state retry button — re-runs the last region capture flow.
+
+        Falls back to a no-op if we never had a region (vision-only sessions
+        with no OCR context to retry from).
+        """
+        if self._last_region_for_retry is not None:
+            self._capture_and_ocr(self._last_region_for_retry)
+
+    @Slot()
+    def _on_overlay_refresh(self) -> None:
+        """Overlay toolbar's Refresh button — re-capture the active monitor
+        and re-run the OCR + batch translate. Useful when source text just
+        scrolled or the user navigated to a new section.
+        """
+        if self._overlay.isVisible():
+            self._overlay.close_overlay()
+        self._start_fullscreen_translate()
+
+    @Slot()
     def _on_settings_saved(self) -> None:
         self._settings = load_settings()
         self._translation_pipeline = build_pipeline(self._settings.translate.provider)
         self._translation_ctx = _build_translation_ctx(self._settings)
-        # Rebind hotkeys in case the user changed them. The manager unbinds the
-        # old combo before binding the new one, so this is safe to call even
-        # when nothing changed.
         if self._hotkey_manager is not None:
             self._hotkey_manager.apply_from_settings(self._settings.hotkeys)
         log.info(
@@ -354,17 +415,45 @@ class AppController(QObject):
             self._settings.translate.provider,
             self._settings.translate.target_lang,
         )
-        self._notify(
-            f"Settings đã lưu. Provider: {self._translation_pipeline.provider_name}, "
-            f"target: {self._translation_ctx.target_lang}",
-            timeout_ms=3000,
-        )
+
+        # Update the tray menu summary lines so the user sees the new
+        # provider / preset without having to re-open Settings.
+        self._tray.set_provider_summary(self._translation_pipeline.provider_name)
+        self._tray.set_preset_summary(self._settings.translate.preset_name)
+
+        # Success toast (different tone from generic _notify so it shows the
+        # green check icon + progress bar).
+        try:
+            from transsnip.ui.toast import get_toast_stack
+            get_toast_stack().show_toast(
+                "Settings đã lưu",
+                f"Provider: {self._translation_pipeline.provider_name} · "
+                f"Target: {self._translation_ctx.target_lang}",
+                tone="success",
+                duration_ms=3000,
+            )
+        except Exception as exc:  # noqa: BLE001
+            log.debug("Toast failed, falling back to tray: %s", exc)
+            self._notify("Settings đã lưu.")
 
     # ── Misc ────────────────────────────────────────────────────────────────
 
     def _notify(self, message: str, *, timeout_ms: int = 2500) -> None:
-        """Tray notification — used for events unrelated to the translation popup
-        (settings saved, hotkey for not-yet-wired mode, etc.)."""
+        """Surface a transient notification to the user.
+
+        Uses the Cobalt ToastStack (slide-in card with progress bar) instead
+        of the Windows-native tray balloon for full theme control — falls
+        back to the tray balloon if QApplication isn't fully ready (which
+        shouldn't happen at runtime, but stays defensive).
+        """
+        try:
+            from transsnip.ui.toast import get_toast_stack
+            get_toast_stack().show_toast(
+                "TransSnip", message, tone="default", duration_ms=timeout_ms,
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 — toast must not crash app
+            log.debug("Toast failed, falling back to tray: %s", exc)
         self._tray.showMessage(
             "TransSnip",
             message,

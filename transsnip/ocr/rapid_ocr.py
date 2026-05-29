@@ -67,15 +67,31 @@ class RapidOCREngine(OCREngine):
             raise OCRError("rapidocr_onnxruntime not installed")
         self._ensure_loaded()
 
+        # Same upscale + sharpen we apply to Windows OCR — RapidOCR also
+        # silently drops small / low-contrast text. Small region captures
+        # (e.g. a 430x90 YouTube card snippet) often come back empty
+        # without this.
+        from transsnip.ocr.windows_ocr import _preprocess
+        preprocessed = image
+        scale = 1.0
+        try:
+            preprocessed = _preprocess(image)
+            scale = preprocessed.width / image.width if image.width else 1.0
+        except Exception:  # noqa: BLE001 — preprocessing is best-effort
+            preprocessed = image
+            scale = 1.0
+
         try:
             import numpy as np
 
-            arr = np.array(image.convert("RGB"))
+            arr = np.array(preprocessed.convert("RGB"))
             raw_result, _elapse = self._engine(arr)
         except Exception as exc:  # noqa: BLE001
             raise OCRError(f"RapidOCR failed: {exc}") from exc
 
         if not raw_result:
+            log.debug("RapidOCR returned no detections on %dx%d image (scale=%.2f)",
+                      preprocessed.width, preprocessed.height, scale)
             return OCRResult(engine=self.name, blocks=[])
 
         blocks: list[OCRBlock] = []
@@ -88,8 +104,11 @@ class RapidOCREngine(OCREngine):
                 continue
             xs = [pt[0] for pt in box]
             ys = [pt[1] for pt in box]
-            x_min, y_min = int(min(xs)), int(min(ys))
-            x_max, y_max = int(max(xs)), int(max(ys))
+            # Bboxes are in PREPROCESSED-image pixel coords; scale back to the
+            # input image so callers (fullscreen overlay) can place boxes at
+            # the right spot on screen.
+            x_min, y_min = int(min(xs) / scale), int(min(ys) / scale)
+            x_max, y_max = int(max(xs) / scale), int(max(ys) / scale)
             blocks.append(
                 OCRBlock(
                     text=text,
@@ -97,5 +116,5 @@ class RapidOCREngine(OCREngine):
                     confidence=float(score),
                 )
             )
-        log.debug("RapidOCR: %d blocks", len(blocks))
+        log.debug("RapidOCR: %d blocks (scale=%.2f)", len(blocks), scale)
         return OCRResult(engine=self.name, blocks=blocks)

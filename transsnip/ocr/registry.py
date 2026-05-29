@@ -11,6 +11,31 @@ from transsnip.ocr.windows_ocr import WindowsOCR
 log = logging.getLogger(__name__)
 
 
+def _lang_matches(requested: str, available: set[str]) -> bool:
+    """BCP-47 primary-subtag match.
+
+    Returns True if `requested` matches any tag in `available` either exactly
+    (case-insensitive) or by primary subtag. e.g. requested="en" matches
+    available={"en-US"}, requested="zh-Hans" matches available={"zh-CN"}
+    only by primary subtag "zh".
+
+    Why this matters: Windows OCR reports installed packs in their full
+    regional form ("en-US", "ja-JP", "vi-VN"). The Settings combo stores
+    primary subtags ("en", "ja", "vi"). Without this normalisation the
+    pipeline filters Windows OCR out as if it didn't speak the language
+    the user picked.
+    """
+    requested_lc = requested.lower()
+    requested_primary = requested_lc.split("-")[0]
+    for tag in available:
+        tag_lc = tag.lower()
+        if tag_lc == requested_lc:
+            return True
+        if tag_lc.split("-")[0] == requested_primary:
+            return True
+    return False
+
+
 class OCRPipeline:
     """Tries OCR engines in priority order, falling back if one is unavailable or fails.
 
@@ -35,7 +60,12 @@ class OCRPipeline:
                 continue
             if lang:
                 supported = engine.supported_languages()
-                if supported and lang not in supported:
+                # Match BCP-47 by PRIMARY SUBTAG so "en" picks up an "en-US"
+                # OCR pack (and vice-versa). Without this, Windows OCR — which
+                # reports installed packs as "en-US" / "ja-JP" / "vi-VN" —
+                # gets filtered out the moment the user picks "en" in
+                # Settings, even though the engine handles it just fine.
+                if supported and not _lang_matches(lang, supported):
                     log.debug("Engine %s doesn't support '%s'", engine.name, lang)
                     continue
             attempted.append(engine.name)
