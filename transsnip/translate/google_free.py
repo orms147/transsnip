@@ -90,12 +90,21 @@ class GoogleTranslateFree(Translator):
 
         translation = self._apply_glossary(translation, ctx.glossary)
 
+        # Learning mode: Google Translate isn't an LLM, so it can't gloss each
+        # word. We still give a partial breakdown — IPA per English word from the
+        # offline CMU dict (no meanings). Better than nothing for a learner.
+        words = None
+        if ctx.want_word_breakdown and (ctx.source_lang or "").lower().split("-")[0] == "en":
+            from transsnip.linguistic.word_breakdown import local_breakdown
+            words = local_breakdown(text) or None
+
         return TranslationResult(
             source_text=text,
             translated_text=translation.strip(),
             source_lang=ctx.source_lang or "auto",
             target_lang=ctx.target_lang,
             provider=self.name,
+            words=words,
         )
 
     @staticmethod

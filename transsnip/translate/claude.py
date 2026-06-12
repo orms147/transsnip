@@ -94,20 +94,38 @@ class ClaudeTranslator(Translator):
                 "PowerShell: $env:ANTHROPIC_API_KEY = 'sk-...' rồi chạy lại app."
             )
 
-        system_prompt = self._build_system_prompt(ctx)
+        # Learning mode: per-word breakdown JSON (shared prompt/parser).
+        want_breakdown = ctx.want_word_breakdown
+        if want_breakdown:
+            from transsnip.linguistic.word_breakdown import build_breakdown_prompt
+            system_prompt = "You are a translator and language tutor. Reply with JSON only."
+            user_content = build_breakdown_prompt(text, ctx)
+        else:
+            system_prompt = self._build_system_prompt(ctx)
+            user_content = text
         try:
             response = self._ensure_client().messages.create(
                 model=self._model,
                 max_tokens=2048,
                 system=system_prompt,
-                messages=[{"role": "user", "content": text}],
+                messages=[{"role": "user", "content": user_content}],
             )
         except Exception as exc:  # anthropic raises various subclasses
             raise TranslationError(f"Claude API call failed: {exc}") from exc
 
-        translation = "".join(
+        raw = "".join(
             block.text for block in response.content if getattr(block, "type", "") == "text"
         ).strip()
+
+        words = None
+        if want_breakdown:
+            from transsnip.linguistic.word_breakdown import parse_breakdown
+            translation, parsed_words = parse_breakdown(raw)
+            if not translation:
+                translation = raw  # JSON parse failed → degrade to plain text
+            words = parsed_words or None
+        else:
+            translation = raw
 
         if not translation:
             raise TranslationError("Claude returned empty response")
@@ -124,6 +142,7 @@ class ClaudeTranslator(Translator):
             source_lang=ctx.source_lang or "auto",
             target_lang=ctx.target_lang,
             provider=self.name,
+            words=words,
         )
 
     @staticmethod

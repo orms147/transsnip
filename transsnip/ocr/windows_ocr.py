@@ -119,19 +119,19 @@ class WindowsOCR(OCREngine):
         from winsdk.windows.globalization import Language
         from winsdk.windows.media.ocr import OcrEngine
 
-        if not lang_tag:
-            # Use the user's system language preferences — works correctly for
-            # Vietnamese users without forcing them into Settings.
-            engine = OcrEngine.try_create_from_user_profile_languages()
-            if engine is None:
-                # User profile didn't yield an OCR-capable language → fall back to en.
-                engine = OcrEngine.try_create_from_language(Language("en"))
-            if engine is None:
-                raise OCRError(
-                    "Không tạo được Windows OCR engine. Cài language pack qua "
-                    "Settings → Time & Language → Languages → Optical character recognition."
-                )
-        else:
+        # Build the list of (tag, engine) candidates to try on this image.
+        #
+        # A Windows OcrEngine is bound to EXACTLY ONE language — it reads only
+        # that script and silently returns garbage (or nothing) for any other.
+        # So "auto-detect" can't be a single engine: the old code used
+        # try_create_from_user_profile_languages(), which on most machines
+        # resolves to en-US and therefore only ever read Latin text — Japanese /
+        # Chinese / Korean captures came back empty or as junk. Instead, when no
+        # source language is pinned we run EVERY installed pack and keep whichever
+        # recognizes the most text. That's a cheap, reliable language auto-detect
+        # across the packs the user actually has (typically 1-3 → 1-3 passes).
+        candidates: list[tuple[str, object]] = []
+        if lang_tag:
             # Resolve to an actually-installed pack: user typically stores
             # primary subtags in Settings ("en", "ja"), Windows reports the
             # regional ones ("en-US", "ja-JP"). is_language_supported("en")
@@ -139,9 +139,7 @@ class WindowsOCR(OCREngine):
             # available_recognizer_languages is more reliable across machines.
             resolved_tag = _resolve_installed_tag(lang_tag)
             if resolved_tag is None:
-                installed = sorted(
-                    lang.language_tag for lang in OcrEngine.available_recognizer_languages
-                )
+                installed = sorted(self._list_installed_tags())
                 raise OCRError(
                     f"Windows OCR pack cho '{lang_tag}' chưa cài. "
                     f"Đang có: {installed or '(none)'}. "
@@ -149,10 +147,21 @@ class WindowsOCR(OCREngine):
                     f"chọn ngôn ngữ → Options → bật 'Optical character recognition' "
                     f"trong Optional features. RapidOCR fallback sẽ tự kick in."
                 )
-            language = Language(resolved_tag)
-            engine = OcrEngine.try_create_from_language(language)
+            engine = OcrEngine.try_create_from_language(Language(resolved_tag))
             if engine is None:
                 raise OCRError(f"Failed to create OcrEngine for '{resolved_tag}'")
+            candidates.append((resolved_tag, engine))
+        else:
+            for tag in self._list_installed_tags():
+                engine = OcrEngine.try_create_from_language(Language(tag))
+                if engine is not None:
+                    candidates.append((tag, engine))
+            if not candidates:
+                raise OCRError(
+                    "Không tạo được Windows OCR engine (chưa có language pack nào "
+                    "hỗ trợ OCR). Cài qua Settings → Time & Language → Languages → "
+                    "Optical character recognition. RapidOCR fallback sẽ tự kick in."
+                )
 
         preprocessed = _preprocess(image)
         # _preprocess upscales the image (≥2000px wide) to help recognition,
@@ -163,13 +172,48 @@ class WindowsOCR(OCREngine):
         # back by the same ratio we upscaled by.
         scale = preprocessed.width / image.width if image.width else 1.0
         bitmap = await self._pil_to_software_bitmap(preprocessed)
-        result = await engine.recognize_async(bitmap)
 
-        # Emit ONE block per detected line, with the words within each line
-        # already joined via the CJK-aware joiner. This preserves Windows OCR's
-        # own line detection — re-grouping words by y-coordinate downstream
-        # would mistakenly merge adjacent short lines (e.g. two bullet items
-        # whose y-centers fall within tolerance).
+        # Recognize with each candidate pack and keep the richest result.
+        # Score = total recognized character count: on a Japanese capture the
+        # ja pack returns dozens of chars while the en pack returns a handful of
+        # junk, so ja wins; on an English capture the reverse holds. The bitmap
+        # is reused across passes (recognition doesn't consume it).
+        best_blocks: list[OCRBlock] = []
+        best_tag: str | None = None
+        best_score = -1
+        for tag, engine in candidates:
+            result = await engine.recognize_async(bitmap)  # type: ignore[attr-defined]
+            blocks = self._blocks_from_result(result, scale)
+            score = sum(len(b.text) for b in blocks)
+            log.debug("Windows OCR pack %s: %d blocks, score=%d", tag, len(blocks), score)
+            if score > best_score:
+                best_score, best_blocks, best_tag = score, blocks, tag
+
+        log.debug(
+            "Windows OCR picked %s: %d lines, %d chars total (lang_tag=%s)",
+            best_tag, len(best_blocks), best_score, lang_tag,
+        )
+        # Per-line dump (debug only) — invaluable when diagnosing "OCR missed
+        # this line": shows whether the engine returned the line at all, and
+        # at what bbox, so we can tell engine-side drops from downstream
+        # grouping/join issues.
+        if log.isEnabledFor(logging.DEBUG):
+            for i, b in enumerate(best_blocks):
+                log.debug("  block[%d] bbox=%s text=%r", i, b.bbox, b.text)
+        return OCRResult(engine=self.name, blocks=best_blocks)
+
+    @staticmethod
+    def _blocks_from_result(result, scale: float) -> list[OCRBlock]:
+        """Convert a winsdk OcrResult into our OCRBlock list.
+
+        Emit ONE block per detected line, with the words within each line
+        already joined via the CJK-aware joiner. This preserves Windows OCR's
+        own line detection — re-grouping words by y-coordinate downstream
+        would mistakenly merge adjacent short lines (e.g. two bullet items
+        whose y-centers fall within tolerance). Coordinates are divided by
+        `scale` to map back from the upscaled preprocessing image to the
+        caller's original image space.
+        """
         blocks: list[OCRBlock] = []
         for line in result.lines or []:
             words = list(line.words or [])
@@ -199,18 +243,7 @@ class WindowsOCR(OCREngine):
                     bbox=(x_min, y_min, x_max - x_min, y_max - y_min),
                 )
             )
-        log.debug(
-            "Windows OCR %s: %d lines, %d chars total",
-            lang_tag, len(blocks), sum(len(b.text) for b in blocks),
-        )
-        # Per-line dump (debug only) — invaluable when diagnosing "OCR missed
-        # this line": shows whether the engine returned the line at all, and
-        # at what bbox, so we can tell engine-side drops from downstream
-        # grouping/join issues.
-        if log.isEnabledFor(logging.DEBUG):
-            for i, b in enumerate(blocks):
-                log.debug("  block[%d] bbox=%s text=%r", i, b.bbox, b.text)
-        return OCRResult(engine=self.name, blocks=blocks)
+        return blocks
 
     @staticmethod
     async def _pil_to_software_bitmap(image: Image.Image):

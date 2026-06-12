@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TransSnip Web — Mockup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+  /* ════ TransSnip Web — self-contained mockup. Cobalt design system. ════ */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body { font-family: var(--font-ui); background: var(--bg-0); color: var(--text-1);
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
+    display: flex; flex-direction: column; min-height: 100%; }
+  button { font: inherit; }
+  ::selection { background: color-mix(in oklab, var(--accent) 30%, transparent); }
+  @keyframes ts-spin { to { transform: rotate(360deg); } }
+  @keyframes ts-fade-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes ts-pop-in { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
+  @keyframes ts-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+
+  .t-cobalt { --bg-0:#0b0c10; --bg-1:#131519; --bg-2:#1a1d24; --bg-3:#232730; --bg-elev:rgba(20,22,28,0.92);
+    --border-1:rgba(255,255,255,0.07); --border-2:rgba(255,255,255,0.12); --border-strong:rgba(255,255,255,0.20);
+    --text-1:#ecedef; --text-2:#a4a9b3; --text-3:#6b717c; --text-mute:#4a4f59;
+    --accent:#818cf8; --accent-hover:#a5b4fc; --accent-soft:rgba(129,140,248,0.13); --accent-strong:#6366f1; --accent-on:#fff;
+    --success:#34d399; --warning:#fbbf24; --danger:#f87171;
+    --shadow-popup:0 32px 60px -20px rgba(0,0,0,0.65),0 12px 28px -10px rgba(0,0,0,0.45);
+    --shadow-card:0 8px 24px -12px rgba(0,0,0,0.55);
+    --font-ui:'Inter',system-ui,-apple-system,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;
+    --font-source:'Inter','Noto Sans JP',system-ui,sans-serif;
+    --r-popup:12px; --r-card:10px; --r-btn:8px; --r-input:8px; --r-pill:999px; --letter-tight:-0.01em; --letter-caps:0.06em; }
+  .t-cobalt-light { --bg-0:#f6f7fa; --bg-1:#fff; --bg-2:#f1f3f8; --bg-3:#e6e9f0; --bg-elev:rgba(255,255,255,0.96);
+    --border-1:rgba(15,23,42,0.06); --border-2:rgba(15,23,42,0.11); --border-strong:rgba(15,23,42,0.20);
+    --text-1:#0f1320; --text-2:#4c5365; --text-3:#7a8294; --text-mute:#b5bbc7;
+    --accent:#4f59e6; --accent-hover:#6b75f5; --accent-soft:rgba(79,89,230,0.10); --accent-strong:#3941d1; --accent-on:#fff;
+    --success:#059669; --warning:#b45309; --danger:#dc2626;
+    --shadow-popup:0 28px 60px -22px rgba(20,30,60,0.30),0 10px 24px -8px rgba(20,30,60,0.14);
+    --shadow-card:0 6px 18px -10px rgba(20,30,60,0.20);
+    --font-ui:'Inter',system-ui,-apple-system,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;
+    --font-source:'Inter','Noto Sans JP',system-ui,sans-serif;
+    --r-popup:12px; --r-card:10px; --r-btn:8px; --r-input:8px; --r-pill:999px; --letter-tight:-0.01em; --letter-caps:0.06em; }
+
+  .mono { font-family: var(--font-mono); }
+  .hidden { display: none !important; }
+  kbd { display:inline-flex; align-items:center; justify-content:center; padding:1px 5px; min-width:18px; height:18px;
+    font-family:var(--font-mono); font-size:10.5px; line-height:1; color:var(--text-2); background:var(--bg-2);
+    border:1px solid var(--border-2); border-bottom-width:2px; border-radius:4px; font-weight:500; }
+
+  /* Topbar */
+  .topbar { display:flex; align-items:center; gap:12px; height:56px; flex-shrink:0; padding:0 20px;
+    border-bottom:1px solid var(--border-1); background:color-mix(in oklab,var(--bg-1) 70%,transparent); backdrop-filter:blur(12px); }
+  .brand { display:inline-flex; align-items:center; gap:9px; }
+  .brand-name { font-size:14px; font-weight:600; letter-spacing:var(--letter-tight); }
+  .brand-tag { font-family:var(--font-mono); font-size:9.5px; letter-spacing:var(--letter-caps); text-transform:uppercase;
+    color:var(--accent); background:var(--accent-soft); border:1px solid color-mix(in oklab,var(--accent) 25%,transparent);
+    border-radius:var(--r-pill); padding:2px 7px; }
+  .topbar-spacer { flex:1; }
+  .provider-pill { display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:11px; color:var(--text-2);
+    background:var(--bg-2); border:1px solid var(--border-1); border-radius:var(--r-pill); padding:5px 11px; text-decoration:none; }
+  .provider-pill::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--success);
+    box-shadow:0 0 0 3px color-mix(in oklab,var(--success) 25%,transparent); }
+  .icon-btn { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; padding:0;
+    background:var(--bg-2); border:1px solid var(--border-1); border-radius:var(--r-btn); color:var(--text-2); cursor:pointer; transition:all 120ms ease; }
+  .icon-btn:hover { background:var(--bg-3); color:var(--text-1); border-color:var(--border-2); }
+  .icon-btn .moon { display:none; } .t-cobalt-light .icon-btn .sun { display:none; } .t-cobalt-light .icon-btn .moon { display:inline; }
+
+  /* Controls */
+  .toolbar { display:flex; align-items:flex-end; flex-wrap:wrap; gap:14px; flex-shrink:0; padding:14px 20px;
+    border-bottom:1px solid var(--border-1); background:var(--bg-1); }
+  .ctl { display:flex; flex-direction:column; gap:5px; min-width:0; }
+  .ctl > label { font-family:var(--font-mono); font-size:9.5px; letter-spacing:var(--letter-caps); text-transform:uppercase; color:var(--text-3); }
+  .select-wrap { position:relative; display:inline-flex; }
+  .select-wrap::after { content:""; position:absolute; right:11px; top:50%; width:7px; height:7px;
+    border-right:1.5px solid var(--text-3); border-bottom:1.5px solid var(--text-3); transform:translateY(-65%) rotate(45deg); pointer-events:none; }
+  select, .input { appearance:none; -webkit-appearance:none; font-family:var(--font-ui); font-size:13px; color:var(--text-1);
+    background:var(--bg-2); border:1px solid var(--border-2); border-radius:var(--r-input); padding:8px 30px 8px 11px; height:36px;
+    cursor:pointer; transition:border-color 120ms ease, box-shadow 120ms ease; max-width:230px; text-overflow:ellipsis; }
+  .input { padding-right:11px; cursor:text; }
+  select:focus, .input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .toolbar .swap { align-self:center; margin-bottom:1px; }
+  .toolbar-divider { width:1px; align-self:stretch; background:var(--border-1); margin:4px 2px 0; }
+  .apikey { flex:1; min-width:220px; } .apikey .input { max-width:none; width:100%; }
+  .apikey-hint { font-size:10.5px; color:var(--text-3); line-height:1.4; }
+
+  /* Stage */
+  .stage { flex:1; position:relative; min-height:0; display:flex; align-items:center; justify-content:center; padding:28px;
+    background:radial-gradient(120% 90% at 50% -10%, color-mix(in oklab,var(--accent) 6%,transparent) 0%, transparent 55%), var(--bg-0); overflow:hidden; }
+  .stage::before { content:""; position:absolute; inset:0; pointer-events:none; opacity:0.5;
+    background-image:linear-gradient(var(--border-1) 1px,transparent 1px),linear-gradient(90deg,var(--border-1) 1px,transparent 1px);
+    background-size:26px 26px; background-position:-1px -1px; }
+
+  /* Empty / capture */
+  .capture-empty { position:relative; z-index:1; width:min(620px,100%); display:flex; flex-direction:column; align-items:center; text-align:center;
+    padding:48px 40px; background:color-mix(in oklab,var(--bg-1) 92%,transparent); border:1.5px dashed var(--border-2); border-radius:18px;
+    animation:ts-fade-in 240ms ease both; }
+  .capture-glyph { width:64px; height:64px; display:flex; align-items:center; justify-content:center; border-radius:16px;
+    background:var(--accent-soft); border:1px solid color-mix(in oklab,var(--accent) 25%,transparent); color:var(--accent); margin-bottom:22px; }
+  .capture-title { font-size:21px; font-weight:600; letter-spacing:var(--letter-tight); margin:0 0 8px; }
+  .capture-sub { font-size:14px; color:var(--text-2); line-height:1.55; margin:0 0 28px; max-width:430px; }
+  .capture-actions { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-items:center; }
+  .capture-alt { margin-top:22px; padding-top:20px; border-top:1px solid var(--border-1); width:100%;
+    display:flex; align-items:center; justify-content:center; gap:14px; font-size:12.5px; color:var(--text-3); flex-wrap:wrap; }
+
+  .btn { display:inline-flex; align-items:center; gap:8px; padding:10px 16px; font-size:13.5px; font-weight:500; line-height:1;
+    color:var(--text-1); background:var(--bg-2); border:1px solid var(--border-2); border-radius:var(--r-btn); cursor:pointer;
+    transition:background 120ms ease, border-color 120ms ease, transform 80ms ease; letter-spacing:var(--letter-tight); }
+  .btn:hover { background:var(--bg-3); border-color:var(--border-strong); } .btn:active { transform:translateY(0.5px); }
+  .btn:disabled { opacity:0.45; cursor:not-allowed; }
+  .btn-primary { background:var(--accent); color:var(--accent-on); border-color:var(--accent); font-weight:600; }
+  .btn-primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
+  .btn-lg { padding:12px 22px; font-size:14.5px; }
+  .link-btn { background:none; border:none; padding:0; cursor:pointer; color:var(--accent); font-size:12.5px;
+    border-bottom:1px dashed color-mix(in oklab,var(--accent) 40%,transparent); }
+  .link-btn:hover { border-bottom-color:var(--accent); }
+  .dotsep { width:3px; height:3px; border-radius:50%; background:var(--text-mute); }
+
+  /* Workspace */
+  .workspace { position:relative; z-index:1; width:100%; height:100%; display:flex; flex-direction:column; gap:14px; }
+  .workspace-bar { display:flex; align-items:center; gap:8px; flex-shrink:0; align-self:center; padding:5px 6px 5px 14px;
+    background:var(--bg-elev); backdrop-filter:blur(20px); border:1px solid var(--border-2); border-radius:var(--r-pill);
+    box-shadow:var(--shadow-card); font-size:12px; color:var(--text-2); max-width:100%; flex-wrap:wrap; justify-content:center; }
+  .ws-hint { display:inline-flex; align-items:center; gap:7px; padding-right:4px; }
+  .ws-divider { width:1px; height:16px; background:var(--border-2); }
+  .seg { display:inline-flex; background:var(--bg-2); border:1px solid var(--border-1); border-radius:var(--r-pill); padding:2px; }
+  .seg button { border:none; background:transparent; color:var(--text-2); cursor:pointer; font-size:11.5px; font-weight:500;
+    padding:5px 11px; border-radius:var(--r-pill); display:inline-flex; align-items:center; gap:5px; transition:all 120ms ease; }
+  .seg button.active { background:var(--accent); color:var(--accent-on); }
+  .ws-btn { display:inline-flex; align-items:center; gap:6px; padding:6px 11px; background:transparent; border:1px solid transparent;
+    border-radius:var(--r-pill); color:var(--text-2); font-size:12px; cursor:pointer; transition:all 120ms ease; }
+  .ws-btn:hover { background:var(--bg-2); color:var(--text-1); }
+  .ws-btn--accent { color:var(--accent); } .ws-btn--accent:hover { background:var(--accent-soft); color:var(--accent-hover); }
+  .ws-btn--close:hover { background:color-mix(in oklab,var(--danger) 14%,transparent); color:var(--danger); }
+  .ws-btn.is-on { background:var(--accent-soft); color:var(--accent-hover); }
+  .scene-meta { font-family:var(--font-mono); font-size:10px; color:var(--text-3); letter-spacing:0.02em; }
+
+  .canvas-scroll { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; overflow:auto; }
+  .canvas-wrap { position:relative; border-radius:var(--r-card); overflow:hidden; box-shadow:var(--shadow-popup); border:1px solid var(--border-2); }
+  .scene-frame { position:absolute; top:0; left:0; width:1180px; height:740px; transform-origin:top left; overflow:hidden; }
+
+  /* selection */
+  .select-layer { position:absolute; inset:0; cursor:crosshair; z-index:10; }
+  .select-layer.is-busy { cursor:progress; }
+  .sel-tint { position:absolute; background:rgba(0,0,0,0.46); pointer-events:none; }
+  .t-cobalt-light .sel-tint { background:rgba(15,23,42,0.30); }
+  .sel-guide { position:absolute; background:color-mix(in oklab,var(--accent) 40%,transparent); pointer-events:none; }
+  .sel-guide--h { height:1px; left:0; right:0; } .sel-guide--v { width:1px; top:0; bottom:0; }
+  .region-box { position:absolute; border:1.5px solid var(--accent); box-shadow:0 0 0 1px rgba(0,0,0,0.4); pointer-events:none;
+    background:repeating-linear-gradient(45deg,transparent 0 6px,color-mix(in oklab,var(--accent) 7%,transparent) 6px 7px); }
+  .region-corner { position:absolute; width:12px; height:12px; border:2px solid var(--accent); background:var(--bg-0); }
+  .region-corner--tl{top:-6px;left:-6px;border-right:none;border-bottom:none} .region-corner--tr{top:-6px;right:-6px;border-left:none;border-bottom:none}
+  .region-corner--bl{bottom:-6px;left:-6px;border-right:none;border-top:none} .region-corner--br{bottom:-6px;right:-6px;border-left:none;border-top:none}
+  .region-readout { position:absolute; display:inline-flex; align-items:center; gap:8px; padding:5px 9px; background:var(--bg-elev);
+    backdrop-filter:blur(10px); border:1px solid var(--border-2); border-radius:var(--r-btn); font-family:var(--font-mono); font-size:11px;
+    color:var(--text-1); box-shadow:var(--shadow-card); pointer-events:none; white-space:nowrap; z-index:12; }
+  .region-readout .rr-div { width:1px; height:11px; background:var(--border-2); } .region-readout .rr-accent { color:var(--accent); }
+  .select-hint { position:absolute; top:14px; left:50%; transform:translateX(-50%); display:inline-flex; align-items:center; gap:8px;
+    padding:8px 14px; background:var(--bg-elev); backdrop-filter:blur(16px); border:1px solid var(--border-2); border-radius:var(--r-pill);
+    font-size:12px; color:var(--text-2); box-shadow:var(--shadow-card); white-space:nowrap; pointer-events:none; z-index:13; animation:ts-fade-in 240ms ease both; }
+  .select-hint .sh-sep { width:1px; height:14px; background:var(--border-2); margin:0 3px; } .select-hint .sh-label { color:var(--text-3); margin-right:3px; }
+
+  /* Popup */
+  .overlay-layer { position:absolute; inset:0; pointer-events:none; z-index:20; }
+  .popup { position:absolute; pointer-events:auto; width:380px; max-width:calc(100% - 24px); background:var(--bg-elev);
+    backdrop-filter:blur(16px) saturate(140%); border:1px solid var(--border-2); border-radius:var(--r-popup); box-shadow:var(--shadow-popup);
+    color:var(--text-1); overflow:hidden; animation:ts-pop-in 200ms ease both; }
+  .popup-header { display:flex; align-items:center; gap:8px; height:38px; padding:0 8px 0 12px; border-bottom:1px solid var(--border-1);
+    background:linear-gradient(180deg,color-mix(in oklab,var(--bg-2) 60%,transparent),transparent); cursor:move; }
+  .popup-brand { display:inline-flex; align-items:center; gap:7px; flex-shrink:0; }
+  .popup-brand-name { font-size:11px; font-weight:600; letter-spacing:var(--letter-caps); text-transform:uppercase; color:var(--text-2); }
+  .popup-spacer { flex:1; }
+  .popup-status { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; font-family:var(--font-mono); color:var(--text-3); }
+  .popup-status--done { color:var(--text-2); } .popup-status--error { color:var(--danger); }
+  .popup-actions { display:inline-flex; align-items:center; gap:2px; flex-shrink:0; }
+  .popup-iconbtn { display:inline-flex; align-items:center; justify-content:center; width:27px; height:27px; background:transparent;
+    border:1px solid transparent; border-radius:var(--r-btn); color:var(--text-2); cursor:pointer; transition:all 120ms ease; }
+  .popup-iconbtn:hover { background:var(--bg-2); color:var(--text-1); border-color:var(--border-1); }
+  .popup-iconbtn--accent.is-on { background:var(--accent-soft); color:var(--accent-hover); border-color:color-mix(in oklab,var(--accent) 35%,transparent); }
+  .popup-iconbtn--close:hover { background:color-mix(in oklab,var(--danger) 15%,transparent); color:var(--danger); }
+  .popup-iconbtn.copied { color:var(--success); }
+  .popup-divider { width:1px; height:16px; background:var(--border-1); margin:0 3px; }
+  .popup-body { padding:14px 16px; display:flex; flex-direction:column; gap:12px; max-height:54vh; overflow:auto; }
+  .popup-body--loading { gap:10px; }
+  .popup-section { display:flex; flex-direction:column; gap:6px; }
+  .lang-chip { display:inline-flex; align-items:baseline; gap:6px; width:max-content; }
+  .lang-chip-code { font-family:var(--font-mono); font-size:9.5px; letter-spacing:var(--letter-caps); text-transform:uppercase; font-weight:600;
+    color:var(--text-2); background:var(--bg-2); border:1px solid var(--border-1); border-radius:var(--r-pill); padding:2px 6px; line-height:1.2; }
+  .lang-chip-name { font-size:10.5px; color:var(--text-3); }
+  .popup-source { font-family:var(--font-source); font-size:14px; line-height:1.55; color:var(--text-2); text-wrap:pretty;
+    letter-spacing:0.01em; white-space:pre-wrap; word-break:break-word; }
+  .popup-translation { font-family:var(--font-source); font-size:15.5px; font-weight:500; line-height:1.6; color:var(--text-1);
+    text-wrap:pretty; letter-spacing:var(--letter-tight); white-space:pre-wrap; word-break:break-word; }
+  .popup-divider-h { height:1px; background:linear-gradient(90deg,transparent,var(--border-2) 20%,var(--border-2) 80%,transparent); }
+  .popup-footer-hint { font-size:10.5px; color:var(--text-3); padding-top:8px; border-top:1px dashed var(--border-1); }
+  .popup-footer-hint kbd { margin:0 2px; }
+  .skeleton-line { height:13px; border-radius:4px; background:linear-gradient(90deg,var(--bg-2) 0%,color-mix(in oklab,var(--bg-2) 60%,var(--border-2)) 50%,var(--bg-2) 100%); background-size:200% 100%; animation:ts-shimmer 1.4s linear infinite; }
+  .skeleton-line--accent { height:17px; background:linear-gradient(90deg,var(--bg-2) 0%,color-mix(in oklab,var(--accent-soft) 80%,var(--bg-2)) 50%,var(--bg-2) 100%); background-size:200% 100%; animation:ts-shimmer 1.4s linear infinite; }
+  .popup-error { display:flex; gap:12px; padding:12px; background:color-mix(in oklab,var(--danger) 6%,transparent); border:1px solid color-mix(in oklab,var(--danger) 20%,transparent); border-radius:var(--r-card); }
+  .popup-error-icon { width:32px; height:32px; border-radius:var(--r-card); background:color-mix(in oklab,var(--danger) 12%,transparent); color:var(--danger); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+  .popup-error-title { font-size:13px; font-weight:600; margin-bottom:4px; } .popup-error-msg { font-size:12px; color:var(--text-2); line-height:1.5; }
+
+  /* Overlay (dịch đè) cards — live INSIDE scene-frame so they scale with it */
+  .ov-card { position:absolute; display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--bg-1);
+    border:1px solid color-mix(in oklab,var(--accent) 35%,var(--border-2)); border-left:3px solid var(--accent); border-radius:8px;
+    font-family:var(--font-source); color:var(--text-1); box-shadow:var(--shadow-card); animation:ts-pop-in 220ms ease both; overflow:hidden; }
+  .scene-frame.show-source .ov-card { opacity:0; pointer-events:none; }
+  .ov-num { font-family:var(--font-mono); font-size:11px; color:var(--accent); background:var(--accent-soft); border-radius:4px;
+    padding:2px 5px; align-self:flex-start; flex-shrink:0; }
+  .ov-text { flex:1; line-height:1.35; font-weight:500; }
+
+  /* Text mode */
+  .text-mode { position:relative; z-index:1; width:min(760px,100%); display:flex; flex-direction:column; gap:14px; animation:ts-fade-in 220ms ease both; }
+  .text-card { background:var(--bg-1); border:1px solid var(--border-1); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:12px; }
+  #text-input { width:100%; min-height:150px; resize:vertical; font-family:var(--font-source); font-size:15px; line-height:1.6;
+    color:var(--text-1); background:var(--bg-2); border:1px solid var(--border-2); border-radius:var(--r-input); padding:12px 14px; }
+  #text-input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+  .text-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .char-count { font-family:var(--font-mono); font-size:11px; color:var(--text-3); }
+  .text-result { background:var(--bg-1); border:1px solid var(--border-1); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:12px; }
+
+  /* Status toast */
+  .status { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); display:inline-flex; align-items:center; gap:9px; z-index:50;
+    padding:11px 16px; border-radius:var(--r-pill); font-size:13px; font-weight:500; background:var(--bg-elev); backdrop-filter:blur(16px);
+    border:1px solid var(--border-2); box-shadow:var(--shadow-popup); color:var(--text-1); animation:ts-pop-in 200ms ease both; max-width:calc(100% - 40px); }
+  .status.error { border-color:color-mix(in oklab,var(--danger) 40%,transparent); background:color-mix(in oklab,var(--danger) 12%,var(--bg-elev)); color:var(--danger); }
+  .status.success { border-color:color-mix(in oklab,var(--success) 40%,transparent); color:var(--success); }
+  .spin { animation:ts-spin 0.9s linear infinite; transform-origin:center; }
+
+  /* Footer */
+  .foot { flex-shrink:0; padding:12px 20px; border-top:1px solid var(--border-1); font-size:11.5px; color:var(--text-3);
+    display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--bg-1); }
+  .foot .mono { color:var(--text-2); }
+
+  /* ════ Scene chrome (the fake "screens" being translated) — fixed colors ════ */
+  .scene-app { background:linear-gradient(135deg,#1a2740,#0d1322); }
+  .scene-app .win { position:absolute; left:80px; top:40px; width:1020px; height:660px; background:#fff; border-radius:14px; overflow:hidden; box-shadow:0 40px 90px rgba(0,0,0,.5); }
+  .scene-app .titlebar { position:absolute; left:80px; top:40px; width:1020px; height:52px; background:#f1f2f5; border-radius:14px 14px 0 0; }
+  .scene-app .traffic { position:absolute; top:60px; display:flex; gap:9px; left:104px; }
+  .scene-app .traffic i { width:13px; height:13px; border-radius:50%; display:block; }
+  .scene-app .toggle { position:absolute; width:48px; height:28px; border-radius:14px; background:#4f59e6; }
+  .scene-app .toggle::after { content:""; position:absolute; right:3px; top:3px; width:22px; height:22px; border-radius:50%; background:#fff; }
+  .scene-app .pillbtn { position:absolute; height:42px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:600; }
+  .scene-app .noticebox { position:absolute; background:#fff7ed; border:1.5px solid #fed7aa; border-radius:10px; }
+
+  .scene-web { background:#e9ebf0; }
+  .scene-web .chrome { position:absolute; left:0; top:0; right:0; height:64px; background:#d9dce4; }
+  .scene-web .urlbar { position:absolute; left:120px; top:18px; width:940px; height:30px; background:#fff; border-radius:15px; }
+  .scene-web .traffic { position:absolute; top:25px; left:28px; display:flex; gap:9px; }
+  .scene-web .traffic i { width:13px; height:13px; border-radius:50%; display:block; }
+  .scene-web .page { position:absolute; left:0; top:64px; right:0; bottom:0; background:#fff; }
+
+  .scene-game { background:radial-gradient(120% 120% at 50% 0%, #243049, #0a0d16); }
+  .scene-game .vignette { position:absolute; inset:0; background:linear-gradient(0deg, rgba(0,0,0,.7), transparent 45%); }
+  .scene-game .dlgbox { position:absolute; left:80px; right:80px; bottom:56px; height:200px; background:rgba(10,14,26,.86);
+    border:2px solid rgba(129,140,248,.5); border-radius:16px; box-shadow:0 0 40px rgba(0,0,0,.6); }
+  .scene-game .namebox { position:absolute; left:108px; bottom:236px; padding:8px 22px; background:#6366f1; border-radius:10px; }
+  .scene-game .menu { position:absolute; right:96px; top:120px; width:230px; background:rgba(10,14,26,.82);
+    border:2px solid rgba(129,140,248,.45); border-radius:14px; }
+  .scene-game .quest { position:absolute; left:96px; top:120px; padding:10px 18px; background:rgba(99,102,241,.22);
+    border:1px solid rgba(129,140,248,.6); border-radius:10px; }
+
+  /* Text blocks (the OCR-able regions) */
+  .blk { position:absolute; margin:0; }
+  .blk-eyebrow { font:600 13px/1.2 var(--font-ui); letter-spacing:.12em; text-transform:uppercase; }
+  .blk-h1 { font:700 34px/1.25 var(--font-ui); letter-spacing:-.01em; }
+  .blk-h2 { font:700 26px/1.3 var(--font-source); }
+  .blk-body { font:400 18px/1.5 var(--font-source); }
+  .blk-label { font:600 20px/1.3 var(--font-ui); }
+  .blk-btn { font:600 16px/1 var(--font-ui); display:flex; align-items:center; justify-content:center; }
+  .blk-game { font:500 22px/1.55 var(--font-source); }
+  .blk-game-name { font:700 19px/1 var(--font-source); color:#fff; }
+  .blk-menu { font:600 19px/1 var(--font-source); }
+
+  @media (max-width:720px) { .toolbar{gap:10px;padding:12px 14px} .toolbar-divider{display:none} select{max-width:150px} .stage{padding:14px} .capture-empty{padding:34px 20px} }
+  </style>
+</head>
+<body class="t-cobalt">
+  <header class="topbar">
+    <div class="brand">
+      <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M2.5 4.5V3a.7.7 0 0 1 .7-.7H4.5M11.5 2.3H13a.7.7 0 0 1 .7.7v1.5M13.7 11.5V13a.7.7 0 0 1-.7.7h-1.5M4.5 13.7H3a.7.7 0 0 1-.7-.7v-1.5" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/><path d="M6 8h4M8.5 6.5L10 8l-1.5 1.5" stroke="var(--text-1)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <span class="brand-name">TransSnip</span><span class="brand-tag">Web</span>
+    </div>
+    <div class="topbar-spacer"></div>
+    <a class="provider-pill" id="provider-pill" href="#"><span class="pp-text">google_free</span></a>
+    <button class="icon-btn" id="theme-toggle" title="Đổi sáng / tối">
+      <svg class="sun" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.3v1.6M8 13.1v1.6M1.3 8h1.6M13.1 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>
+      <svg class="moon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 9.2A5.6 5.6 0 0 1 6.8 2.5 5.6 5.6 0 1 0 13.5 9.2z"/></svg>
+    </button>
+  </header>
+
+  <div class="toolbar">
+    <div class="ctl"><label>Ngôn ngữ nguồn</label><div class="select-wrap"><select id="source-lang"></select></div></div>
+    <button class="icon-btn swap" id="swap" title="Đảo ngôn ngữ"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h9M9.5 2.5L12 5 9.5 7.5M13 11H4M6.5 8.5L4 11l2.5 2.5"/></svg></button>
+    <div class="ctl"><label>Ngôn ngữ đích</label><div class="select-wrap"><select id="target-lang"></select></div></div>
+    <div class="toolbar-divider"></div>
+    <div class="ctl"><label>Provider</label><div class="select-wrap"><select id="provider"></select></div></div>
+    <div class="ctl"><label>Ngữ cảnh</label><div class="select-wrap"><select id="preset"></select></div></div>
+    <div class="ctl apikey hidden" id="apikey-wrap"><label>API key</label><input class="input" id="api-key" type="password" placeholder="Dán API key — không lưu trên server" /><span class="apikey-hint" id="apikey-hint"></span></div>
+  </div>
+
+  <main class="stage">
+    <section class="capture-empty" id="capture-empty">
+      <div class="capture-glyph"><svg width="30" height="30" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.2"/><path d="M5.5 14h5M8 11.2V14"/></svg></div>
+      <h1 class="capture-title">Khoanh vùng trên màn hình &amp; dịch</h1>
+      <p class="capture-sub">Chia sẻ một cửa sổ hoặc màn hình, rồi kéo chọn đúng vùng có chữ — TransSnip sẽ OCR và dịch ngay vùng đó.</p>
+      <div class="capture-actions">
+        <button class="btn btn-primary btn-lg" id="btn-capture"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.2"/><path d="M5.5 14h5M8 11.2V14"/></svg>Chụp màn hình</button>
+        <button class="btn" id="btn-upload"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="5.5" cy="6.5" r="1.1"/><path d="M3 11l3-3 2.5 2.5L11 7l2 2"/></svg>Dùng ảnh mẫu</button>
+      </div>
+    </section>
+
+    <section class="workspace hidden" id="workspace">
+      <div class="workspace-bar">
+        <span class="ws-hint"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v9.3a.7.7 0 0 0 .7.7H14"/><path d="M2 4h9.3a.7.7 0 0 1 .7.7V14"/></svg><span id="ws-hint-text">Kéo để khoanh vùng cần dịch</span></span>
+        <span class="ws-divider"></span>
+        <div class="seg">
+          <button id="mode-popup" class="active" title="Popup nổi"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M4.5 6.5h5M4.5 9.5h7"/></svg>Popup</button>
+          <button id="mode-inline" title="Dịch đè lên chữ gốc"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l5.5 3L8 8 2.5 5z"/><path d="M2.5 8.5L8 11.5l5.5-3"/></svg>Dịch đè</button>
+        </div>
+        <button class="ws-btn ws-btn--accent hidden" id="ov-all" title="Dịch toàn bộ màn hình"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12M2 8h12M2 12h8"/></svg>Dịch cả màn hình</button>
+        <button class="ws-btn hidden" id="ov-source" title="Giữ để xem bản gốc"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/></svg>Bản gốc</button>
+        <span class="ws-divider"></span>
+        <span class="scene-meta" id="scene-meta">Màn hình 1/3</span>
+        <button class="ws-btn" id="ws-recapture" title="Chụp lại (S) — đổi màn hình demo"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.7-4"/><path d="M13.5 2v3.5h-3.5"/></svg>Chụp lại</button>
+        <button class="ws-btn ws-btn--close" id="ws-close" title="Đóng"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
+      </div>
+      <div class="canvas-scroll" id="canvas-scroll">
+        <div class="canvas-wrap" id="canvas-wrap">
+          <div class="scene-frame" id="scene-frame"></div>
+          <div class="select-layer" id="select-layer"></div>
+          <div class="overlay-layer" id="overlay-layer"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="text-mode hidden" id="panel-text">
+      <button class="link-btn" id="text-back" style="align-self:flex-start">← Quay lại khoanh vùng</button>
+      <div class="text-card">
+        <textarea id="text-input" placeholder="Dán hoặc gõ văn bản cần dịch…"></textarea>
+        <div class="text-row"><span class="char-count" id="char-count">0 ký tự</span><button class="btn btn-primary" id="translate-text">Dịch</button></div>
+      </div>
+      <div class="text-result hidden" id="text-result"></div>
+    </section>
+  </main>
+
+  <div id="status" class="status hidden"></div>
+
+  <footer class="foot">
+    <span class="mono">TransSnip Web</span><span class="dotsep"></span>
+    <span>khoanh vùng · OCR · dịch đa ngôn ngữ</span><span class="dotsep"></span>
+    <span style="color:var(--accent)">● Bản mockup demo — minh hoạ luồng sử dụng</span>
+  </footer>
+
+  <script>
+  (function () {
+    "use strict";
+    const $ = (id) => document.getElementById(id);
+    const SW = 1180, SH = 740;
+
+    /* Icons */
+    const P = { copy:'<rect x="5" y="5" width="8" height="8" rx="1.3"/><path d="M3 11V4a1.3 1.3 0 0 1 1.3-1.3H11"/>',
+      check:'<path d="M3 8.5l3 3 7-7"/>', close:'<path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/>',
+      pin:'<path d="M8 1.8l-2 4-3 1 3.5 3.5L3 14l4.2-3.5L10.7 14l-1-3 3.5-3.5-3-1z"/>',
+      alert:'<path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.3"/>' };
+    const icon = (n,s=16,w=1.5)=>`<svg width="${s}" height="${s}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${P[n]||""}</svg>`;
+    const spinner = (s=14)=>`<svg class="spin" width="${s}" height="${s}" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.18"/><path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+    const GLYPH = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2.5 4.5V3a.7.7 0 0 1 .7-.7H4.5M11.5 2.3H13a.7.7 0 0 1 .7.7v1.5M13.7 11.5V13a.7.7 0 0 1-.7.7h-1.5M4.5 13.7H3a.7.7 0 0 1-.7-.7v-1.5" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/><path d="M6 8h4M8.5 6.5L10 8l-1.5 1.5" stroke="var(--text-1)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    /* Config */
+    const CONFIG = {
+      providers: [
+        { key:"google_free", display_name:"Google Translate (free, no key)", needs_api_key:false, api_key_hint:"" },
+        { key:"gemini", display_name:"Google Gemini (free tier 1500/day)", needs_api_key:true, api_key_hint:"Lấy free tại aistudio.google.com → Get API key" },
+        { key:"claude", display_name:"Anthropic Claude (premium, paid)", needs_api_key:true, api_key_hint:"Lấy tại console.anthropic.com → API Keys" },
+        { key:"openrouter", display_name:"OpenRouter (300+ models, free tier)", needs_api_key:true, api_key_hint:"Lấy free tại openrouter.ai → Keys" },
+      ],
+      languages: [
+        {code:"auto",name:"Tự động nhận diện"},{code:"en",name:"English"},{code:"ja",name:"日本語 (Japanese)"},
+        {code:"ko",name:"한국어 (Korean)"},{code:"zh-Hans",name:"中文 简体 (Chinese)"},{code:"vi",name:"Tiếng Việt (Vietnamese)"},
+        {code:"fr",name:"Français (French)"},{code:"de",name:"Deutsch (German)"},{code:"th",name:"ภาษาไทย (Thai)"},
+      ],
+      presets: [
+        {name:"default",description:"Bản dịch thông thường."},
+        {name:"programming",description:"Tài liệu kỹ thuật, giữ thuật ngữ Anh."},
+        {name:"gaming",description:"Hội thoại / UI game."},
+      ],
+    };
+
+    /* ── Demo scenes. Each block: {x,y,w, kind, cls, src, vi}. ─────────── */
+    const b = (x,y,w,kind,src,vi,cls)=>({x,y,w,kind,src,vi,cls:cls||""});
+    const SCENES = [
+      { id:"app", lang:"en", preset:"programming", title:"Cửa sổ phần mềm (English)",
+        chrome:
+          `<div class="titlebar"></div><div class="win"></div>
+           <div class="traffic"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+           <div class="toggle" style="left:990px;top:330px"></div>
+           <div class="noticebox" style="left:140px;top:440px;width:760px;height:96px"></div>
+           <div class="pillbtn" style="left:740px;top:600px;width:120px;background:#eef0f4;color:#3a3f4a">Cancel</div>
+           <div class="pillbtn" style="left:880px;top:600px;width:120px;background:#4f59e6;color:#fff">Apply</div>`,
+        blocks:[
+          b(140,118,200,"eyebrow","Aurora Editor — Preferences","Aurora Editor — Tuỳ chọn"),
+          b(140,150,200,"eyebrow","GENERAL","CHUNG"),
+          b(140,182,820,"h1","Restore previous session on startup","Khôi phục phiên làm việc trước khi khởi động"),
+          b(140,242,760,"body","When enabled, the editor reopens all files and panels from your last session. Disable this to always start with a clean, empty workspace.","Khi bật, trình soạn thảo sẽ mở lại toàn bộ tệp và bảng từ phiên gần nhất. Tắt để luôn khởi động với không gian làm việc trống và sạch."),
+          b(140,330,400,"label","Automatic updates","Tự động cập nhật"),
+          b(140,378,700,"body","Download and install updates in the background automatically.","Tự động tải và cài đặt bản cập nhật ở chế độ nền."),
+          b(164,460,720,"label","Unsaved changes will be lost","Các thay đổi chưa lưu sẽ bị mất","blk-h2"),
+          b(164,498,720,"body","Some preferences require a restart to take effect. Make sure to save your work before applying the changes below.","Một số tuỳ chọn cần khởi động lại mới có hiệu lực. Hãy lưu công việc trước khi áp dụng các thay đổi bên dưới."),
+        ],
+        win:{color:"#16181d"} },
+
+      { id:"web", lang:"ja", preset:"default", title:"Bài báo tiếng Nhật",
+        chrome:
+          `<div class="chrome"></div><div class="page"></div>
+           <div class="traffic"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
+           <div class="urlbar"></div>`,
+        urlText:"tech-blog.jp/ai-translation-future",
+        blocks:[
+          b(150,120,300,"eyebrow","AI・機械学習","AI · Học máy"),
+          b(150,152,860,"h1","AI翻訳の未来について","Về tương lai của dịch thuật AI"),
+          b(150,230,820,"body","OCRと大規模言語モデルの組み合わせは、画面上のあらゆるテキストを瞬時に理解できる新しい体験を生み出している。","Sự kết hợp giữa OCR và mô hình ngôn ngữ lớn đang tạo ra một trải nghiệm mới, giúp hiểu tức thì mọi văn bản trên màn hình."),
+          b(150,320,820,"body","近年、画像認識と自然言語処理の技術が急速に発展し、スクリーン上の文字をリアルタイムで翻訳することが可能になった。","Những năm gần đây, công nghệ nhận dạng hình ảnh và xử lý ngôn ngữ tự nhiên phát triển nhanh chóng, giúp dịch chữ trên màn hình theo thời gian thực."),
+          b(150,430,820,"body","これは語学学習者だけでなく、ゲーム実況者やマンガ読者にも大きな影響を与えている。","Điều này ảnh hưởng lớn không chỉ tới người học ngoại ngữ mà cả streamer game lẫn người đọc truyện tranh."),
+        ],
+        win:{color:"#16181d"} },
+
+      { id:"game", lang:"ja", preset:"gaming", title:"Hội thoại game (RPG)",
+        chrome:
+          `<div class="vignette"></div>
+           <div class="quest" style="left:96px;top:118px"></div>
+           <div class="menu" style="right:96px;top:150px;width:230px;height:230px"></div>
+           <div class="namebox"></div><div class="dlgbox"></div>`,
+        blocks:[
+          b(110,128,360,"game","新しいクエスト：封印の祭壇","Nhiệm vụ mới: Bàn thờ phong ấn","blk-menu"),
+          b(120,170,200,"game","魔導士エレナ","Pháp sư Elena","blk-game-name"),
+          b(110,470,960,"game","古の封印が解かれた…早くこの島から脱出しなければ、我々は皆飲み込まれてしまうだろう。","Phong ấn cổ đã bị phá vỡ… Nếu không mau rời khỏi hòn đảo này, tất cả chúng ta sẽ bị nuốt chửng.","blk-game"),
+          b(990,188,180,"game","スキル","Kỹ năng","blk-menu"),
+          b(990,236,180,"game","アイテム","Vật phẩm","blk-menu"),
+          b(990,284,180,"game","そうび","Trang bị","blk-menu"),
+          b(990,332,180,"game","セーブ","Lưu game","blk-menu"),
+        ],
+        win:{color:"#fff"} },
+    ];
+
+    /* State */
+    let sceneIdx = 0, scale = 1, mode = localStorage.getItem("ts-result-mode") || "popup";
+    let drag = null, statusTimer = null;
+    const state = { view: "empty" };
+
+    /* Init */
+    initTheme(); init();
+    function init() {
+      fillLangs($("source-lang"), CONFIG.languages, "auto");
+      fillLangs($("target-lang"), CONFIG.languages.filter((l)=>l.code!=="auto"), "vi");
+      fillSel($("provider"), CONFIG.providers.map((p)=>({v:p.key,t:p.display_name})));
+      fillSel($("preset"), CONFIG.presets.map((p)=>({v:p.name,t:p.name+" — "+p.description})));
+      wire(); onProviderChange(); syncMode();
+      window.addEventListener("resize", fitScene);
+    }
+    function fillLangs(sel,langs,def){ sel.innerHTML=""; langs.forEach((l)=>{const o=document.createElement("option");o.value=l.code;o.textContent=l.name;if(l.code===def)o.selected=true;sel.appendChild(o);}); }
+    function fillSel(sel,items){ sel.innerHTML=""; items.forEach((it)=>{const o=document.createElement("option");o.value=it.v;o.textContent=it.t;sel.appendChild(o);}); }
+    function currentProvider(){ return CONFIG.providers.find((p)=>p.key===$("provider").value); }
+    function onProviderChange(){ const p=currentProvider(); $("provider-pill").querySelector(".pp-text").textContent=p?p.key:"";
+      const needs=p&&p.needs_api_key; $("apikey-wrap").classList.toggle("hidden",!needs); $("apikey-hint").textContent=needs?p.api_key_hint:""; }
+
+    function wire() {
+      $("theme-toggle").addEventListener("click", toggleTheme);
+      $("provider").addEventListener("change", onProviderChange);
+      $("swap").addEventListener("click", ()=>{const s=$("source-lang"),t=$("target-lang"); if(s.value==="auto")return; [s.value,t.value]=[t.value,s.value];});
+      $("btn-capture").addEventListener("click", ()=>loadScene(0));
+      $("btn-upload").addEventListener("click", ()=>loadScene(0));
+      $("text-back").addEventListener("click", ()=>switchView(state.view==="text"&&sceneLoaded?"workspace":"empty"));
+      $("ws-recapture").addEventListener("click", ()=>loadScene(sceneIdx+1));
+      $("ws-close").addEventListener("click", ()=>{ sceneLoaded=false; dismiss(); switchView("empty"); });
+      $("mode-popup").addEventListener("click", ()=>setMode("popup"));
+      $("mode-inline").addEventListener("click", ()=>setMode("inline"));
+      $("ov-all").addEventListener("click", ()=>translateBlocks(SCENES[sceneIdx].blocks, null));
+      $("ov-source").addEventListener("mousedown", ()=>$("scene-frame").classList.add("show-source"));
+      ["mouseup","mouseleave"].forEach(ev=>$("ov-source").addEventListener(ev, ()=>$("scene-frame").classList.remove("show-source")));
+      $("translate-text").addEventListener("click", doTranslateText);
+      $("text-input").addEventListener("input", ()=>{ $("char-count").textContent=$("text-input").value.length+" ký tự"; });
+      const layer=$("select-layer");
+      layer.addEventListener("pointerdown", onDown);
+      layer.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("keydown", (e)=>{
+        if(e.key==="Escape"){ if(state.view==="workspace") dismiss(); return; }
+        if(/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+        if(e.key.toLowerCase()==="s" && state.view==="workspace"){ e.preventDefault(); loadScene(sceneIdx+1); }
+      });
+    }
+
+    function switchView(v){ state.view=v;
+      $("capture-empty").classList.toggle("hidden", v!=="empty");
+      $("workspace").classList.toggle("hidden", v!=="workspace");
+      $("panel-text").classList.toggle("hidden", v!=="text"); }
+
+    let sceneLoaded = false;
+    function loadScene(i){
+      sceneIdx = ((i % SCENES.length) + SCENES.length) % SCENES.length;
+      const sc = SCENES[sceneIdx];
+      const f = $("scene-frame");
+      f.className = "scene-frame scene-" + sc.id;
+      let html = sc.chrome || "";
+      sc.blocks.forEach((blk, idx)=>{
+        html += `<div class="blk ${"blk-"+blk.kind} ${blk.cls}" data-i="${idx}" style="left:${blk.x}px;top:${blk.y}px;width:${blk.w}px;color:${sc.win.color}">${escapeHtml(blk.src)}</div>`;
+      });
+      if (sc.urlText) html += `<div style="position:absolute;left:150px;top:25px;font:500 14px var(--font-mono);color:#5a6072">${escapeHtml(sc.urlText)}</div>`;
+      f.innerHTML = html;
+      sceneLoaded = true;
+      dismiss();
+      // auto-pick provider/preset to match the scene for a realistic demo
+      $("source-lang").value = "auto";
+      if ([...$("preset").options].some(o=>o.value===sc.preset)) $("preset").value = sc.preset;
+      $("scene-meta").textContent = `Màn hình ${sceneIdx+1}/${SCENES.length} · ${sc.title}`;
+      switchView("workspace");
+      fitScene();
+    }
+
+    function fitScene(){
+      if (!sceneLoaded) return;
+      const box = $("canvas-scroll");
+      const availW = box.clientWidth, availH = box.clientHeight;
+      scale = Math.min(availW/SW, availH/SH, 1);
+      const wrap = $("canvas-wrap");
+      wrap.style.width = Math.round(SW*scale)+"px";
+      wrap.style.height = Math.round(SH*scale)+"px";
+      $("scene-frame").style.transform = "scale("+scale+")";
+    }
+
+    /* Selection */
+    const layerRect = ()=>$("select-layer").getBoundingClientRect();
+    function onDown(e){
+      if($("select-layer").classList.contains("is-busy")) return;
+      dismiss();
+      const r=layerRect(); drag={x0:e.clientX-r.left,y0:e.clientY-r.top};
+      try{$("select-layer").setPointerCapture(e.pointerId);}catch(_){}
+      renderSel(drag.x0,drag.y0,0,0);
+    }
+    function onMove(e){
+      if(!drag) return;
+      const r=layerRect();
+      const x=Math.max(0,Math.min(e.clientX-r.left,r.width)), y=Math.max(0,Math.min(e.clientY-r.top,r.height));
+      renderSel(Math.min(drag.x0,x),Math.min(drag.y0,y),Math.abs(x-drag.x0),Math.abs(y-drag.y0));
+    }
+    function onUp(){
+      if(!drag) return; drag=null;
+      const sel=$("select-layer").querySelector(".region-box"); if(!sel) return;
+      const rect={left:parseFloat(sel.style.left),top:parseFloat(sel.style.top),w:parseFloat(sel.style.width),h:parseFloat(sel.style.height)};
+      if(rect.w<14||rect.h<14){ clearSelVisual(); return; }
+      // find blocks whose center is inside the selection (scene px)
+      const scn={left:rect.left/scale,top:rect.top/scale,right:(rect.left+rect.w)/scale,bottom:(rect.top+rect.h)/scale};
+      const hits=SCENES[sceneIdx].blocks.filter((blk)=>{const cx=blk.x+blk.w/2,cy=blk.y+18; return cx>=scn.left&&cx<=scn.right&&cy>=scn.top&&cy<=scn.bottom;});
+      translateBlocks(hits.length?hits:null, rect);
+    }
+    function renderSel(left,top,w,h){
+      const layer=$("select-layer"); clearSelVisual(); const R=layerRect();
+      [[0,0,R.width,top],[0,top+h,R.width,R.height-top-h],[0,top,left,h],[left+w,top,R.width-left-w,h]].forEach((t)=>{
+        const d=document.createElement("div"); d.className="sel-tint";
+        Object.assign(d.style,{left:t[0]+"px",top:t[1]+"px",width:Math.max(0,t[2])+"px",height:Math.max(0,t[3])+"px"}); layer.appendChild(d);
+      });
+      addGuide(layer,"sel-guide--h",{top:(top+h)+"px"}); addGuide(layer,"sel-guide--v",{left:(left+w)+"px"});
+      const box=document.createElement("div"); box.className="region-box";
+      Object.assign(box.style,{left:left+"px",top:top+"px",width:w+"px",height:h+"px"});
+      ["tl","tr","bl","br"].forEach((c)=>{const s=document.createElement("span");s.className="region-corner region-corner--"+c;box.appendChild(s);});
+      layer.appendChild(box);
+      const ro=document.createElement("div"); ro.className="region-readout";
+      ro.innerHTML=`<span>${Math.round(w/scale)} × ${Math.round(h/scale)}</span><span class="rr-div"></span><span class="rr-accent">px</span>`;
+      layer.appendChild(ro);
+      let rx=left+w+8, ry=top+h+8;
+      if(rx+ro.offsetWidth>R.width) rx=Math.max(0,left+w-ro.offsetWidth);
+      if(ry+ro.offsetHeight>R.height) ry=Math.max(0,top-ro.offsetHeight-8);
+      ro.style.left=rx+"px"; ro.style.top=ry+"px";
+    }
+    function addGuide(layer,cls,style){const g=document.createElement("div");g.className="sel-guide "+cls;Object.assign(g.style,style);layer.appendChild(g);}
+    function clearSelVisual(){ $("select-layer").querySelectorAll(".sel-tint,.sel-guide,.region-box,.region-readout").forEach(n=>n.remove()); }
+    function dismiss(){ clearSelVisual(); $("overlay-layer").innerHTML=""; const f=$("scene-frame"); f.querySelectorAll(".ov-card").forEach(n=>n.remove()); f.classList.remove("show-source"); }
+
+    /* Translate selected blocks */
+    function translateBlocks(blocks, rect){
+      const sc=SCENES[sceneIdx];
+      $("select-layer").classList.add("is-busy");
+      if(mode==="popup"){
+        const anchor = rect || bbox(blocks||sc.blocks);
+        showPopup(anchor, {loading:true});
+        setTimeout(()=>{
+          if(!blocks){ showPopup(anchor,{error:"OCR không tìm thấy chữ trong vùng này. Hãy chọn vùng có văn bản."}); $("select-layer").classList.remove("is-busy"); return; }
+          showPopup(anchor, {data:{
+            source_text: blocks.map(b=>b.src).join("\n"),
+            translated_text: blocks.map(b=>b.vi).join("\n"),
+            source_lang: sc.lang, target_lang:$("target-lang").value, provider:$("provider").value, engine:"rapid",
+          }});
+          $("select-layer").classList.remove("is-busy");
+        }, 720);
+      } else {
+        // overlay (dịch đè)
+        showPopup(rect||{left:0,top:0,w:0,h:0}, {loading:true, mini:true});
+        setTimeout(()=>{
+          $("overlay-layer").innerHTML="";
+          renderOverlay(blocks||sc.blocks);
+          $("select-layer").classList.remove("is-busy");
+          clearSelVisual();
+          toast("success", (blocks||sc.blocks).length+" khối đã dịch · giữ \u201cBản gốc\u201d để đối chiếu");
+        }, 720);
+      }
+    }
+    function bbox(blocks){ const xs=blocks.map(b=>b.x),ys=blocks.map(b=>b.y),xe=blocks.map(b=>b.x+b.w),ye=blocks.map(b=>b.y+40);
+      const l=Math.min(...xs),t=Math.min(...ys),r=Math.max(...xe),btm=Math.max(...ye);
+      return {left:l*scale,top:t*scale,w:(r-l)*scale,h:(btm-t)*scale}; }
+
+    function renderOverlay(blocks){
+      const f=$("scene-frame");
+      blocks.forEach((blk,i)=>{
+        const card=document.createElement("div"); card.className="ov-card";
+        const fs = blk.kind==="h1"?26: blk.kind==="label"?19: (blk.cls==="blk-h2")?22: blk.kind==="game"?(blk.cls==="blk-game"?22:18): blk.kind==="eyebrow"?13:16;
+        card.style.left=blk.x+"px"; card.style.top=(blk.y-6)+"px"; card.style.width=Math.max(blk.w,140)+"px"; card.style.fontSize=fs+"px";
+        card.innerHTML=`<span class="ov-num">${i+1}</span><span class="ov-text">${escapeHtml(blk.vi)}</span>`;
+        f.appendChild(card);
+      });
+    }
+
+    /* Popup */
+    function showPopup(rect, opt){
+      const layer=$("overlay-layer"); layer.innerHTML="";
+      const R=layerRect(); const pop=document.createElement("div"); pop.className="popup";
+      if(opt.loading){
+        pop.innerHTML=head("ocr")+`<div class="popup-body popup-body--loading">
+          <div class="skeleton-line" style="width:80%"></div><div class="skeleton-line" style="width:55%"></div>
+          <div class="skeleton-line skeleton-line--accent" style="width:72%"></div><div class="skeleton-line skeleton-line--accent" style="width:48%"></div></div>`;
+      } else if(opt.error){
+        pop.innerHTML=head("error")+`<div class="popup-body"><div class="popup-error"><div class="popup-error-icon">${icon("alert",18)}</div>
+          <div><div class="popup-error-title">Không thể dịch</div><div class="popup-error-msg">${escapeHtml(opt.error)}</div></div></div></div>`;
+      } else {
+        const d=opt.data; const eng=d.engine?` · OCR: ${escapeHtml(d.engine)}`:"";
+        pop.innerHTML=head("done",`${escapeHtml(d.provider)}${eng}`)+`<div class="popup-body">
+          <div class="popup-section">${chip(d.source_lang)}<div class="popup-source">${escapeHtml(d.source_text)}</div></div>
+          <div class="popup-divider-h"></div>
+          <div class="popup-section">${chip(d.target_lang)}<div class="popup-translation" id="pop-tr">${escapeHtml(d.translated_text)}</div></div>
+          <div class="popup-footer-hint"><kbd>Esc</kbd> đóng · kéo header để di chuyển · chọn lại vùng để dịch tiếp</div></div>`;
+      }
+      layer.appendChild(pop);
+      positionPopup(pop, rect, R); wirePopup(pop);
+    }
+    function head(status,meta){
+      let s = status==="ocr" ? `<div class="popup-status">${spinner(11)}<span>Đang OCR + dịch…</span></div>`
+        : status==="error" ? `<div class="popup-status popup-status--error">${icon("alert",11)}<span>error</span></div>`
+        : `<div class="popup-status popup-status--done"><span>${meta||""}</span></div>`;
+      const act = status==="done"
+        ? `<button class="popup-iconbtn" data-act="copy" title="Copy">${icon("copy",14)}</button><button class="popup-iconbtn popup-iconbtn--accent" data-act="pin" title="Ghim">${icon("pin",14)}</button><div class="popup-divider"></div><button class="popup-iconbtn popup-iconbtn--close" data-act="close" title="Đóng">${icon("close",14)}</button>`
+        : `<button class="popup-iconbtn popup-iconbtn--close" data-act="close" title="Đóng">${icon("close",14)}</button>`;
+      return `<div class="popup-header"><div class="popup-brand">${GLYPH}<span class="popup-brand-name">TransSnip</span></div>${s}<div class="popup-spacer"></div><div class="popup-actions">${act}</div></div>`;
+    }
+    function wirePopup(pop){
+      pop.querySelectorAll("[data-act]").forEach((bn)=>{
+        const a=bn.dataset.act;
+        if(a==="close") bn.addEventListener("click", dismiss);
+        if(a==="pin") bn.addEventListener("click", ()=>bn.classList.toggle("is-on"));
+        if(a==="copy") bn.addEventListener("click", ()=>{ const t=pop.querySelector("#pop-tr")?.textContent||""; navigator.clipboard?.writeText(t);
+          bn.classList.add("copied"); bn.innerHTML=icon("check",14); setTimeout(()=>{bn.classList.remove("copied");bn.innerHTML=icon("copy",14);},1400); });
+      });
+      const h=pop.querySelector(".popup-header"); let pd=null;
+      h.addEventListener("pointerdown",(e)=>{ if(e.target.closest("[data-act]"))return; pd={x:e.clientX,y:e.clientY,l:parseFloat(pop.style.left),t:parseFloat(pop.style.top)}; try{h.setPointerCapture(e.pointerId);}catch(_){} });
+      h.addEventListener("pointermove",(e)=>{ if(!pd)return; pop.style.left=(pd.l+e.clientX-pd.x)+"px"; pop.style.top=(pd.t+e.clientY-pd.y)+"px"; });
+      h.addEventListener("pointerup",()=>{pd=null;});
+    }
+    function positionPopup(pop,rect,R){
+      const pw=pop.offsetWidth,ph=pop.offsetHeight; let left=rect.left, top=rect.top+rect.h+10;
+      if(top+ph>R.height) top=Math.max(8, rect.top-ph-10); if(top<8) top=8;
+      left=Math.max(8,Math.min(left,R.width-pw-8)); pop.style.left=left+"px"; pop.style.top=top+"px";
+    }
+
+    /* Text mode */
+    function doTranslateText(){
+      const text=$("text-input").value.trim(); if(!text) return toast("error","Nhập text cần dịch.");
+      toast("loading","Đang dịch…"); $("translate-text").disabled=true;
+      setTimeout(()=>{
+        let vi=null; for(const sc of SCENES) for(const blk of sc.blocks) if(blk.src.toLowerCase()===text.toLowerCase()){vi=blk.vi;break;}
+        if(!vi) vi="「"+text.slice(0,80)+"」 → bản dịch mô phỏng (mockup không gọi server thật).";
+        hideStatus();
+        const box=$("text-result"); box.classList.remove("hidden");
+        box.innerHTML=`<div class="popup-header" style="cursor:default;margin:-16px -16px 0;border-radius:10px 10px 0 0">
+            <div class="popup-brand">${GLYPH}<span class="popup-brand-name">Kết quả</span></div><div class="popup-spacer"></div>
+            <div class="popup-status popup-status--done"><span>${escapeHtml($("provider").value)}</span></div>
+            <div class="popup-actions"><button class="popup-iconbtn" id="txt-copy">${icon("copy",14)}</button></div></div>
+          <div class="popup-section">${chip($("source-lang").value)}<div class="popup-source">${escapeHtml(text)}</div></div>
+          <div class="popup-divider-h"></div>
+          <div class="popup-section">${chip($("target-lang").value)}<div class="popup-translation" id="txt-out">${escapeHtml(vi)}</div></div>`;
+        box.querySelector("#txt-copy").addEventListener("click",(e)=>{ navigator.clipboard?.writeText(box.querySelector("#txt-out").textContent);
+          const bn=e.currentTarget; bn.classList.add("copied"); bn.innerHTML=icon("check",14); setTimeout(()=>{bn.classList.remove("copied");bn.innerHTML=icon("copy",14);},1400); });
+        $("translate-text").disabled=false;
+      }, 650);
+    }
+
+    /* Mode */
+    function setMode(m){ mode=m; localStorage.setItem("ts-result-mode",m); dismiss(); syncMode(); }
+    function syncMode(){
+      $("mode-popup").classList.toggle("active", mode==="popup");
+      $("mode-inline").classList.toggle("active", mode==="inline");
+      const ov = mode==="inline";
+      $("ov-all").classList.toggle("hidden", !ov);
+      $("ov-source").classList.toggle("hidden", !ov);
+      $("ws-hint-text").textContent = ov ? "Kéo để dịch một vùng, hoặc bấm Dịch cả màn hình" : "Kéo để khoanh vùng cần dịch";
+    }
+
+    /* Helpers */
+    function chip(code){ const l=CONFIG.languages.find(x=>x.code===code); const name=l?l.name.replace(/\s*\(.*\)$/,""):"";
+      return `<div class="lang-chip"><span class="lang-chip-code">${escapeHtml(code||"?")}</span>${name?`<span class="lang-chip-name">${escapeHtml(name)}</span>`:""}</div>`; }
+    function escapeHtml(s){ return String(s).replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+    function toast(kind,msg){ const s=$("status"); clearTimeout(statusTimer); s.className="status "+kind;
+      s.innerHTML=(kind==="loading"?spinner(15):kind==="error"?icon("alert",15):icon("check",15))+`<span>${escapeHtml(msg)}</span>`; s.classList.remove("hidden");
+      if(kind!=="loading") statusTimer=setTimeout(hideStatus, kind==="error"?5000:2800); }
+    function hideStatus(){ $("status").classList.add("hidden"); }
+
+    function initTheme(){ document.body.className=(localStorage.getItem("ts-theme")==="cobalt-light")?"t-cobalt-light":"t-cobalt"; }
+    function toggleTheme(){ const light=document.body.classList.toggle("t-cobalt-light"); document.body.classList.toggle("t-cobalt",!light);
+      localStorage.setItem("ts-theme", light?"cobalt-light":"cobalt"); }
+  })();
+  </script>
+</body>
+</html>

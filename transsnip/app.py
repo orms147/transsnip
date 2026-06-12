@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+from datetime import datetime
 
 from PIL import Image
 from PySide6.QtCore import QObject, QRect, QThreadPool, QTimer, Slot
@@ -10,9 +11,12 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
 from transsnip.capture.region_selector import RegionSelector
 from transsnip.capture.screen import active_monitor_logical_rect, capture_rect
+from transsnip.config.history import HistoryEntry, HistoryStore
 from transsnip.config.settings import Settings, get_preset, load_settings
 from transsnip.display.floating_popup import FloatingPopup
 from transsnip.display.inline_overlay import InlineOverlay
+from transsnip.display.subtitle_bar import SubtitleBar
+from transsnip.modes.video_subtitle import VideoSubtitleController
 from transsnip.ocr.base import OCRBlock, OCRResult
 from transsnip.ocr.registry import OCRPipeline
 from transsnip.ocr.registry import default_pipeline as default_ocr_pipeline
@@ -55,7 +59,8 @@ class AppController(QObject):
 
         self._settings = load_settings()
         self._translation_pipeline = translation_pipeline or build_pipeline(
-            self._settings.translate.provider
+            self._settings.translate.provider,
+            openrouter_model=self._settings.translate.openrouter_model,
         )
         self._translation_ctx = _build_translation_ctx(self._settings)
 
@@ -64,6 +69,9 @@ class AppController(QObject):
         self._region_selector.cancelled.connect(self._on_region_cancelled)
 
         self._popup = FloatingPopup()
+        self._popup.set_voice_settings(self._settings.voice)
+        self._popup.set_display_mode(self._settings.translate.display_mode)
+        self._popup.set_click_outside_close(self._settings.display.click_outside_close)
         self._popup.settings_requested.connect(self._open_settings)
         # New Cobalt-design signals from the rebuilt popup.
         self._popup.retry_requested.connect(self._on_popup_retry)
@@ -71,6 +79,21 @@ class AppController(QObject):
 
         self._overlay = InlineOverlay()
         self._overlay.refresh_requested.connect(self._on_overlay_refresh)
+
+        # Video subtitle mode: a persistent bar + a background capture loop.
+        # `_region_target` routes the NEXT region selection: the region selector
+        # is shared with region-translate, so Alt+V flips this to "video" so the
+        # drawn rectangle starts the subtitle loop instead of a one-shot translate.
+        self._subtitle_bar = SubtitleBar()
+        self._video = VideoSubtitleController(self)
+        self._video.text_ready.connect(self._subtitle_bar.set_text)
+        self._video.status.connect(self._subtitle_bar.set_status)
+        self._video.error.connect(lambda msg: self._notify(f"Video subtitle: {msg}"))
+        self._video.stopped.connect(self._subtitle_bar.stop)
+        self._region_target = "translate"
+        # Stop the background loop cleanly on quit so its QThread doesn't block
+        # process exit.
+        self._app.aboutToQuit.connect(self._video.stop)
         # AboutDialog instance — created lazily on first open so app start
         # stays snappy (it's never needed during the snipe-and-translate flow).
         # Typed as the actual AboutDialog via a TYPE_CHECKING-guarded import to
@@ -93,9 +116,17 @@ class AppController(QObject):
         # only need it to rebind on settings-save.
         self._hotkey_manager = None
 
+        # Translation history (recent results, browsable from the tray).
+        self._history = HistoryStore()
+        from typing import TYPE_CHECKING as _TC
+        if _TC:
+            from transsnip.ui.history_window import HistoryWindow  # noqa: F401
+        self._history_window: "HistoryWindow | None" = None  # type: ignore[name-defined]
+
         self._tray.settings_requested.connect(self._open_settings)
         # Tray menu actions from the redesigned context menu.
         self._tray.about_requested.connect(self._open_about)
+        self._tray.history_requested.connect(self._open_history)
         self._tray.region_translate_triggered.connect(
             lambda: self.handle_hotkey("region_translate")
         )
@@ -134,7 +165,16 @@ class AppController(QObject):
             self._popup.hide_popup()
             self._start_fullscreen_translate()
         elif action_id == "video_subtitle_translate":
-            self._notify("Video subtitle chưa wire — Phase 2.")
+            # Toggle: if a subtitle loop is running, Alt+V stops it; otherwise
+            # start by letting the user draw the subtitle region.
+            if self._video.is_running():
+                self._stop_video()
+                return
+            self._popup.hide_popup()
+            self._region_target = "video"
+            self._region_selector.start()
+        elif action_id == "open_settings":
+            self._open_settings()
         else:
             log.warning("Unknown hotkey action: %s", action_id)
 
@@ -142,6 +182,12 @@ class AppController(QObject):
 
     @Slot(QRect)
     def _on_region_selected(self, rect: QRect) -> None:
+        # The region selector is shared between region-translate and video
+        # subtitle mode; `_region_target` says which one asked for this rect.
+        if self._region_target == "video":
+            self._region_target = "translate"
+            self._start_video_for_region(rect)
+            return
         # Cache the rect so the popup's error-state Retry button can re-run
         # the same flow without forcing the user to re-snipe.
         self._last_region_for_retry = rect
@@ -152,7 +198,29 @@ class AppController(QObject):
 
     @Slot()
     def _on_region_cancelled(self) -> None:
+        # Reset the target so a cancelled Alt+V pick doesn't leave the next
+        # region-translate selection accidentally routed to video mode.
+        self._region_target = "translate"
         log.debug("Region selection cancelled by user")
+
+    # ── Video subtitle flow ─────────────────────────────────────────────────
+
+    def _start_video_for_region(self, rect: QRect) -> None:
+        """Begin the live subtitle loop over `rect` (logical coords)."""
+        screen = QGuiApplication.screenAt(rect.center()) or QGuiApplication.primaryScreen()
+        dpr = screen.devicePixelRatio() if screen is not None else 1.0
+        self._subtitle_bar.set_bg_opacity(self._settings.display.subtitle_bg_opacity)
+        self._subtitle_bar.set_font_pt(self._settings.display.subtitle_font_pt)
+        self._subtitle_bar.start_for_region(rect)
+        self._video.start(
+            rect, dpr, self._ocr_pipeline, self._translation_pipeline, self._translation_ctx,
+        )
+        self._notify("Video subtitle: đang chạy. Bấm Alt+V để dừng.")
+
+    def _stop_video(self) -> None:
+        self._video.stop()
+        self._subtitle_bar.stop()
+        self._notify("Video subtitle: đã dừng.")
 
     def _capture_and_ocr(self, rect: QRect) -> None:
         try:
@@ -236,6 +304,26 @@ class AppController(QObject):
             len(result.source_text), len(result.translated_text),
         )
         self._popup.update_translation(result)
+        self._record_history(result)
+
+    def _record_history(self, result: TranslationResult) -> None:
+        """Append a region/vision translation to history (best-effort)."""
+        if not result.translated_text.strip():
+            return
+        try:
+            self._history.add(HistoryEntry(
+                source_text=result.source_text,
+                translated_text=result.translated_text,
+                source_lang=result.source_lang or "auto",
+                target_lang=result.target_lang,
+                provider=result.provider,
+                timestamp=datetime.now().isoformat(timespec="seconds"),
+            ))
+            # If the history window is open, reflect the new entry live.
+            if self._history_window is not None and self._history_window.isVisible():
+                self._history_window.refresh()
+        except Exception as exc:  # noqa: BLE001 — history must never break translate
+            log.debug("history add failed: %s", exc)
 
     @Slot(str)
     def _on_translation_failed(self, error: str) -> None:
@@ -384,6 +472,13 @@ class AppController(QObject):
         self._about_dialog.activateWindow()
 
     @Slot()
+    def _open_history(self) -> None:
+        if self._history_window is None:
+            from transsnip.ui.history_window import HistoryWindow
+            self._history_window = HistoryWindow(self._history)
+        self._history_window.open()
+
+    @Slot()
     def _on_popup_retry(self) -> None:
         """Error-state retry button — re-runs the last region capture flow.
 
@@ -406,8 +501,14 @@ class AppController(QObject):
     @Slot()
     def _on_settings_saved(self) -> None:
         self._settings = load_settings()
-        self._translation_pipeline = build_pipeline(self._settings.translate.provider)
+        self._translation_pipeline = build_pipeline(
+            self._settings.translate.provider,
+            openrouter_model=self._settings.translate.openrouter_model,
+        )
         self._translation_ctx = _build_translation_ctx(self._settings)
+        self._popup.set_voice_settings(self._settings.voice)
+        self._popup.set_display_mode(self._settings.translate.display_mode)
+        self._popup.set_click_outside_close(self._settings.display.click_outside_close)
         if self._hotkey_manager is not None:
             self._hotkey_manager.apply_from_settings(self._settings.hotkeys)
         log.info(
@@ -479,6 +580,8 @@ def _build_translation_ctx(settings: Settings) -> TranslationContext:
         preset_name=preset.name,
         system_prompt=preset.system_prompt,
         glossary=preset.glossary,
+        # Learning mode asks LLM providers for the per-word breakdown JSON.
+        want_word_breakdown=settings.translate.display_mode == "learning",
     )
 
 

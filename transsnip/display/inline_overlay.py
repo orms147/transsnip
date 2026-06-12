@@ -35,11 +35,13 @@ log = logging.getLogger(__name__)
 _DIM_ALPHA = 90              # full-screen dim under the boxes
 _BLOCK_BG = QColor(0, 0, 0, 235)
 _BLOCK_FG = QColor(245, 245, 250, 255)
-_BLOCK_PAD_X = 6
-_BLOCK_PAD_Y = 3
+_BLOCK_PAD_X = 8
+_BLOCK_PAD_Y = 5
 _BLOCK_RADIUS = 4
-_MIN_FONT_PT = 8
-_MAX_FONT_PT = 24
+_MIN_FONT_PT = 11            # readable floor — below this we grow the box instead
+_MAX_FONT_PT = 22
+_MIN_BOX_W = 160             # don't let a box get narrower than this
+_MAX_BOX_W_FRAC = 0.6        # cap box width at this fraction of the monitor width
 
 
 class InlineOverlay(QWidget):
@@ -111,24 +113,24 @@ class InlineOverlay(QWidget):
         # 1. Faint global dim so the boxes pop without hiding context entirely.
         painter.fillRect(self.rect(), QColor(0, 0, 0, _DIM_ALPHA))
 
-        # 2. Opaque rounded box at each bbox with the translated text.
-        painter.setPen(_BLOCK_FG)
+        # 2. Opaque rounded box at each bbox with the translated text. The box
+        #    GROWS to fit the translation (rather than shrinking the text to an
+        #    unreadable size and clipping it inside the small source bbox).
         for bbox, text in self._blocks:
+            box, font = _layout_block(text, bbox, self.width(), self.height())
             painter.setPen(Qt.PenStyle.NoPen)
             painter.setBrush(_BLOCK_BG)
-            painter.drawRoundedRect(bbox, _BLOCK_RADIUS, _BLOCK_RADIUS)
+            painter.drawRoundedRect(box, _BLOCK_RADIUS, _BLOCK_RADIUS)
 
-            inner = bbox.adjusted(_BLOCK_PAD_X, _BLOCK_PAD_Y, -_BLOCK_PAD_X, -_BLOCK_PAD_Y)
+            inner = box.adjusted(_BLOCK_PAD_X, _BLOCK_PAD_Y, -_BLOCK_PAD_X, -_BLOCK_PAD_Y)
             if inner.width() <= 0 or inner.height() <= 0:
                 continue
-
-            font = _fit_font(text, inner)
             painter.setFont(font)
             painter.setPen(_BLOCK_FG)
             painter.drawText(
                 inner,
-                Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
-                | Qt.TextFlag.TextWordWrap,
+                int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+                    | Qt.TextFlag.TextWordWrap),
                 text,
             )
 
@@ -146,28 +148,35 @@ class InlineOverlay(QWidget):
         super().keyPressEvent(event)
 
 
-def _fit_font(text: str, rect: QRect) -> QFont:
-    """Pick the largest point size in [_MIN_FONT_PT, _MAX_FONT_PT] that
-    word-wraps `text` inside `rect`.
+def _layout_block(text: str, bbox: QRect, ov_w: int, ov_h: int) -> tuple[QRect, QFont]:
+    """Return (box, font) for one translated block — the box GROWS to fit text.
 
-    Translated text typically expands ~30-50% vs the original (especially
-    CJK→Vi), so the block's OCR bbox is usually too small for the source's
-    font size. Auto-fitting prevents clipping at the cost of a few
-    QFontMetrics measurements per block (cheap — overlay is short-lived).
+    Why grow instead of shrink-to-fit: a Vietnamese translation is often 30-50%
+    longer than the CJK/EN source, so the source's small OCR bbox can't hold it
+    even at a tiny font — the old shrink-then-clip approach left text cut off and
+    unreadable. Instead we pick a readable font sized to the source line, then
+    size the box to whatever the wrapped text needs (capped at 60% monitor width),
+    and nudge it back on-screen if it would spill off the edge.
     """
-    for pt in range(_MAX_FONT_PT, _MIN_FONT_PT - 1, -1):
-        font = QFont()
-        font.setPointSize(pt)
-        font.setBold(True)
-        metrics = QFontMetrics(font)
-        bound = metrics.boundingRect(
-            rect,
-            Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignLeft,
-            text,
-        )
-        if bound.width() <= rect.width() and bound.height() <= rect.height():
-            return font
     font = QFont()
-    font.setPointSize(_MIN_FONT_PT)
     font.setBold(True)
-    return font
+    pt = max(_MIN_FONT_PT, min(_MAX_FONT_PT, round(bbox.height() * 0.5) or _MIN_FONT_PT))
+    font.setPointSize(pt)
+    metrics = QFontMetrics(font)
+
+    max_w = int(min(ov_w * _MAX_BOX_W_FRAC, max(bbox.width(), _MIN_BOX_W)))
+    inner_w = max(40, max_w - 2 * _BLOCK_PAD_X)
+    bound = metrics.boundingRect(
+        QRect(0, 0, inner_w, 100_000),
+        int(Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignLeft),
+        text,
+    )
+    box_w = max(bbox.width(), min(max_w, bound.width() + 2 * _BLOCK_PAD_X))
+    box_h = max(bbox.height(), bound.height() + 2 * _BLOCK_PAD_Y)
+
+    x, y = bbox.x(), bbox.y()
+    if x + box_w > ov_w:
+        x = max(0, ov_w - box_w)
+    if y + box_h > ov_h:
+        y = max(0, ov_h - box_h)
+    return QRect(x, y, box_w, box_h), font

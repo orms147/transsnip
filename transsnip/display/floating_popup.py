@@ -27,6 +27,7 @@ from PySide6.QtGui import (
     QBrush,
     QColor,
     QFont,
+    QFontMetrics,
     QGuiApplication,
     QKeyEvent,
     QMouseEvent,
@@ -47,6 +48,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from transsnip.config.settings import VoiceSettings
 from transsnip.linguistic.ipa import get_ipa
 from transsnip.translate.base import TranslationResult
 from transsnip.tts.edge_tts_player import EdgeTTSPlayer
@@ -70,18 +72,42 @@ _MIN_WIDTH = 320
 _MIN_HEIGHT = 140
 _MARGIN_FROM_EDGE = 16
 _GAP_FROM_REGION = 12
-_RESIZE_MARGIN = 6
+_RESIZE_MARGIN = 8
 
 # Font scaling — base point sizes at _DEFAULT_WIDTH, multiplied by width/default
 # (clamped) so a user dragging the popup wider gets larger reading text.
 _FONT_SOURCE_PT = 11
 _FONT_TRANSLATION_PT = 12
 _FONT_IPA_PT = 9
-_FONT_MIN_SCALE = 1.0
-_FONT_MAX_SCALE = 2.0
+_FONT_MIN_SCALE = 0.7   # allow shrinking text below default (A− button)
+_FONT_MAX_SCALE = 2.4
 
 _SPEAK_LINK_PREFIX = "speak:"
 _IPA_TOKEN_RE = re.compile(r"\S+|\s+")
+
+# A default Edge-TTS voice per target language, used to read the TRANSLATION
+# aloud (Standard/Learning mode). The Settings → Voice `voice` is for the SOURCE
+# (English pronunciation); reading a Vietnamese translation with an English
+# voice sounds wrong, so we pick a matching voice by target language here.
+_TARGET_VOICE: dict[str, str] = {
+    "vi": "vi-VN-HoaiMyNeural",
+    "en": "en-US-AriaNeural",
+    "ja": "ja-JP-NanamiNeural",
+    "ko": "ko-KR-SunHiNeural",
+    "zh-Hans": "zh-CN-XiaoxiaoNeural",
+    "zh-Hant": "zh-TW-HsiaoChenNeural",
+    "fr": "fr-FR-DeniseNeural",
+    "de": "de-DE-KatjaNeural",
+    "es": "es-ES-ElviraNeural",
+    "th": "th-TH-PremwadeeNeural",
+    "ru": "ru-RU-SvetlanaNeural",
+}
+
+
+def _voice_for_lang(lang: str) -> str:
+    """Edge voice for a target language; falls back to Vietnamese."""
+    primary = (lang or "vi").split("-")[0]
+    return _TARGET_VOICE.get(lang) or _TARGET_VOICE.get(primary, "vi-VN-HoaiMyNeural")
 
 
 # ── DragBar ────────────────────────────────────────────────────────────────
@@ -193,6 +219,8 @@ class _PopupHeader(QWidget):
     pin_toggled = Signal(bool)
     settings_requested = Signal()
     close_requested = Signal()
+    font_dec_requested = Signal()
+    font_inc_requested = Signal()
 
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -233,6 +261,16 @@ class _PopupHeader(QWidget):
         actions_row = QHBoxLayout(actions)
         actions_row.setContentsMargins(0, 0, 0, 0)
         actions_row.setSpacing(2)
+
+        # Font size − / + (user-controlled; dragging the popup wider reflows
+        # text, it no longer zooms — see _apply_fonts / resizeEvent).
+        self._font_dec_btn = self._mini_text_btn("A−", "Cỡ chữ nhỏ hơn")
+        self._font_dec_btn.clicked.connect(self.font_dec_requested.emit)
+        actions_row.addWidget(self._font_dec_btn)
+        self._font_inc_btn = self._mini_text_btn("A+", "Cỡ chữ lớn hơn")
+        self._font_inc_btn.clicked.connect(self.font_inc_requested.emit)
+        actions_row.addWidget(self._font_inc_btn)
+
         self._voice_btn = IconButton("volume", kind="accent", tooltip="Phát âm nguồn")
         self._voice_btn.clicked.connect(self.speak_requested.emit)
         self._voice_btn.hide()
@@ -316,6 +354,14 @@ class _PopupHeader(QWidget):
             badge = PillBadge("error", icon_name="alert", tone="warn")
             self._status_layout.addWidget(badge)
 
+    def _mini_text_btn(self, text: str, tooltip: str) -> QPushButton:
+        """A compact text button (e.g. 'A−'/'A+') matching the icon-button chrome."""
+        b = QPushButton(text)
+        b.setToolTip(tooltip)
+        b.setFixedSize(26, 26)
+        b.setCursor(Qt.CursorShape.PointingHandCursor)
+        return b
+
     def _apply_style(self) -> None:
         p = get_theme().palette
         self._brand_label.setStyleSheet(
@@ -323,6 +369,12 @@ class _PopupHeader(QWidget):
             f"letter-spacing: {p.letter_tight};"
         )
         self._divider.setStyleSheet(f"background: {p.border_1};")
+        for b in (self._font_dec_btn, self._font_inc_btn):
+            b.setStyleSheet(
+                f"QPushButton {{ color: {p.text_2}; background: transparent; border: none; "
+                f"border-radius: 6px; font-weight: 700; font-size: 12px; }} "
+                f"QPushButton:hover {{ background: {p.bg_2}; color: {p.text_1}; }}"
+            )
         self._rebuild_status()
 
 
@@ -341,6 +393,8 @@ class _PhoneticSource(QWidget):
 
     speak_requested = Signal(str)
 
+    _COL_GAP = 12  # px between word columns
+
     def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
@@ -358,10 +412,133 @@ class _PhoneticSource(QWidget):
         layout.addWidget(self._label)
         self._text = ""
         self._scale = 1.0
+        self._avail_px = 380  # available width for wrapping; updated by set_text
         get_theme().mode_changed.connect(lambda _p: self._render())
 
-    def set_text(self, text: str, *, scale: float = 1.0) -> None:
+    def set_text(self, text: str, *, scale: float = 1.0, avail_px: int | None = None) -> None:
         self._text = text
+        self._scale = scale
+        if avail_px and avail_px > 80:
+            self._avail_px = avail_px
+        self._render()
+
+    def _on_link(self, href: str) -> None:
+        if href.startswith(_SPEAK_LINK_PREFIX):
+            word = href[len(_SPEAK_LINK_PREFIX):].strip()
+            if word:
+                self.speak_requested.emit(word)
+
+    def _render(self) -> None:
+        # Each line's words are packed into ROWS that fit the available width;
+        # every row is a 2-row table (words over IPA, aligned per column). This
+        # wraps VERTICALLY by stacking tables — unlike the old single-line
+        # approach which used non-breaking spaces and overflowed on long text.
+        p = get_theme().palette
+        word_color = p.text_1
+        ipa_color = p.accent
+        dash_color = p.text_mute
+        source_pt = max(8, round(_FONT_SOURCE_PT * self._scale))
+        ipa_pt = max(7, round(_FONT_IPA_PT * self._scale))
+
+        wf = QFont(); wf.setPointSize(source_pt)
+        ipf = QFont(); ipf.setPointSize(ipa_pt)
+        wm = QFontMetrics(wf)
+        im = QFontMetrics(ipf)
+        avail = max(120, self._avail_px - 8)
+
+        out: list[str] = []
+        for raw_line in (self._text or "").splitlines() or [self._text or ""]:
+            # Build columns: (word, ipa, column_width_px).
+            cols: list[tuple[str, Optional[str], int]] = []
+            for token in _IPA_TOKEN_RE.findall(raw_line):
+                if not token.strip():
+                    continue
+                ipa = get_ipa(token)
+                ww = wm.horizontalAdvance(token)
+                iw = im.horizontalAdvance(f"/{ipa}/") if ipa else 0
+                cols.append((token, ipa, max(ww, iw) + self._COL_GAP))
+            if not cols:
+                continue
+            # Greedy-pack columns into rows that fit `avail`.
+            rows: list[list[tuple[str, Optional[str], int]]] = []
+            cur: list[tuple[str, Optional[str], int]] = []
+            cur_w = 0
+            for col in cols:
+                if cur and cur_w + col[2] > avail:
+                    rows.append(cur)
+                    cur, cur_w = [], 0
+                cur.append(col)
+                cur_w += col[2]
+            if cur:
+                rows.append(cur)
+            for row in rows:
+                out.append(self._row_table(row, source_pt, ipa_pt,
+                                           word_color, ipa_color, dash_color))
+        self._label.setText("".join(out))
+
+    @staticmethod
+    def _row_table(row, source_pt, ipa_pt, word_color, ipa_color, dash_color) -> str:
+        """One packed row → a 2-row HTML table (word over IPA, aligned columns)."""
+        word_tds: list[str] = []
+        ipa_tds: list[str] = []
+        for token, ipa, _w in row:
+            esc = html.escape(token)
+            pad = "padding:0 6px 0 0; white-space:nowrap;"
+            if ipa:
+                href = f"{_SPEAK_LINK_PREFIX}{esc}"
+                word_tds.append(
+                    f"<td style='{pad}'><a href='{href}' style='color:{word_color}; "
+                    f"text-decoration:none; font-size:{source_pt}pt;'>{esc}</a></td>"
+                )
+                ipa_tds.append(
+                    f"<td style='{pad}'><a href='{href}' style='color:{ipa_color}; "
+                    f"text-decoration:none; font-size:{ipa_pt}pt;'>/{html.escape(ipa)}/</a></td>"
+                )
+            else:
+                word_tds.append(
+                    f"<td style='{pad} color:{word_color}; font-size:{source_pt}pt;'>{esc}</td>"
+                )
+                ipa_tds.append(
+                    f"<td style='{pad} color:{dash_color}; font-size:{ipa_pt}pt;'>—</td>"
+                )
+        return (
+            "<table cellspacing='0' cellpadding='0' style='margin-bottom:6px;'>"
+            f"<tr>{''.join(word_tds)}</tr><tr>{''.join(ipa_tds)}</tr></table>"
+        )
+
+
+class _WordBreakdown(QWidget):
+    """Learning-mode per-word gloss: one line per word — token (click to speak)
+    + IPA + meaning + part of speech.
+
+    Rendered as a single rich-text QLabel (same approach as `_PhoneticSource`):
+    Qt's rich-text engine doesn't do flow-of-cards layouts reliably, so a
+    vertical list is both robust and the clearest format for studying.
+    """
+
+    speak_requested = Signal(str)
+
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 2, 0, 0)
+        layout.setSpacing(0)
+        self._label = QLabel()
+        self._label.setWordWrap(True)
+        self._label.setTextFormat(Qt.TextFormat.RichText)
+        self._label.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+            | Qt.TextInteractionFlag.LinksAccessibleByMouse
+        )
+        self._label.setOpenExternalLinks(False)
+        self._label.linkActivated.connect(self._on_link)
+        layout.addWidget(self._label)
+        self._words: list = []
+        self._scale = 1.0
+        get_theme().mode_changed.connect(lambda _p: self._render())
+
+    def set_words(self, words: list, *, scale: float = 1.0) -> None:
+        self._words = words or []
         self._scale = scale
         self._render()
 
@@ -373,53 +550,28 @@ class _PhoneticSource(QWidget):
 
     def _render(self) -> None:
         p = get_theme().palette
-        word_color = p.text_1
-        ipa_color = p.accent
-        dash_color = p.text_mute
-        source_pt = max(8, round(_FONT_SOURCE_PT * self._scale))
-        ipa_pt = max(7, round(_FONT_IPA_PT * self._scale))
-
-        out: list[str] = []
-        for raw_line in (self._text or "").splitlines() or [self._text or ""]:
-            tokens = _IPA_TOKEN_RE.findall(raw_line)
-            source_html: list[str] = []
-            ipa_html: list[str] = []
-            any_ipa = False
-            for token in tokens:
-                if token.isspace():
-                    source_html.append(token.replace(" ", "&nbsp;"))
-                    ipa_html.append("&nbsp;")
-                    continue
-                ipa = get_ipa(token)
-                esc = html.escape(token)
-                if ipa:
-                    any_ipa = True
-                    href = f"{_SPEAK_LINK_PREFIX}{esc}"
-                    source_html.append(
-                        f"<a href='{href}' "
-                        f"style='color: {word_color}; text-decoration: none;'>"
-                        f"{esc}</a>"
-                    )
-                    ipa_html.append(
-                        f"<a href='{href}' "
-                        f"style='color: {ipa_color}; text-decoration: none;'>"
-                        f"/{html.escape(ipa)}/</a>"
-                    )
-                else:
-                    source_html.append(
-                        f"<span style='color: {word_color};'>{esc}</span>"
-                    )
-                    ipa_html.append(
-                        f"<span style='color: {dash_color};'>—</span>"
-                    )
-            block = f"<div style='font-size: {source_pt}pt; line-height: 1.5;'>{''.join(source_html)}</div>"
-            if any_ipa:
-                block += (
-                    f"<div style='font-size: {ipa_pt}pt; line-height: 1.3; "
-                    f"margin-top: 1px; margin-bottom: 6px;'>{''.join(ipa_html)}</div>"
-                )
-            out.append(block)
-        self._label.setText("".join(out))
+        token_pt = max(8, round(_FONT_SOURCE_PT * self._scale))
+        small_pt = max(7, round(_FONT_IPA_PT * self._scale))
+        rows: list[str] = []
+        for w in self._words:
+            esc = html.escape(w.token)
+            href = f"{_SPEAK_LINK_PREFIX}{esc}"
+            ipa = (f" <span style='color:{p.accent};'>/{html.escape(w.ipa)}/</span>"
+                   if getattr(w, "ipa", None) else "")
+            pos = (f" <span style='color:{p.text_mute};'>· {html.escape(w.pos)}</span>"
+                   if getattr(w, "pos", None) else "")
+            meaning = (
+                f"<span style='color:{p.text_2};'>{html.escape(w.meaning)}</span>"
+                if getattr(w, "meaning", None)
+                else f"<span style='color:{p.text_mute};'>—</span>"
+            )
+            rows.append(
+                f"<div style='font-size:{small_pt}pt; line-height:1.65; margin-bottom:4px;'>"
+                f"<a href='{href}' style='color:{p.text_1}; text-decoration:none; "
+                f"font-size:{token_pt}pt; font-weight:600;'>{esc}</a>"
+                f"{ipa}{pos} &nbsp;&nbsp;{meaning}</div>"
+            )
+        self._label.setText("".join(rows))
 
 
 # ── Skeleton placeholder (loading state) ──────────────────────────────────
@@ -557,21 +709,43 @@ class FloatingPopup(QWidget):
         self._last_translation: str = ""
         self._last_source_text: str = ""
         self._last_source_lang: Optional[str] = None
+        self._last_target_lang: str = "vi"
         self._show_phonetic_active: bool = False
         self._filter_installed = False
+        # Whether clicking outside the popup dismisses it (Settings → Display).
+        self._click_outside_close = True
         self._user_resized = False
         self._current_state = "loading"
         self._current_font_scale = 1.0
+        # User-controlled text size (header A−/A+). Decoupled from width so
+        # dragging the popup wider reflows text instead of zooming it.
+        self._user_font_scale = 1.0
 
         # Resize state
         self._resize_edges = 0
         self._resize_start_geom: Optional[QRect] = None
         self._resize_start_global: Optional[QPoint] = None
+        self._edge_cursor_widget: Optional[QWidget] = None  # child showing resize cursor
 
         self._tts_player = EdgeTTSPlayer(self)
+        # User voice prefs (Settings → Voice). AppController pushes the real
+        # values via set_voice_settings(); defaults keep the popup usable
+        # standalone (tests, first run before settings load).
+        self._voice_settings = VoiceSettings()
+        # Result detail level (Settings → Translation). "standard" adds a 🔊 to
+        # read the source aloud even without the learning breakdown.
+        self._display_mode = "simple"
 
         self._build_ui()
-        get_theme().mode_changed.connect(lambda _p: self.update())  # re-paint frame
+        # On theme switch, re-apply label colors AND repaint the frame. Without
+        # re-running _apply_style the translation/source labels keep the OLD
+        # palette's color — which after a light↔dark switch matches the new
+        # background, making the text invisible until selected.
+        get_theme().mode_changed.connect(self._on_theme_changed)
+
+    def _on_theme_changed(self, _palette=None) -> None:
+        self._apply_style()
+        self.update()
 
     # ── UI construction ───────────────────────────────────────────────────
 
@@ -584,6 +758,8 @@ class FloatingPopup(QWidget):
         self._header = _PopupHeader(self)
         self._header.speak_requested.connect(self._on_speak_sentence)
         self._header.copy_requested.connect(self._on_copy)
+        self._header.font_dec_requested.connect(lambda: self._adjust_font(-0.15))
+        self._header.font_inc_requested.connect(lambda: self._adjust_font(+0.15))
         self._header.pin_toggled.connect(self.pin_changed.emit)
         self._header.settings_requested.connect(self.settings_requested.emit)
         self._header.close_requested.connect(self.hide_popup)
@@ -619,6 +795,12 @@ class FloatingPopup(QWidget):
         self._phonetic = _PhoneticSource()
         self._phonetic.speak_requested.connect(self._on_speak_word)
         self._phonetic.hide()
+        # Learning-mode per-word gloss (IPA + meaning + pos). Populated from
+        # result.words; shown instead of the plain source when present.
+        self._word_breakdown = _WordBreakdown()
+        self._word_breakdown.speak_requested.connect(self._on_speak_word)
+        self._word_breakdown.hide()
+        self._last_words: list = []
         self._divider = QFrame()
         self._divider.setFixedHeight(1)
         self._divider.hide()
@@ -655,12 +837,23 @@ class FloatingPopup(QWidget):
         src_layout.addLayout(src_head)
         src_layout.addWidget(self._source_label)
         src_layout.addWidget(self._phonetic)
+        src_layout.addWidget(self._word_breakdown)
 
         tx_section = QWidget()
         tx_layout = QVBoxLayout(tx_section)
         tx_layout.setContentsMargins(0, 0, 0, 0)
         tx_layout.setSpacing(6)
-        tx_layout.addWidget(self._target_chip)
+        tx_head = QHBoxLayout()
+        tx_head.setSpacing(6)
+        tx_head.addWidget(self._target_chip)
+        tx_head.addStretch(1)
+        # Speak the TRANSLATION in a target-language voice (Standard/Learning).
+        self._speak_dst_btn = IconButton("volume", size=24, icon_size=13,
+                                         tooltip="Nghe bản dịch")
+        self._speak_dst_btn.clicked.connect(self._on_speak_translation)
+        self._speak_dst_btn.hide()
+        tx_head.addWidget(self._speak_dst_btn)
+        tx_layout.addLayout(tx_head)
         tx_layout.addWidget(self._translation_label)
 
         self._body_layout.addWidget(src_section)
@@ -710,6 +903,7 @@ class FloatingPopup(QWidget):
         self._last_source_text = ""
         self._last_source_lang = None
         self._show_phonetic_active = False
+        self._last_words = []
         self._user_resized = False
         self._tts_player.stop()
         self._set_state("loading")
@@ -756,7 +950,17 @@ class FloatingPopup(QWidget):
 
         self._last_translation = result.translated_text
         self._translation_label.setText(result.translated_text)
-        target_code = (result.target_lang or "vi").upper()
+        # Learning mode: if the provider returned a per-word breakdown, render it
+        # (it replaces the plain source / phonetic block — see _set_state).
+        self._last_words = list(result.words) if result.words else []
+        if self._last_words:
+            self._word_breakdown.set_words(self._last_words, scale=self._current_font_scale)
+        # Reflect the ACTUAL target language on the chip — it was previously
+        # left at its hardcoded "VI / Tiếng Việt" init value, so translating to
+        # any other language (e.g. ja) showed the wrong label.
+        target_lang = result.target_lang or "vi"
+        self._last_target_lang = target_lang
+        self._target_chip.set_lang(target_lang.upper(), _lang_display_name(target_lang))
         self._target_chip.show()
         self._header.set_status(
             "done",
@@ -765,6 +969,16 @@ class FloatingPopup(QWidget):
         )
         self._set_state("translation-done")
         self._fit_height_to_content()
+
+        # Autoplay: read the English source aloud when the user enabled it.
+        # Gated to English source so a Vietnamese/Japanese popup doesn't blurt
+        # out with an English voice unexpectedly.
+        if (
+            self._voice_settings.autoplay_en
+            and (self._last_source_lang or "").lower().startswith("en")
+            and self._last_source_text.strip()
+        ):
+            self._speak(self._last_source_text)
 
     def show_error(self, message: str) -> None:
         self._header.set_status("error")
@@ -792,29 +1006,58 @@ class FloatingPopup(QWidget):
 
         # Source section visible whenever we have content.
         source_visible = (is_source_known or is_done) and bool(self._last_source_text)
+        # Learning-mode breakdown takes over the source block once translation
+        # is done and the provider returned per-word data.
+        has_breakdown = is_done and bool(self._last_words)
         self._source_chip.setVisible(source_visible)
-        if source_visible and self._show_phonetic_active:
+        if has_breakdown:
+            self._learning_tag.setVisible(True)
+            self._word_breakdown.setVisible(True)
+            self._phonetic.setVisible(False)
+            self._source_label.setVisible(False)
+            self._header.set_voice_available(True)
+        elif source_visible and self._show_phonetic_active:
             self._learning_tag.setVisible(True)
             self._phonetic.setVisible(True)
+            self._word_breakdown.setVisible(False)
             self._source_label.setVisible(False)
             self._header.set_voice_available(True)
         elif source_visible:
             self._learning_tag.setVisible(False)
             self._phonetic.setVisible(False)
+            self._word_breakdown.setVisible(False)
             self._source_label.setVisible(True)
-            self._header.set_voice_available(False)
+            # Standard mode: offer the speak button (reads the source sentence).
+            self._header.set_voice_available(self._display_mode == "standard")
         else:
             self._learning_tag.setVisible(False)
             self._phonetic.setVisible(False)
+            self._word_breakdown.setVisible(False)
             self._source_label.setVisible(False)
 
         # Divider + target section only on done state.
         self._divider.setVisible(is_done and source_visible)
         self._target_chip.setVisible(is_done)
         self._translation_label.setVisible(is_done)
+        # Speak-translation button: Standard/Learning modes, once there's a result.
+        self._speak_dst_btn.setVisible(
+            is_done and bool(self._last_translation)
+            and self._display_mode in ("standard", "learning")
+        )
 
         # Footer hint only when done and English source.
         self._footer_hint.setVisible(is_done and self._show_phonetic_active)
+
+    def _content_width(self) -> int:
+        """Available pixel width for wrapping body content (phonetic rows).
+
+        Uses the scroll viewport once laid out; falls back to the window width
+        minus chrome before the first show (viewport width is 0 then).
+        """
+        vw = self._scroll.viewport().width()
+        if vw <= 80:
+            vw = self.width() - 36
+        return max(120, vw - 28)
 
     def _render_source_block(self, text: str, source_lang: Optional[str]) -> None:
         # Update chip in place (LangChip.set_lang) — avoids re-parenting which
@@ -823,20 +1066,48 @@ class FloatingPopup(QWidget):
         name = _lang_display_name(source_lang)
         self._source_chip.set_lang(code, name)
         if self._show_phonetic_active:
-            self._phonetic.set_text(text, scale=self._current_font_scale)
+            self._phonetic.set_text(
+                text, scale=self._current_font_scale, avail_px=self._content_width()
+            )
         else:
             self._source_label.setText(text)
 
     # ── TTS handlers ──────────────────────────────────────────────────────
 
+    def set_voice_settings(self, vs: VoiceSettings) -> None:
+        """Push the user's Settings → Voice prefs (voice id, rate, volume, autoplay)."""
+        self._voice_settings = vs
+
+    def set_display_mode(self, mode: str) -> None:
+        """Result detail level: 'simple' / 'standard' / 'learning'."""
+        self._display_mode = mode
+
+    def set_click_outside_close(self, enabled: bool) -> None:
+        """Whether a click outside the popup dismisses it (Settings → Display)."""
+        self._click_outside_close = enabled
+
+    def _speak(self, text: str) -> None:
+        vs = self._voice_settings
+        self._tts_player.speak(text, voice=vs.voice, rate=vs.rate, volume=vs.volume)
+
     def _on_speak_sentence(self) -> None:
         text = (self._last_source_text or "").strip()
         if text:
-            self._tts_player.speak(text, voice="en-US-AriaNeural")
+            self._speak(text)
 
     def _on_speak_word(self, word: str) -> None:
         if word.strip():
-            self._tts_player.speak(word.strip(), voice="en-US-AriaNeural")
+            self._speak(word.strip())
+
+    def _on_speak_translation(self) -> None:
+        """Read the translated text aloud using a target-language voice."""
+        text = (self._last_translation or "").strip()
+        if not text:
+            return
+        vs = self._voice_settings
+        self._tts_player.speak(
+            text, voice=_voice_for_lang(self._last_target_lang), rate=vs.rate, volume=vs.volume,
+        )
 
     def _on_copy(self) -> None:
         if not self._last_translation:
@@ -894,35 +1165,55 @@ class FloatingPopup(QWidget):
             return
         self.resize(self.width(), new_h)
 
+    def _adjust_font(self, delta: float) -> None:
+        """Header A−/A+ — change the user text size and re-apply."""
+        self._user_font_scale = max(_FONT_MIN_SCALE, min(self._user_font_scale + delta,
+                                                         _FONT_MAX_SCALE))
+        self._apply_fonts(force=True)
+        self._fit_height_to_content()
+
     def _apply_fonts(self, *, force: bool = False) -> None:
-        ratio = self.width() / _DEFAULT_WIDTH
-        scale = max(_FONT_MIN_SCALE, min(ratio, _FONT_MAX_SCALE))
+        # Font size is USER-controlled (A−/A+), NOT tied to popup width — so
+        # dragging the popup wider reflows the text wider instead of zooming it.
+        # We size via STYLESHEET (font-size), not setFont(), because the global
+        # theme stylesheet sets a pixel font-size that would override setFont().
+        scale = max(_FONT_MIN_SCALE, min(self._user_font_scale, _FONT_MAX_SCALE))
         if not force and abs(scale - self._current_font_scale) < 0.05:
             return
         self._current_font_scale = scale
-        src_pt = max(8, round(_FONT_SOURCE_PT * scale))
-        tx_pt = max(9, round(_FONT_TRANSLATION_PT * scale))
-        sf = QFont(self._source_label.font())
-        sf.setPointSize(src_pt)
-        self._source_label.setFont(sf)
-        tf = QFont(self._translation_label.font())
-        tf.setPointSize(tx_pt)
-        tf.setBold(True)
-        self._translation_label.setFont(tf)
+        self._apply_style()  # re-applies label stylesheets at the new font size
         if self._show_phonetic_active and self._last_source_text:
-            self._phonetic.set_text(_truncate(self._last_source_text), scale=scale)
+            self._phonetic.set_text(
+                _truncate(self._last_source_text), scale=scale, avail_px=self._content_width()
+            )
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        self._apply_fonts()
+        # Width changed → REFLOW text to the new width (re-pack phonetic rows);
+        # do NOT rescale the font. Plain wordWrap labels (source/translation)
+        # reflow on their own; only the phonetic table layout needs re-rendering.
+        if self._show_phonetic_active and self._last_source_text:
+            self._phonetic.set_text(
+                _truncate(self._last_source_text),
+                scale=self._current_font_scale,
+                avail_px=self._content_width(),
+            )
 
     # ── Apply style (text colors, divider, learning tag) ──────────────────
 
     def _apply_style(self) -> None:
         p = get_theme().palette
+        # Font sizes scale with the user's A−/A+ choice (via stylesheet so they
+        # win over the global theme's pixel font-size).
+        src_pt = max(8, round(_FONT_SOURCE_PT * self._current_font_scale))
+        tx_pt = max(9, round(_FONT_TRANSLATION_PT * self._current_font_scale))
         self._divider.setStyleSheet(f"background: {p.border_1};")
-        self._source_label.setStyleSheet(f"color: {p.text_2}; line-height: 1.55;")
-        self._translation_label.setStyleSheet(f"color: {p.text_1}; line-height: 1.6; font-weight: 600;")
+        self._source_label.setStyleSheet(
+            f"color: {p.text_2}; line-height: 1.55; font-size: {src_pt}pt;"
+        )
+        self._translation_label.setStyleSheet(
+            f"color: {p.text_1}; line-height: 1.6; font-weight: 600; font-size: {tx_pt}pt;"
+        )
         self._learning_tag.setStyleSheet(
             f"color: {p.accent}; background: {p.accent_soft}; "
             f"padding: 1px 8px; border-radius: 999px; "
@@ -956,21 +1247,61 @@ class FloatingPopup(QWidget):
             app.removeEventFilter(self)
         self._filter_installed = False
 
+    def _is_self_or_descendant(self, watched) -> bool:
+        w = watched if isinstance(watched, QWidget) else None
+        while w is not None:
+            if w is self:
+                return True
+            w = w.parentWidget()
+        return False
+
     def eventFilter(self, watched, event):
-        if event.type() == QEvent.Type.MouseButtonPress and self.isVisible():
-            # Walk ancestor chain — if watched is the popup or any descendant,
-            # let the click through (text selection, button click, etc.).
-            w = watched if isinstance(watched, QWidget) else None
-            while w is not None:
-                if w is self:
-                    return super().eventFilter(watched, event)
-                w = w.parentWidget()
+        et = event.type()
+        # Drag-resize in progress — handle every move/release app-wide (the
+        # cursor may be over a child label, whose own handlers we bypass).
+        if self._resize_edges:
+            if et == QEvent.Type.MouseMove:
+                self._update_resize(event.globalPosition().toPoint())
+                return True
+            if et == QEvent.Type.MouseButtonRelease:
+                self._finish_resize()
+                return True
+
+        if not self.isVisible():
+            return super().eventFilter(watched, event)
+        inside = self._is_self_or_descendant(watched)
+
+        if et == QEvent.Type.MouseButtonPress:
             try:
-                global_pos = event.globalPosition().toPoint()
+                gp = event.globalPosition().toPoint()
             except AttributeError:
                 return super().eventFilter(watched, event)
-            if not self.geometry().contains(global_pos):
+            if inside:
+                # Near an edge → START resize even though a selectable label is
+                # under the cursor; consume so it doesn't begin a text selection
+                # instead of resizing.
+                if event.button() == Qt.MouseButton.LeftButton:
+                    edges = self._edges_at(self.mapFromGlobal(gp))
+                    if edges:
+                        self._begin_resize(edges, gp)
+                        return True
+                return super().eventFilter(watched, event)
+            if self._click_outside_close and not self.geometry().contains(gp):
                 self.hide_popup()
+        elif et == QEvent.Type.MouseMove and inside:
+            # Show the resize cursor when hovering an edge over a child label.
+            try:
+                gp = event.globalPosition().toPoint()
+            except AttributeError:
+                return super().eventFilter(watched, event)
+            edges = self._edges_at(self.mapFromGlobal(gp))
+            if isinstance(watched, QWidget):
+                if edges:
+                    watched.setCursor(self._cursor_for_edges(edges))
+                    self._edge_cursor_widget = watched
+                elif self._edge_cursor_widget is watched:
+                    watched.unsetCursor()
+                    self._edge_cursor_widget = None
         return super().eventFilter(watched, event)
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -1017,56 +1348,69 @@ class FloatingPopup(QWidget):
             return Qt.CursorShape.SizeVerCursor
         return Qt.CursorShape.ArrowCursor
 
+    def _begin_resize(self, edges: int, global_pt: QPoint) -> None:
+        self._resize_edges = edges
+        self._resize_start_geom = self.geometry()
+        self._resize_start_global = global_pt
+
+    def _update_resize(self, global_pt: QPoint) -> None:
+        if not (self._resize_edges and self._resize_start_geom and self._resize_start_global):
+            return
+        delta = global_pt - self._resize_start_global
+        g = QRect(self._resize_start_geom)
+        screen = QGuiApplication.screenAt(self.frameGeometry().center()) \
+            or QGuiApplication.primaryScreen()
+        avail = screen.availableGeometry() if screen else None
+
+        if self._resize_edges & 1:
+            new_left = g.left() + delta.x()
+            if g.right() - new_left + 1 < _MIN_WIDTH:
+                new_left = g.right() - _MIN_WIDTH + 1
+            if avail and new_left < avail.left():
+                new_left = avail.left()
+            g.setLeft(new_left)
+        if self._resize_edges & 2:
+            new_right = g.right() + delta.x()
+            if new_right - g.left() + 1 < _MIN_WIDTH:
+                new_right = g.left() + _MIN_WIDTH - 1
+            if avail and new_right > avail.right():
+                new_right = avail.right()
+            g.setRight(new_right)
+        if self._resize_edges & 4:
+            new_top = g.top() + delta.y()
+            if g.bottom() - new_top + 1 < _MIN_HEIGHT:
+                new_top = g.bottom() - _MIN_HEIGHT + 1
+            if avail and new_top < avail.top():
+                new_top = avail.top()
+            g.setTop(new_top)
+        if self._resize_edges & 8:
+            new_bottom = g.bottom() + delta.y()
+            if new_bottom - g.top() + 1 < _MIN_HEIGHT:
+                new_bottom = g.top() + _MIN_HEIGHT - 1
+            if avail and new_bottom > avail.bottom():
+                new_bottom = avail.bottom()
+            g.setBottom(new_bottom)
+        self.setGeometry(g)
+        self.repaint()
+
+    def _finish_resize(self) -> None:
+        if self._resize_start_geom is not None:
+            self._user_resized = True
+        self._resize_edges = 0
+        self._resize_start_geom = None
+        self._resize_start_global = None
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
             edges = self._edges_at(event.position().toPoint())
             if edges:
-                self._resize_edges = edges
-                self._resize_start_geom = self.geometry()
-                self._resize_start_global = event.globalPosition().toPoint()
+                self._begin_resize(edges, event.globalPosition().toPoint())
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
-        if self._resize_edges and self._resize_start_geom and self._resize_start_global:
-            delta = event.globalPosition().toPoint() - self._resize_start_global
-            g = QRect(self._resize_start_geom)
-            screen = QGuiApplication.screenAt(self.frameGeometry().center()) \
-                or QGuiApplication.primaryScreen()
-            avail = screen.availableGeometry() if screen else None
-
-            if self._resize_edges & 1:
-                new_left = g.left() + delta.x()
-                if g.right() - new_left + 1 < _MIN_WIDTH:
-                    new_left = g.right() - _MIN_WIDTH + 1
-                if avail and new_left < avail.left():
-                    new_left = avail.left()
-                g.setLeft(new_left)
-            if self._resize_edges & 2:
-                new_right = g.right() + delta.x()
-                if new_right - g.left() + 1 < _MIN_WIDTH:
-                    new_right = g.left() + _MIN_WIDTH - 1
-                if avail and new_right > avail.right():
-                    new_right = avail.right()
-                g.setRight(new_right)
-            if self._resize_edges & 4:
-                new_top = g.top() + delta.y()
-                if g.bottom() - new_top + 1 < _MIN_HEIGHT:
-                    new_top = g.bottom() - _MIN_HEIGHT + 1
-                if avail and new_top < avail.top():
-                    new_top = avail.top()
-                g.setTop(new_top)
-            if self._resize_edges & 8:
-                new_bottom = g.bottom() + delta.y()
-                if new_bottom - g.top() + 1 < _MIN_HEIGHT:
-                    new_bottom = g.top() + _MIN_HEIGHT - 1
-                if avail and new_bottom > avail.bottom():
-                    new_bottom = avail.bottom()
-                g.setBottom(new_bottom)
-            self.setGeometry(g)
-            self.repaint()
-            super().mouseMoveEvent(event)
+        if self._resize_edges:
+            self._update_resize(event.globalPosition().toPoint())
             return
-
         edges = self._edges_at(event.position().toPoint())
         if edges:
             self.setCursor(self._cursor_for_edges(edges))
@@ -1075,11 +1419,7 @@ class FloatingPopup(QWidget):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
-        if self._resize_start_geom is not None:
-            self._user_resized = True
-        self._resize_edges = 0
-        self._resize_start_geom = None
-        self._resize_start_global = None
+        self._finish_resize()
         super().mouseReleaseEvent(event)
 
 

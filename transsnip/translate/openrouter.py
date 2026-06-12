@@ -116,13 +116,21 @@ class OpenRouterTranslator(Translator):
                 "OpenRouter API key chưa set. Lấy key miễn phí tại openrouter.ai → Keys"
             )
 
-        system_prompt = self._build_system_prompt(ctx)
+        # Learning mode: per-word breakdown JSON (shared prompt/parser).
+        want_breakdown = ctx.want_word_breakdown
+        if want_breakdown:
+            from transsnip.linguistic.word_breakdown import build_breakdown_prompt
+            system_prompt = "You are a translator and language tutor. Reply with JSON only."
+            user_content = build_breakdown_prompt(text, ctx)
+        else:
+            system_prompt = self._build_system_prompt(ctx)
+            user_content = text
         try:
             response = self._ensure_client().chat.completions.create(
                 model=self._model,
                 messages=[
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": text},
+                    {"role": "user", "content": user_content},
                 ],
                 max_tokens=2048,
                 temperature=0.1,
@@ -131,7 +139,17 @@ class OpenRouterTranslator(Translator):
             raise TranslationError(f"OpenRouter API call failed: {exc}") from exc
 
         choice = response.choices[0] if response.choices else None
-        translation = (choice.message.content or "").strip() if choice else ""
+        raw = (choice.message.content or "").strip() if choice else ""
+
+        words = None
+        if want_breakdown:
+            from transsnip.linguistic.word_breakdown import parse_breakdown
+            translation, parsed_words = parse_breakdown(raw)
+            if not translation:
+                translation = raw
+            words = parsed_words or None
+        else:
+            translation = raw
 
         if not translation:
             raise TranslationError("OpenRouter returned empty response")
@@ -149,6 +167,7 @@ class OpenRouterTranslator(Translator):
             source_lang=ctx.source_lang or "auto",
             target_lang=ctx.target_lang,
             provider=f"openrouter/{self._model.split('/')[-1]}",
+            words=words,
         )
 
     @staticmethod

@@ -109,6 +109,29 @@ class GeminiTranslator(Translator):
                 "mở Settings trong tray và paste vào, hoặc set env GOOGLE_API_KEY."
             )
 
+        # Learning mode: ask for the per-word breakdown JSON instead of a plain
+        # translation. Shared prompt/parse so every LLM provider behaves the same.
+        if ctx.want_word_breakdown:
+            from transsnip.linguistic.word_breakdown import build_breakdown_prompt, parse_breakdown
+            try:
+                response = self._ensure_model().generate_content(build_breakdown_prompt(text, ctx))
+            except Exception as exc:
+                raise TranslationError(f"Gemini API call failed: {exc}") from exc
+            raw = (response.text or "").strip()
+            translation, words = parse_breakdown(raw)
+            if not translation:
+                translation, words = raw, []  # JSON parse failed → degrade to plain
+            if not translation:
+                raise TranslationError("Gemini returned empty response")
+            return TranslationResult(
+                source_text=text,
+                translated_text=translation,
+                source_lang=ctx.source_lang or "auto",
+                target_lang=ctx.target_lang,
+                provider=self.name,
+                words=words or None,
+            )
+
         prompt = self._build_prompt(text, ctx)
         try:
             response = self._ensure_model().generate_content(prompt)

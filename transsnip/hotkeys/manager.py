@@ -13,6 +13,7 @@ DEFAULT_BINDINGS: Final[dict[str, str]] = {
     "region_translate": "alt+t",
     "fullscreen_translate": "alt+f",
     "video_subtitle_translate": "alt+v",
+    "open_settings": "ctrl+alt+s",
 }
 
 

@@ -27,6 +27,7 @@ class TrayController(QSystemTrayIcon):
 
     settings_requested = Signal()
     about_requested = Signal()
+    history_requested = Signal()
     region_translate_triggered = Signal()
     fullscreen_translate_triggered = Signal()
 
@@ -78,9 +79,13 @@ class TrayController(QSystemTrayIcon):
         # in the tray menu just made the panel taller without adding value.
         menu = QMenu()
 
-        settings_action = QAction("Settings…    (Ctrl+,)", self)
+        settings_action = QAction("Settings…", self)
         settings_action.triggered.connect(self.settings_requested.emit)
         menu.addAction(settings_action)
+
+        history_action = QAction("Lịch sử dịch", self)
+        history_action.triggered.connect(self.history_requested.emit)
+        menu.addAction(history_action)
 
         about_action = QAction("About TransSnip", self)
         about_action.triggered.connect(self.about_requested.emit)

@@ -183,6 +183,11 @@ class SettingsWindow(QWidget):
         self.setMinimumSize(720, 540)
 
         self._settings = load_settings()
+        # OpenRouter models fetched this session (persisted on save so the
+        # dropdown survives a restart). Seeded from the cached list if present.
+        self._fetched_models: list[tuple[str, str]] = [
+            (d, i) for d, i in self._settings.translate.openrouter_models if d and i
+        ]
         self._models_fetched.connect(self._apply_fetched_models)
         self._fetch_error.connect(self._on_fetch_error)
 
@@ -397,7 +402,9 @@ class SettingsWindow(QWidget):
         provider_form.addRow("", self._api_key_hint)
 
         self._model_combo = QComboBox()
-        for display, model_id in OPENROUTER_MODELS:
+        # Prefer the user's previously-fetched catalog; fall back to the small
+        # hardcoded starter list on a fresh install.
+        for display, model_id in (self._fetched_models or OPENROUTER_MODELS):
             self._model_combo.addItem(display, model_id)
         self._model_row_label = QLabel("Model:")
         model_row = QHBoxLayout()
@@ -436,6 +443,17 @@ class SettingsWindow(QWidget):
         preset_row = QFormLayout()
         preset_row.setSpacing(12)
         preset_row.addRow("Context preset:", self._active_preset_combo)
+
+        # Display mode — how much detail the result popup shows.
+        self._display_mode_combo = QComboBox()
+        self._display_mode_combo.addItem("Simple — chỉ bản dịch", "simple")
+        self._display_mode_combo.addItem("Standard — bản dịch + phát âm", "standard")
+        self._display_mode_combo.addItem("Learning — phân tích từng từ (IPA + nghĩa)", "learning")
+        self._display_mode_combo.setToolTip(
+            "Learning mode yêu cầu provider LLM (Gemini/Claude/OpenRouter) trả về "
+            "phân tích từng từ; Google Free chỉ hiện IPA cho tiếng Anh."
+        )
+        preset_row.addRow("Chế độ hiển thị:", self._display_mode_combo)
         layout.addLayout(preset_row)
 
         self._phonetic_toggle = ToggleRow(
@@ -547,7 +565,8 @@ class SettingsWindow(QWidget):
         rows = [
             ("region_translate", "crop", "Region translate", "Snipping-tool style"),
             ("fullscreen_translate", "fullscreen", "Fullscreen translate", "Dịch toàn màn hình hiện tại"),
-            ("video_subtitle_translate", "subtitles", "Video subtitle", "Auto-translate phụ đề real-time (Phase 2)"),
+            ("video_subtitle_translate", "subtitles", "Video subtitle", "Auto-translate phụ đề real-time"),
+            ("open_settings", "settings", "Mở Settings", "Mở cửa sổ cài đặt từ bàn phím"),
         ]
         for action_id, icon_name, label, desc in rows:
             row = QWidget()
@@ -626,9 +645,21 @@ class SettingsWindow(QWidget):
             min_label="1.0×", max_label="3.0×",
             format_readout=lambda v: f"{v:.1f}×",
         )
+        self._subtitle_opacity_slider = Slider(
+            minimum=0.2, maximum=1.0, value=0.92,
+            min_label="20%", max_label="100%",
+            format_readout=lambda v: f"{int(v*100)}%",
+        )
+        self._subtitle_font_slider = Slider(
+            minimum=10, maximum=32, value=15,
+            min_label="10pt", max_label="32pt",
+            format_readout=lambda v: f"{int(v)}pt",
+        )
         form = QFormLayout()
         form.addRow("Kích thước mặc định:", self._popup_width_slider)
         form.addRow("Font scale tối đa:", self._font_scale_slider)
+        form.addRow("Độ mờ nền phụ đề video:", self._subtitle_opacity_slider)
+        form.addRow("Cỡ chữ phụ đề video:", self._subtitle_font_slider)
         layout.addLayout(form)
 
         self._click_outside_display = ToggleRow("Click outside để đóng popup")
@@ -717,9 +748,15 @@ class SettingsWindow(QWidget):
         # Translation
         _select_by_data(self._provider_combo, s.translate.provider)
         self._refresh_provider_fields(s.translate.provider)
-        _select_by_data(self._model_combo, s.translate.openrouter_model)
+        # Make sure the saved model is selectable even if it isn't in the current
+        # list (e.g. picked from a fetched catalog that wasn't re-fetched yet).
+        saved_model = s.translate.openrouter_model
+        if saved_model and self._model_combo.findData(saved_model) < 0:
+            self._model_combo.addItem(saved_model, saved_model)
+        _select_by_data(self._model_combo, saved_model)
         _select_by_data(self._source_lang_combo, s.translate.source_lang or "")
         _select_by_data(self._target_lang_combo, s.translate.target_lang)
+        _select_by_data(self._display_mode_combo, s.translate.display_mode)
         self._phonetic_toggle.setChecked(s.translate.phonetic_audio_en)
 
         # Presets
@@ -744,11 +781,16 @@ class SettingsWindow(QWidget):
         self._hotkey_editors["video_subtitle_translate"].setKeySequence(
             QKeySequence(_hotkey_to_qt(s.hotkeys.video_subtitle_translate))
         )
+        self._hotkey_editors["open_settings"].setKeySequence(
+            QKeySequence(_hotkey_to_qt(s.hotkeys.open_settings))
+        )
 
         # Display
         self._on_theme_picked(s.display.theme_mode)
         self._popup_width_slider.setValue(s.display.popup_default_width)
         self._font_scale_slider.setValue(s.display.popup_font_scale_max)
+        self._subtitle_opacity_slider.setValue(s.display.subtitle_bg_opacity)
+        self._subtitle_font_slider.setValue(s.display.subtitle_font_pt)
         self._click_outside_display.setChecked(s.display.click_outside_close)
         self._click_outside_toggle.setChecked(s.display.click_outside_close)
         self._pin_persist_toggle.setChecked(s.display.pin_persist)
@@ -778,8 +820,12 @@ class SettingsWindow(QWidget):
         src_data = self._source_lang_combo.currentData()
         s.translate.source_lang = src_data if src_data else None
         s.translate.phonetic_audio_en = self._phonetic_toggle.isChecked()
+        s.translate.display_mode = self._display_mode_combo.currentData() or "simple"
         if provider_key == "openrouter":
             s.translate.openrouter_model = self._model_combo.currentData()
+        # Persist the fetched catalog so the dropdown repopulates next launch.
+        if self._fetched_models:
+            s.translate.openrouter_models = [[d, i] for d, i in self._fetched_models]
         # Active preset
         active_preset_key = self._active_preset_combo.currentData()
         if active_preset_key:
@@ -793,6 +839,7 @@ class SettingsWindow(QWidget):
             region_translate=_qt_to_hotkey(self._hotkey_editors["region_translate"].keySequence()),
             fullscreen_translate=_qt_to_hotkey(self._hotkey_editors["fullscreen_translate"].keySequence()),
             video_subtitle_translate=_qt_to_hotkey(self._hotkey_editors["video_subtitle_translate"].keySequence()),
+            open_settings=_qt_to_hotkey(self._hotkey_editors["open_settings"].keySequence()),
         )
 
         # Display
@@ -807,6 +854,8 @@ class SettingsWindow(QWidget):
             click_outside_close=self._click_outside_display.isChecked(),
             pin_persist=self._pin_persist_toggle.isChecked(),
             show_footer_hint=self._footer_hint_toggle.isChecked(),
+            subtitle_bg_opacity=self._subtitle_opacity_slider.value(),
+            subtitle_font_pt=int(self._subtitle_font_slider.value()),
         )
 
         # Voice
@@ -914,6 +963,8 @@ class SettingsWindow(QWidget):
     def _apply_fetched_models(self, models: list) -> None:
         self._fetch_models_button.setEnabled(True)
         self._fetch_models_button.setText("Fetch")
+        # Remember the catalog so _on_save can persist it (survives restart).
+        self._fetched_models = [(d, i) for d, i in models]
         current = self._model_combo.currentData()
         self._model_combo.clear()
         for display, model_id in models:

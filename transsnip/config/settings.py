@@ -30,6 +30,7 @@ class HotkeySettings(BaseModel):
     region_translate: str = "alt+t"
     fullscreen_translate: str = "alt+f"
     video_subtitle_translate: str = "alt+v"
+    open_settings: str = "ctrl+alt+s"
 
 
 class TranslateSettings(BaseModel):
@@ -44,11 +45,24 @@ class TranslateSettings(BaseModel):
     source_lang: str | None = None  # None → provider auto-detects
     preset_name: str = "default"
     openrouter_model: str = "google/gemini-2.0-flash-001"
+    # Cache of the OpenRouter model list fetched via Settings → "Fetch" so the
+    # dropdown repopulates with the full catalog on the next launch (instead of
+    # only the small hardcoded starter list). Each item is [display, model_id].
+    openrouter_models: list[list[str]] = Field(default_factory=list)
 
     # English-source enhancements: IPA shown inline under each word + a 🔊
     # button next to source text using Edge TTS. Off by default to avoid
     # surprising users; only kicks in when source_lang == "en" anyway.
     phonetic_audio_en: bool = False
+
+    # Detail level of the result popup (Settings → Translation):
+    #   "simple"   — chỉ bản dịch (mặc định, nhanh)
+    #   "standard" — bản dịch + nút 🔊 phát âm
+    #   "learning" — bản dịch + phân tích từng từ (IPA + nghĩa + loại từ) qua LLM
+    # Only "learning" sets want_word_breakdown on the TranslationContext, which
+    # makes LLM providers return the per-word JSON (costs extra tokens, so it's
+    # opt-in). See linguistic/word_breakdown.py.
+    display_mode: str = "simple"
 
 
 class PresetSettings(BaseModel):
@@ -124,6 +138,10 @@ class DisplaySettings(BaseModel):
     click_outside_close: bool = True
     pin_persist: bool = False            # restore pinned popup next session
     show_footer_hint: bool = True
+    # Opacity of the video-subtitle bar's background (0.0 = fully transparent,
+    # 1.0 = solid). Lower it to see more of the video behind the translation.
+    subtitle_bg_opacity: float = 0.92
+    subtitle_font_pt: int = 15           # video-subtitle text size (point)
     # Fullscreen overlay only supports the simple "opaque box" style now
     # (per user feedback the per-block accent border / numbered badges /
     # toolbar were too busy for this view). The previous overlay_style /

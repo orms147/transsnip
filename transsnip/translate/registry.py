@@ -21,6 +21,26 @@ from transsnip.translate.openrouter import OpenRouterTranslator
 log = logging.getLogger(__name__)
 
 
+# Substrings that mark a PERMANENT failure — retrying these just wastes the
+# user's time (same error, slower). Providers wrap their SDK exceptions into
+# TranslationError(f"... {exc}"), so we match against the message text.
+_PERMANENT_MARKERS = (
+    "api key", "api_key", "apikey", "chưa set", "not installed", "sdk not installed",
+    "unauthorized", "authentication", "permission", "forbidden", "invalid", "quota",
+    "exhausted", "billing", "not found", "401", "403", "404",
+)
+
+
+def is_transient_translation_error(exc: Exception) -> bool:
+    """True if `exc` looks worth retrying (network/5xx/rate-limit), not permanent.
+
+    Defaults to transient (retry) unless the message clearly names a permanent
+    problem — better to retry an ambiguous error once than to surface a flake.
+    """
+    msg = str(exc).lower()
+    return not any(marker in msg for marker in _PERMANENT_MARKERS)
+
+
 @dataclass(frozen=True)
 class ProviderInfo:
     """Metadata describing one translation backend for the UI."""
@@ -108,22 +128,43 @@ class TranslationPipeline:
             return cached
 
         log.info("Translation cache miss — calling %s", provider)
-        result = self._translator.translate(text, ctx)
+        # Retry transient network failures (dropped connection, 503, rate-limit)
+        # with backoff; permanent failures (bad key, missing SDK) fail fast.
+        from transsnip.utils.retry import with_retry
+        result = with_retry(
+            lambda: self._translator.translate(text, ctx),
+            retries=2,
+            transient=is_transient_translation_error,
+            label=f"translate({provider})",
+        )
         self._cache.put(text, ctx, provider, result)
         return result
 
 
-def build_pipeline(provider_key: str, cache: TranslationCache | None = None) -> TranslationPipeline:
+def build_pipeline(
+    provider_key: str,
+    cache: TranslationCache | None = None,
+    *,
+    openrouter_model: str | None = None,
+) -> TranslationPipeline:
     """Construct a pipeline using the named provider.
 
     Falls back to `google_free` if the requested provider key is unknown — keeps
     the app usable when settings.json references a provider that was removed.
+
+    `openrouter_model` is forwarded to the OpenRouter provider so the model the
+    user picked in Settings is actually used at runtime (without it the provider
+    silently fell back to its hardcoded default — the saved choice did nothing).
     """
     info = PROVIDER_REGISTRY.get(provider_key)
     if info is None:
         log.warning("Unknown provider %r — falling back to google_free", provider_key)
         info = PROVIDER_REGISTRY["google_free"]
-    return TranslationPipeline(info.factory(), cache)
+    if info.key == "openrouter" and openrouter_model:
+        translator = info.factory(model=openrouter_model)  # type: ignore[call-arg]
+    else:
+        translator = info.factory()
+    return TranslationPipeline(translator, cache)
 
 
 def default_pipeline() -> TranslationPipeline:
@@ -131,4 +172,4 @@ def default_pipeline() -> TranslationPipeline:
     # Lazy import — settings depends on pydantic, this module is hit early at startup.
     from transsnip.config.settings import load_settings
     s = load_settings()
-    return build_pipeline(s.translate.provider)
+    return build_pipeline(s.translate.provider, openrouter_model=s.translate.openrouter_model)

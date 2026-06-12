@@ -95,15 +95,38 @@ class EdgeTTSPlayer(QObject):
         self._audio_out = QAudioOutput(self)
         self._player.setAudioOutput(self._audio_out)
         self._current_path: str | None = None
+        # Playback rate applied per clip (QMediaPlayer.setPlaybackRate works for
+        # both the Edge mp3 and the SAPI wav fallback; volume goes through
+        # QAudioOutput). These come from VoiceSettings via speak().
+        self._rate: float = 1.0
+        # Kept so we can re-synthesize via the offline SAPI fallback if the
+        # online Edge call fails (e.g. no internet).
+        self._last_text: str = ""
+        self._last_voice: str = _DEFAULT_VOICE
+        self._tried_fallback: bool = False
         self._player.mediaStatusChanged.connect(self._on_media_status)
         self._player.errorOccurred.connect(self._on_player_error)
 
-    def speak(self, text: str, *, voice: str = _DEFAULT_VOICE) -> None:
+    def speak(
+        self,
+        text: str,
+        *,
+        voice: str = _DEFAULT_VOICE,
+        rate: float = 1.0,
+        volume: float = 1.0,
+    ) -> None:
         text = (text or "").strip()
         if not text:
             return
         # Stop whatever's playing and discard its temp file before starting.
         self._stop_and_cleanup()
+        self._last_text = text
+        self._last_voice = voice
+        self._tried_fallback = False
+        # Apply user voice prefs: rate via playback speed (set per-clip in
+        # _on_audio_ready), volume via the audio output (0.0-1.0).
+        self._rate = max(0.5, min(rate, 2.0))
+        self._audio_out.setVolume(max(0.0, min(volume, 1.0)))
 
         fd, path = tempfile.mkstemp(suffix=".mp3", prefix="transsnip_tts_")
         os.close(fd)  # we let edge-tts write to the path; we only needed it
@@ -138,6 +161,9 @@ class EdgeTTSPlayer(QObject):
     def _on_audio_ready(self, path: str) -> None:
         self._current_path = path
         self._player.setSource(QUrl.fromLocalFile(path))
+        # setPlaybackRate must come after setSource; applies to mp3 (Edge) and
+        # wav (SAPI) alike.
+        self._player.setPlaybackRate(self._rate)
         self._player.play()
         # Safety: even if mediaStatusChanged never reaches EndOfMedia (rare
         # but possible on driver hiccups), make sure we eventually delete
@@ -145,6 +171,20 @@ class EdgeTTSPlayer(QObject):
         QTimer.singleShot(_CLEANUP_TIMEOUT_MS, self._delete_current_path)
 
     def _on_audio_failed(self, error: str) -> None:
+        # Edge (online) failed — try the offline WinRT/SAPI voice once before
+        # giving up, so pronunciation still works without internet.
+        if not self._tried_fallback and self._last_text:
+            from transsnip.tts.sapi import SapiGenRunnable, sapi_available
+            if sapi_available():
+                self._tried_fallback = True
+                log.info("Edge-TTS failed (%s) — falling back to offline SAPI", error)
+                fd, path = tempfile.mkstemp(suffix=".wav", prefix="transsnip_tts_")
+                os.close(fd)
+                runner = SapiGenRunnable(self._last_text, path)
+                runner.signals.ready.connect(self._on_audio_ready)
+                runner.signals.failed.connect(lambda msg: self.failed.emit(msg))
+                QThreadPool.globalInstance().start(runner)
+                return
         self.failed.emit(error)
 
     def _on_media_status(self, status: QMediaPlayer.MediaStatus) -> None:

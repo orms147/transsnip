@@ -34,6 +34,11 @@ htmlcov/
 Thumbs.db
 .DS_Store
 
+# Bundled OCR models (~42MB of ONNX) — fetched via `scripts/fetch_models.py`,
+# not committed (binary blobs bloat the repo). The .exe bundles them at build.
+resources/models/*.onnx
+resources/models/*.txt
+
 # Claude Code local overrides (user-specific permission cache, not shared)
 .claude/settings.local.json
 
