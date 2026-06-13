@@ -51,15 +51,13 @@ secrets.json
 resources/models/*.onnx
 resources/models/*.txt
 
-# ─── Claude Code local overrides (user-specific, not shared) ──────────────
-.claude/settings.local.json
+# ─── Claude Code tooling (internal — not shared on the public repo) ───────
+.claude/
 
-# NOTE: docs/ (incl. docs/mentor/) IS committed — the mentor learning docs are
-# a core part of this project. Do not add `docs/` here.
+# ─── Mentor learning docs (kept local-only) ───────────────────────────────
+docs/
 
 # ─── Scratch / diagnostics (temp files created while developing) ──────────
 _diag_*.py
 _shot*.png
 build_log.txt
-
-docs
