@@ -84,7 +84,7 @@ pyinstaller --noconfirm --clean TransSnip.spec  # → dist\TransSnip\ (onedir)
 "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer.iss  # → dist\installer\TransSnip-Setup.exe
 ```
 
-Details and the gotchas (bundling models + the wordninja wordlist) are in [`docs/mentor/42-build-packaging.md`](docs/mentor/42-build-packaging.md).
+The spec bundles the OCR models into `resources/models/` and the wordninja wordlist; if the `.exe` is missing OCR data, re-run `scripts/fetch_models.py` before building.
 
 ### Run the tests
 
@@ -120,16 +120,11 @@ transsnip/
 ├─ ui/                 # settings window, theme, icons, atoms
 └─ config/             # pydantic settings, keyring store, history
 
-docs/mentor/           # step-by-step learning docs (Vietnamese) — see below
 scripts/fetch_models.py
 tests/                 # pytest suite (pure-logic units)
 TransSnip.spec         # PyInstaller spec
 installer.iss          # Inno Setup script
 ```
-
-## Learning docs
-
-This project is built to be learned from. [`docs/mentor/`](docs/mentor/) contains step-by-step, mentor-style guides (in Vietnamese) covering every subsystem — from screen capture and OCR to async Qt, caching, packaging and a real debugging postmortem. Start at [`docs/mentor/README.md`](docs/mentor/README.md).
 
 ## Tech stack
 
