@@ -95,6 +95,10 @@ class EdgeTTSPlayer(QObject):
         self._audio_out = QAudioOutput(self)
         self._player.setAudioOutput(self._audio_out)
         self._current_path: str | None = None
+        # True from speak() until playback finishes/stops — lets the UI toggle
+        # the speaker button (click again to stop). Covers the generating window
+        # too (clip not playing yet but a worker is in flight).
+        self._active: bool = False
         # Playback rate applied per clip (QMediaPlayer.setPlaybackRate works for
         # both the Edge mp3 and the SAPI wav fallback; volume goes through
         # QAudioOutput). These come from VoiceSettings via speak().
@@ -120,6 +124,7 @@ class EdgeTTSPlayer(QObject):
             return
         # Stop whatever's playing and discard its temp file before starting.
         self._stop_and_cleanup()
+        self._active = True
         self._last_text = text
         self._last_voice = voice
         self._tried_fallback = False
@@ -141,9 +146,14 @@ class EdgeTTSPlayer(QObject):
     def stop(self) -> None:
         self._stop_and_cleanup()
 
+    def is_active(self) -> bool:
+        """True while a clip is being generated or is playing (for UI toggle)."""
+        return self._active
+
     # ── Internals ──────────────────────────────────────────────────────────
 
     def _stop_and_cleanup(self) -> None:
+        self._active = False
         if self._player.playbackState() != QMediaPlayer.PlaybackState.StoppedState:
             self._player.stop()
         self._delete_current_path()
@@ -185,10 +195,12 @@ class EdgeTTSPlayer(QObject):
                 runner.signals.failed.connect(lambda msg: self.failed.emit(msg))
                 QThreadPool.globalInstance().start(runner)
                 return
+        self._active = False
         self.failed.emit(error)
 
     def _on_media_status(self, status: QMediaPlayer.MediaStatus) -> None:
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
+            self._active = False
             self.finished.emit()
             self._delete_current_path()
 

@@ -137,35 +137,6 @@ def _detect_windows_palette() -> Optional[Palette]:
         return None
 
 
-def _write_chevron_svg(color: str, filename: str) -> str:
-    """Write a 12×12 SVG chevron to %TEMP% and return its absolute path.
-
-    Qt's CSS engine doesn't accept `data:` URIs in `image: url(...)` —
-    Fusion / Windows 11 styles silently render the chevron at near-zero
-    contrast when no explicit image is supplied. Saving the SVG to disk
-    and pointing QSS at a `file:///` path is the standard workaround.
-
-    Caller passes the stroke color (typically `palette.text_1` for clear
-    contrast); we regenerate the file on each theme switch so the chevron
-    flips between dark/light without leaving stale assets behind.
-    """
-    import tempfile
-    from pathlib import Path
-    svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" '
-        f'fill="none" stroke="{color}" stroke-width="2" '
-        f'stroke-linecap="round" stroke-linejoin="round">'
-        f'<path d="M3 5l3 3 3-3" />'
-        f'</svg>'
-    )
-    path = Path(tempfile.gettempdir()) / "transsnip" / filename
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(svg, encoding="utf-8")
-    # Forward slashes — Qt QSS accepts them on Windows and avoids
-    # backslash-escape gotchas in the f-string substitution.
-    return path.as_posix()
-
-
 # ── Stylesheet builder ─────────────────────────────────────────────────────
 def _build_app_stylesheet(p: Palette) -> str:
     """Compose the app-wide Qt stylesheet from a palette.
@@ -263,16 +234,16 @@ QComboBox {{
 QComboBox:hover {{ border-color: {p.border_strong}; }}
 QComboBox:focus {{ border-color: {p.accent}; }}
 QComboBox::drop-down {{
+    /* Reserve the right gutter; the chevron is painted by _ComboBox.paintEvent
+       (QSS ::down-arrow image rendering is unreliable, esp. for editable
+       combos — it came out blank). width must match _ComboBox._ARROW_W. */
     subcontrol-origin: padding;
     subcontrol-position: right center;
-    width: 24px;
-    border: none;
+    width: 26px;
+    border-left: 1px solid {p.border_2};
 }}
-QComboBox::down-arrow {{
-    image: url("file:///{_write_chevron_svg(p.text_1, "chevron-" + ("light" if p.bg_0 == "#f6f7fa" else "dark") + ".svg")}");
-    width: 12px;
-    height: 12px;
-}}
+QComboBox::drop-down:hover {{ background: {p.bg_3}; }}
+QComboBox::down-arrow {{ image: none; width: 0; height: 0; }}
 QComboBox QAbstractItemView {{
     background: {p.bg_2};
     color: {p.text_1};

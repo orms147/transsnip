@@ -115,7 +115,27 @@ class SubtitleBar(QWidget):
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
         self._drag_offset = None
         self.setCursor(Qt.CursorShape.OpenHandCursor)
+        # Snap out of the capture region if the user dropped the bar over it —
+        # otherwise the next OCR poll would read the bar's own translated text
+        # back in as "source" (the self-capture trap).
+        self._nudge_out_of_region()
         event.accept()
+
+    def _nudge_out_of_region(self) -> None:
+        """If the bar overlaps the subtitle region, push it just below (or above
+        if no room below) so screen captures of the region never include it."""
+        if self._region.isNull():
+            return
+        rect = self.frameGeometry()
+        if not rect.intersects(self._region):
+            return
+        screen = QGuiApplication.screenAt(self._region.center()) or QGuiApplication.primaryScreen()
+        geo = screen.geometry() if screen is not None else rect
+        below_y = self._region.bottom() + _GAP
+        if below_y + rect.height() <= geo.bottom():
+            self.move(rect.x(), below_y)
+        else:
+            self.move(rect.x(), self._region.top() - _GAP - rect.height())
 
     # ── Layout ───────────────────────────────────────────────────────────────
 
@@ -135,8 +155,11 @@ class SubtitleBar(QWidget):
         height = bound.height() + 2 * _PAD_Y
 
         if self._user_moved:
-            # Keep where the user parked it; only resize (anchor top-left).
+            # Keep where the user parked it; only resize (anchor top-left)…
             self.resize(width, height)
+            # …but if the resize now makes it overlap the region, push it out
+            # (a taller translation could grow back into the source area).
+            self._nudge_out_of_region()
             return
 
         x = region.x()

@@ -66,6 +66,13 @@ class IconButton(QPushButton):
         self._apply_style()
         get_theme().mode_changed.connect(lambda _p: self._apply_style())
 
+    def set_kind(self, kind: str) -> None:
+        """Switch variant ('default'/'accent'/'close') and restyle — used to
+        reflect toggle state (e.g. the pin button turns accent while pinned)."""
+        if kind != self._kind:
+            self._kind = kind
+            self._apply_style()
+
     def _apply_style(self) -> None:
         p = get_theme().palette
         if self._kind == "accent":

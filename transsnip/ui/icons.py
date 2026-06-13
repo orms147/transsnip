@@ -29,11 +29,13 @@ from PySide6.QtSvg import QSvgRenderer
 # is added at paint time so we can swap stroke color per call. Every entry is
 # verbatim from the Cobalt design's `tokens.jsx`.
 _ICON_BODIES: dict[str, str] = {
+    # Gear/cog: toothed outline + center hole. The previous "circle + 8 thin
+    # spokes" read as a sun, not a settings gear — this is unambiguous.
     "settings": (
-        '<circle cx="8" cy="8" r="2.2" />'
-        '<path d="M8 1.5v1.7M8 12.8v1.7M2.2 8h1.7M12.1 8h1.7'
-        'M3.9 3.9l1.2 1.2M10.9 10.9l1.2 1.2'
-        'M3.9 12.1l1.2-1.2M10.9 5.1l1.2-1.2" />'
+        '<circle cx="8" cy="8" r="2.1" />'
+        '<path d="M8 1.4l.9 1.7 1.9-.5.3 2 1.9.7-.7 1.8 1.3 1.5-1.5 1.3'
+        '.2 1.9-1.9.4-.7 1.8H8h-1.6l-.7-1.8-1.9-.4.2-1.9-1.5-1.3 1.3-1.5'
+        '-.7-1.8 1.9-.7.3-2 1.9.5z" />'
     ),
     "volume": (
         '<path d="M3 6h2l3-2.5v9L5 10H3z" />'
@@ -62,6 +64,16 @@ _ICON_BODIES: dict[str, str] = {
     ),
     "plus": '<path d="M8 3v10M3 8h10" />',
     "minus": '<path d="M3 8h10" />',
+    # Font-size controls: an "A" with a small +/− at upper-right. Drawn as
+    # strokes so they recolor with the theme (no Unicode glyph reliance).
+    "font-larger": (
+        '<path d="M2 13l3.2-8 3.2 8M3.1 10.2h4.2" />'
+        '<path d="M11.5 3.5v4M9.5 5.5h4" />'
+    ),
+    "font-smaller": (
+        '<path d="M2 13l3.2-8 3.2 8M3.1 10.2h4.2" />'
+        '<path d="M9.5 5.5h4" />'
+    ),
     "trash": (
         '<path d="M2.5 4h11M5.5 4V2.7A.7.7 0 0 1 6.2 2h3.6'
         'a.7.7 0 0 1 .7.7V4M4 4l.7 9a.7.7 0 0 0 .7.7h5.2'

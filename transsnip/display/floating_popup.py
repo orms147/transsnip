@@ -22,7 +22,7 @@ import logging
 import re
 from typing import Optional
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, Qt, Signal
+from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -263,11 +263,13 @@ class _PopupHeader(QWidget):
         actions_row.setSpacing(2)
 
         # Font size − / + (user-controlled; dragging the popup wider reflows
-        # text, it no longer zooms — see _apply_fonts / resizeEvent).
-        self._font_dec_btn = self._mini_text_btn("A−", "Cỡ chữ nhỏ hơn")
+        # text, it no longer zooms — see _apply_fonts / resizeEvent). Painted as
+        # SVG icons (not Unicode text) so they render with consistent contrast
+        # in both themes — see icons.py header note on why we avoid glyphs.
+        self._font_dec_btn = IconButton("font-smaller", icon_size=15, tooltip="Cỡ chữ nhỏ hơn")
         self._font_dec_btn.clicked.connect(self.font_dec_requested.emit)
         actions_row.addWidget(self._font_dec_btn)
-        self._font_inc_btn = self._mini_text_btn("A+", "Cỡ chữ lớn hơn")
+        self._font_inc_btn = IconButton("font-larger", icon_size=15, tooltip="Cỡ chữ lớn hơn")
         self._font_inc_btn.clicked.connect(self.font_inc_requested.emit)
         actions_row.addWidget(self._font_inc_btn)
 
@@ -317,10 +319,21 @@ class _PopupHeader(QWidget):
     def is_pinned(self) -> bool:
         return self._pinned
 
+    def reset_pin(self) -> None:
+        """Unpin on a fresh translation cycle (called by the popup)."""
+        if self._pinned:
+            self._pinned = False
+            self._refresh_pin_style()
+
     # ── Internals ─────────────────────────────────────────────────────────
     def _on_pin_clicked(self) -> None:
         self._pinned = not self._pinned
+        self._refresh_pin_style()
         self.pin_toggled.emit(self._pinned)
+
+    def _refresh_pin_style(self) -> None:
+        # Tint the pin button accent while pinned so the state is visible.
+        self._pin_btn.set_kind("accent" if self._pinned else "default")
 
     def _rebuild_status(self) -> None:
         # Clear existing widgets in status_layout.
@@ -354,14 +367,6 @@ class _PopupHeader(QWidget):
             badge = PillBadge("error", icon_name="alert", tone="warn")
             self._status_layout.addWidget(badge)
 
-    def _mini_text_btn(self, text: str, tooltip: str) -> QPushButton:
-        """A compact text button (e.g. 'A−'/'A+') matching the icon-button chrome."""
-        b = QPushButton(text)
-        b.setToolTip(tooltip)
-        b.setFixedSize(26, 26)
-        b.setCursor(Qt.CursorShape.PointingHandCursor)
-        return b
-
     def _apply_style(self) -> None:
         p = get_theme().palette
         self._brand_label.setStyleSheet(
@@ -369,12 +374,6 @@ class _PopupHeader(QWidget):
             f"letter-spacing: {p.letter_tight};"
         )
         self._divider.setStyleSheet(f"background: {p.border_1};")
-        for b in (self._font_dec_btn, self._font_inc_btn):
-            b.setStyleSheet(
-                f"QPushButton {{ color: {p.text_2}; background: transparent; border: none; "
-                f"border-radius: 6px; font-weight: 700; font-size: 12px; }} "
-                f"QPushButton:hover {{ background: {p.bg_2}; color: {p.text_1}; }}"
-            )
         self._rebuild_status()
 
 
@@ -412,7 +411,8 @@ class _PhoneticSource(QWidget):
         layout.addWidget(self._label)
         self._text = ""
         self._scale = 1.0
-        self._avail_px = 380  # available width for wrapping; updated by set_text
+        self._avail_px = 380  # fallback width hint; the live widget width wins
+        self._last_render_w = 0
         get_theme().mode_changed.connect(lambda _p: self._render())
 
     def set_text(self, text: str, *, scale: float = 1.0, avail_px: int | None = None) -> None:
@@ -421,6 +421,21 @@ class _PhoneticSource(QWidget):
         if avail_px and avail_px > 80:
             self._avail_px = avail_px
         self._render()
+
+    def resizeEvent(self, event) -> None:  # noqa: N802
+        # Re-pack rows to the widget's REAL width whenever it changes. This is
+        # the reliable source of width — a snapshot avail_px passed at set_text
+        # time can be stale (computed before the popup reached its final size),
+        # which left the phonetic rows breaking early with empty space on the
+        # right. Guard against re-render loops (only when width actually moved).
+        super().resizeEvent(event)
+        if self._text and abs(self.width() - self._last_render_w) > 4:
+            self._render()
+
+    def _wrap_width(self) -> int:
+        # Prefer the widget's actual width once laid out; fall back to the hint.
+        w = self.width()
+        return (w if w > 80 else self._avail_px)
 
     def _on_link(self, href: str) -> None:
         if href.startswith(_SPEAK_LINK_PREFIX):
@@ -444,7 +459,8 @@ class _PhoneticSource(QWidget):
         ipf = QFont(); ipf.setPointSize(ipa_pt)
         wm = QFontMetrics(wf)
         im = QFontMetrics(ipf)
-        avail = max(120, self._avail_px - 8)
+        self._last_render_w = self.width()
+        avail = max(120, self._wrap_width() - 6)
 
         out: list[str] = []
         for raw_line in (self._text or "").splitlines() or [self._text or ""]:
@@ -714,6 +730,9 @@ class FloatingPopup(QWidget):
         self._filter_installed = False
         # Whether clicking outside the popup dismisses it (Settings → Display).
         self._click_outside_close = True
+        # When pinned (pin button), the popup ignores click-outside / focus-loss
+        # auto-close — it stays put until Esc or the close button.
+        self._pinned = False
         self._user_resized = False
         self._current_state = "loading"
         self._current_font_scale = 1.0
@@ -725,7 +744,7 @@ class FloatingPopup(QWidget):
         self._resize_edges = 0
         self._resize_start_geom: Optional[QRect] = None
         self._resize_start_global: Optional[QPoint] = None
-        self._edge_cursor_widget: Optional[QWidget] = None  # child showing resize cursor
+        self._edge_cursor_active = False  # True while the ↔/↕ resize cursor is shown
 
         self._tts_player = EdgeTTSPlayer(self)
         # User voice prefs (Settings → Voice). AppController pushes the real
@@ -760,6 +779,7 @@ class FloatingPopup(QWidget):
         self._header.copy_requested.connect(self._on_copy)
         self._header.font_dec_requested.connect(lambda: self._adjust_font(-0.15))
         self._header.font_inc_requested.connect(lambda: self._adjust_font(+0.15))
+        self._header.pin_toggled.connect(self._on_pin_toggled)
         self._header.pin_toggled.connect(self.pin_changed.emit)
         self._header.settings_requested.connect(self.settings_requested.emit)
         self._header.close_requested.connect(self.hide_popup)
@@ -905,6 +925,8 @@ class FloatingPopup(QWidget):
         self._show_phonetic_active = False
         self._last_words = []
         self._user_resized = False
+        self._pinned = False
+        self._header.reset_pin()
         self._tts_player.stop()
         self._set_state("loading")
         self._header.set_status("ocr")
@@ -1086,21 +1108,34 @@ class FloatingPopup(QWidget):
         """Whether a click outside the popup dismisses it (Settings → Display)."""
         self._click_outside_close = enabled
 
+    def _on_pin_toggled(self, pinned: bool) -> None:
+        # Pinned popups survive clicks elsewhere; only Esc / close dismisses them.
+        self._pinned = pinned
+
     def _speak(self, text: str) -> None:
         vs = self._voice_settings
         self._tts_player.speak(text, voice=vs.voice, rate=vs.rate, volume=vs.volume)
 
     def _on_speak_sentence(self) -> None:
+        # Toggle: click the speaker once to play the source, again to stop.
+        if self._tts_player.is_active():
+            self._tts_player.stop()
+            return
         text = (self._last_source_text or "").strip()
         if text:
             self._speak(text)
 
     def _on_speak_word(self, word: str) -> None:
+        # Per-word: always play the clicked word (don't toggle — clicking a
+        # different word should switch, not stop). speak() stops any prior clip.
         if word.strip():
             self._speak(word.strip())
 
     def _on_speak_translation(self) -> None:
-        """Read the translated text aloud using a target-language voice."""
+        """Toggle reading the translation aloud (target-language voice)."""
+        if self._tts_player.is_active():
+            self._tts_player.stop()
+            return
         text = (self._last_translation or "").strip()
         if not text:
             return
@@ -1286,23 +1321,55 @@ class FloatingPopup(QWidget):
                         self._begin_resize(edges, gp)
                         return True
                 return super().eventFilter(watched, event)
-            if self._click_outside_close and not self.geometry().contains(gp):
+            if self._click_outside_close and not self._pinned \
+                    and not self.geometry().contains(gp):
                 self.hide_popup()
         elif et == QEvent.Type.MouseMove and inside:
-            # Show the resize cursor when hovering an edge over a child label.
+            # Show the resize cursor ONLY on the popup's own outer edge. We set
+            # it on `self` (children inherit it) and clear it back to the normal
+            # arrow the moment the pointer leaves the edge band. The previous
+            # code set the cursor on whatever child `watched` was and failed to
+            # clear it when the pointer crossed to a sibling — children then
+            # inherited a stuck ↔ cursor across the whole popup.
             try:
                 gp = event.globalPosition().toPoint()
             except AttributeError:
                 return super().eventFilter(watched, event)
             edges = self._edges_at(self.mapFromGlobal(gp))
-            if isinstance(watched, QWidget):
-                if edges:
-                    watched.setCursor(self._cursor_for_edges(edges))
-                    self._edge_cursor_widget = watched
-                elif self._edge_cursor_widget is watched:
-                    watched.unsetCursor()
-                    self._edge_cursor_widget = None
+            if edges:
+                self.setCursor(self._cursor_for_edges(edges))
+                self._edge_cursor_active = True
+            elif self._edge_cursor_active:
+                self.setCursor(Qt.CursorShape.ArrowCursor)
+                self._edge_cursor_active = False
         return super().eventFilter(watched, event)
+
+    def changeEvent(self, event) -> None:
+        # Close on losing window focus (user clicked ANOTHER application/window).
+        # The app-level eventFilter only sees clicks on our own widgets, so for
+        # clicks on a foreign window this WindowDeactivate is what fires.
+        if (
+            event.type() == QEvent.Type.ActivationChange
+            and self._click_outside_close
+            and not self._pinned
+            and self.isVisible()
+            and not self.isActiveWindow()
+            and self._resize_edges == 0
+        ):
+            # Defer so we don't hide mid-event (e.g. while focus is transferring
+            # to our own settings window the user opened from the popup gear).
+            QTimer.singleShot(0, self._close_if_truly_outside)
+        super().changeEvent(event)
+
+    def _close_if_truly_outside(self) -> None:
+        # Re-check on the next tick: if focus went to one of our OWN windows
+        # (settings/about/history) we keep the popup; only a foreign window or
+        # the desktop should dismiss it.
+        if not self._click_outside_close or self._pinned or not self.isVisible():
+            return
+        active = QApplication.activeWindow()
+        if active is None or active is not self:
+            self.hide_popup()
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Escape:

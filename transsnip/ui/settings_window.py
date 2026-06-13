@@ -16,7 +16,7 @@ import logging
 from typing import Optional
 
 from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtGui import QKeySequence
+from PySide6.QtGui import QKeySequence, QWheelEvent
 from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
@@ -133,8 +133,50 @@ _VOICE_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
 
 
 # ── Helpers (kept from previous impl) ─────────────────────────────────────
+class _ComboBox(QComboBox):
+    """QComboBox that (1) doesn't change value on scroll-wheel and (2) paints
+    its own down-chevron.
+
+    Scroll: default Qt combos cycle their value when you scroll the wheel over
+    them — easy to change a setting by accident while scrolling the page. We
+    pass the wheel event up to the parent (so the panel scrolls), consuming it
+    only when the dropdown popup is open.
+
+    Arrow: Qt's QSS `::down-arrow { image: url(...) }` renders blank for these
+    (esp. editable combos), so we draw the chevron ourselves in paintEvent —
+    reliable in both themes. Typeahead (editable + completer) still works.
+    """
+
+    _ARROW_W = 26  # must match QComboBox::drop-down width in theme.py
+
+    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
+        if self.view().isVisible():
+            super().wheelEvent(event)  # popup open → normal scroll inside it
+        else:
+            event.ignore()  # bubble up so the scroll area scrolls instead
+
+    def paintEvent(self, event) -> None:  # noqa: N802
+        super().paintEvent(event)
+        from PySide6.QtGui import QColor, QPainter, QPen
+
+        from transsnip.ui.theme import get_theme
+        p = get_theme().palette
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        pen = QPen(QColor(p.text_1), 2.0)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        painter.setPen(pen)
+        cx = self.width() - self._ARROW_W / 2
+        cy = self.height() / 2
+        # Down chevron: ⌄
+        painter.drawLine(int(cx - 4), int(cy - 2), int(cx), int(cy + 2))
+        painter.drawLine(int(cx), int(cy + 2), int(cx + 4), int(cy - 2))
+        painter.end()
+
+
 def _make_searchable_lang_combo(options: list[tuple[str, str]]) -> QComboBox:
-    combo = QComboBox()
+    combo = _ComboBox()
     combo.setEditable(True)
     combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
     for label, data in options:
@@ -385,7 +427,7 @@ class SettingsWindow(QWidget):
         ))
         provider_form = QFormLayout()
         provider_form.setSpacing(12)
-        self._provider_combo = QComboBox()
+        self._provider_combo = _ComboBox()
         for info in PROVIDER_REGISTRY.values():
             self._provider_combo.addItem(info.display_name, info.key)
         self._provider_combo.currentIndexChanged.connect(self._on_provider_changed)
@@ -401,7 +443,7 @@ class SettingsWindow(QWidget):
         self._api_key_hint.setWordWrap(True)
         provider_form.addRow("", self._api_key_hint)
 
-        self._model_combo = QComboBox()
+        self._model_combo = _ComboBox()
         # Prefer the user's previously-fetched catalog; fall back to the small
         # hardcoded starter list on a fresh install.
         for display, model_id in (self._fetched_models or OPENROUTER_MODELS):
@@ -436,7 +478,7 @@ class SettingsWindow(QWidget):
 
         # Behavior section
         layout.addWidget(SectionHead("Hành vi"))
-        self._active_preset_combo = QComboBox()
+        self._active_preset_combo = _ComboBox()
         self._active_preset_combo.setToolTip(
             "Preset đang dùng — chỉnh nội dung preset ở tab 'Context'."
         )
@@ -445,7 +487,7 @@ class SettingsWindow(QWidget):
         preset_row.addRow("Context preset:", self._active_preset_combo)
 
         # Display mode — how much detail the result popup shows.
-        self._display_mode_combo = QComboBox()
+        self._display_mode_combo = _ComboBox()
         self._display_mode_combo.addItem("Simple — chỉ bản dịch", "simple")
         self._display_mode_combo.addItem("Standard — bản dịch + phát âm", "standard")
         self._display_mode_combo.addItem("Learning — phân tích từng từ (IPA + nghĩa)", "learning")
@@ -590,18 +632,8 @@ class SettingsWindow(QWidget):
             row_layout.addWidget(reset_btn)
             layout.addWidget(row)
 
-        layout.addWidget(SectionHead("Khi popup mở"))
-        self._click_outside_toggle = ToggleRow(
-            "Click outside để đóng popup",
-            "Tắt nếu bạn hay click ra ngoài để copy text từ app khác.",
-        )
-        layout.addWidget(self._click_outside_toggle)
-        self._esc_overlay_toggle = ToggleRow(
-            "Esc đóng overlay fullscreen",
-            "Bất kỳ click nào trên overlay cũng đóng — phím Esc là tuỳ chọn.",
-        )
-        layout.addWidget(self._esc_overlay_toggle)
-
+        # Popup-behaviour toggles ("Click outside để đóng", "Esc đóng overlay")
+        # live in the Display tab so all popup/overlay settings are in one place.
         layout.addStretch(1)
         return self._wrap_in_scroll(body)
 
@@ -662,13 +694,21 @@ class SettingsWindow(QWidget):
         form.addRow("Cỡ chữ phụ đề video:", self._subtitle_font_slider)
         layout.addLayout(form)
 
-        self._click_outside_display = ToggleRow("Click outside để đóng popup")
+        self._click_outside_display = ToggleRow(
+            "Click outside để đóng popup",
+            "Tắt nếu bạn hay click ra ngoài để copy text từ app khác.",
+        )
+        self._esc_overlay_toggle = ToggleRow(
+            "Esc đóng overlay fullscreen",
+            "Bất kỳ click nào trên overlay cũng đóng — phím Esc là tuỳ chọn.",
+        )
         self._pin_persist_toggle = ToggleRow("Pin popup mở lại lần dịch sau")
         self._footer_hint_toggle = ToggleRow(
             "Hiện footer hint trong popup",
             "Ẩn dòng 'Esc · Ctrl+C · click vào từ' để gọn hơn.",
         )
         layout.addWidget(self._click_outside_display)
+        layout.addWidget(self._esc_overlay_toggle)
         layout.addWidget(self._pin_persist_toggle)
         layout.addWidget(self._footer_hint_toggle)
 
@@ -703,7 +743,7 @@ class SettingsWindow(QWidget):
             "Giọng đọc Microsoft Edge — stream trực tiếp, không cần cài đặt thêm.",
         ))
 
-        self._voice_combo = QComboBox()
+        self._voice_combo = _ComboBox()
         for group_name, voices in _VOICE_GROUPS:
             for name, voice_id in voices:
                 self._voice_combo.addItem(f"{group_name} · {name}", voice_id)
@@ -792,7 +832,6 @@ class SettingsWindow(QWidget):
         self._subtitle_opacity_slider.setValue(s.display.subtitle_bg_opacity)
         self._subtitle_font_slider.setValue(s.display.subtitle_font_pt)
         self._click_outside_display.setChecked(s.display.click_outside_close)
-        self._click_outside_toggle.setChecked(s.display.click_outside_close)
         self._pin_persist_toggle.setChecked(s.display.pin_persist)
         self._footer_hint_toggle.setChecked(s.display.show_footer_hint)
         self._esc_overlay_toggle.setChecked(True)
