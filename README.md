@@ -7,6 +7,10 @@ Snip a region, translate a full screen, or auto-translate video subtitles — wi
 
 OCR + multi-provider translation (Google · Gemini · Claude · OpenRouter) with context-aware prompts, text-to-speech, and a language-learning mode.
 
+### 🌐 [Try the interactive demo →](https://orms147.github.io/transsnip-demo/)
+
+No install needed — the browser demo walks through the region-capture → OCR → translate flow.
+
 </div>
 
 ---

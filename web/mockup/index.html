@@ -1,721 +1,858 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>TransSnip Web — Mockup</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;700&display=swap" rel="stylesheet" />
-  <style>
-  /* ════ TransSnip Web — self-contained mockup. Cobalt design system. ════ */
-  *, *::before, *::after { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; height: 100%; }
-  body { font-family: var(--font-ui); background: var(--bg-0); color: var(--text-1);
-    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility;
-    display: flex; flex-direction: column; min-height: 100%; }
-  button { font: inherit; }
-  ::selection { background: color-mix(in oklab, var(--accent) 30%, transparent); }
-  @keyframes ts-spin { to { transform: rotate(360deg); } }
-  @keyframes ts-fade-in { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes ts-pop-in { from { opacity: 0; transform: translateY(6px) scale(0.985); } to { opacity: 1; transform: translateY(0) scale(1); } }
-  @keyframes ts-shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
-
-  .t-cobalt { --bg-0:#0b0c10; --bg-1:#131519; --bg-2:#1a1d24; --bg-3:#232730; --bg-elev:rgba(20,22,28,0.92);
-    --border-1:rgba(255,255,255,0.07); --border-2:rgba(255,255,255,0.12); --border-strong:rgba(255,255,255,0.20);
-    --text-1:#ecedef; --text-2:#a4a9b3; --text-3:#6b717c; --text-mute:#4a4f59;
-    --accent:#818cf8; --accent-hover:#a5b4fc; --accent-soft:rgba(129,140,248,0.13); --accent-strong:#6366f1; --accent-on:#fff;
-    --success:#34d399; --warning:#fbbf24; --danger:#f87171;
-    --shadow-popup:0 32px 60px -20px rgba(0,0,0,0.65),0 12px 28px -10px rgba(0,0,0,0.45);
-    --shadow-card:0 8px 24px -12px rgba(0,0,0,0.55);
-    --font-ui:'Inter',system-ui,-apple-system,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;
-    --font-source:'Inter','Noto Sans JP',system-ui,sans-serif;
-    --r-popup:12px; --r-card:10px; --r-btn:8px; --r-input:8px; --r-pill:999px; --letter-tight:-0.01em; --letter-caps:0.06em; }
-  .t-cobalt-light { --bg-0:#f6f7fa; --bg-1:#fff; --bg-2:#f1f3f8; --bg-3:#e6e9f0; --bg-elev:rgba(255,255,255,0.96);
-    --border-1:rgba(15,23,42,0.06); --border-2:rgba(15,23,42,0.11); --border-strong:rgba(15,23,42,0.20);
-    --text-1:#0f1320; --text-2:#4c5365; --text-3:#7a8294; --text-mute:#b5bbc7;
-    --accent:#4f59e6; --accent-hover:#6b75f5; --accent-soft:rgba(79,89,230,0.10); --accent-strong:#3941d1; --accent-on:#fff;
-    --success:#059669; --warning:#b45309; --danger:#dc2626;
-    --shadow-popup:0 28px 60px -22px rgba(20,30,60,0.30),0 10px 24px -8px rgba(20,30,60,0.14);
-    --shadow-card:0 6px 18px -10px rgba(20,30,60,0.20);
-    --font-ui:'Inter',system-ui,-apple-system,sans-serif; --font-mono:'JetBrains Mono',ui-monospace,monospace;
-    --font-source:'Inter','Noto Sans JP',system-ui,sans-serif;
-    --r-popup:12px; --r-card:10px; --r-btn:8px; --r-input:8px; --r-pill:999px; --letter-tight:-0.01em; --letter-caps:0.06em; }
-
-  .mono { font-family: var(--font-mono); }
-  .hidden { display: none !important; }
-  kbd { display:inline-flex; align-items:center; justify-content:center; padding:1px 5px; min-width:18px; height:18px;
-    font-family:var(--font-mono); font-size:10.5px; line-height:1; color:var(--text-2); background:var(--bg-2);
-    border:1px solid var(--border-2); border-bottom-width:2px; border-radius:4px; font-weight:500; }
-
-  /* Topbar */
-  .topbar { display:flex; align-items:center; gap:12px; height:56px; flex-shrink:0; padding:0 20px;
-    border-bottom:1px solid var(--border-1); background:color-mix(in oklab,var(--bg-1) 70%,transparent); backdrop-filter:blur(12px); }
-  .brand { display:inline-flex; align-items:center; gap:9px; }
-  .brand-name { font-size:14px; font-weight:600; letter-spacing:var(--letter-tight); }
-  .brand-tag { font-family:var(--font-mono); font-size:9.5px; letter-spacing:var(--letter-caps); text-transform:uppercase;
-    color:var(--accent); background:var(--accent-soft); border:1px solid color-mix(in oklab,var(--accent) 25%,transparent);
-    border-radius:var(--r-pill); padding:2px 7px; }
-  .topbar-spacer { flex:1; }
-  .provider-pill { display:inline-flex; align-items:center; gap:6px; font-family:var(--font-mono); font-size:11px; color:var(--text-2);
-    background:var(--bg-2); border:1px solid var(--border-1); border-radius:var(--r-pill); padding:5px 11px; text-decoration:none; }
-  .provider-pill::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--success);
-    box-shadow:0 0 0 3px color-mix(in oklab,var(--success) 25%,transparent); }
-  .icon-btn { display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px; padding:0;
-    background:var(--bg-2); border:1px solid var(--border-1); border-radius:var(--r-btn); color:var(--text-2); cursor:pointer; transition:all 120ms ease; }
-  .icon-btn:hover { background:var(--bg-3); color:var(--text-1); border-color:var(--border-2); }
-  .icon-btn .moon { display:none; } .t-cobalt-light .icon-btn .sun { display:none; } .t-cobalt-light .icon-btn .moon { display:inline; }
-
-  /* Controls */
-  .toolbar { display:flex; align-items:flex-end; flex-wrap:wrap; gap:14px; flex-shrink:0; padding:14px 20px;
-    border-bottom:1px solid var(--border-1); background:var(--bg-1); }
-  .ctl { display:flex; flex-direction:column; gap:5px; min-width:0; }
-  .ctl > label { font-family:var(--font-mono); font-size:9.5px; letter-spacing:var(--letter-caps); text-transform:uppercase; color:var(--text-3); }
-  .select-wrap { position:relative; display:inline-flex; }
-  .select-wrap::after { content:""; position:absolute; right:11px; top:50%; width:7px; height:7px;
-    border-right:1.5px solid var(--text-3); border-bottom:1.5px solid var(--text-3); transform:translateY(-65%) rotate(45deg); pointer-events:none; }
-  select, .input { appearance:none; -webkit-appearance:none; font-family:var(--font-ui); font-size:13px; color:var(--text-1);
-    background:var(--bg-2); border:1px solid var(--border-2); border-radius:var(--r-input); padding:8px 30px 8px 11px; height:36px;
-    cursor:pointer; transition:border-color 120ms ease, box-shadow 120ms ease; max-width:230px; text-overflow:ellipsis; }
-  .input { padding-right:11px; cursor:text; }
-  select:focus, .input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
-  .toolbar .swap { align-self:center; margin-bottom:1px; }
-  .toolbar-divider { width:1px; align-self:stretch; background:var(--border-1); margin:4px 2px 0; }
-  .apikey { flex:1; min-width:220px; } .apikey .input { max-width:none; width:100%; }
-  .apikey-hint { font-size:10.5px; color:var(--text-3); line-height:1.4; }
-
-  /* Stage */
-  .stage { flex:1; position:relative; min-height:0; display:flex; align-items:center; justify-content:center; padding:28px;
-    background:radial-gradient(120% 90% at 50% -10%, color-mix(in oklab,var(--accent) 6%,transparent) 0%, transparent 55%), var(--bg-0); overflow:hidden; }
-  .stage::before { content:""; position:absolute; inset:0; pointer-events:none; opacity:0.5;
-    background-image:linear-gradient(var(--border-1) 1px,transparent 1px),linear-gradient(90deg,var(--border-1) 1px,transparent 1px);
-    background-size:26px 26px; background-position:-1px -1px; }
-
-  /* Empty / capture */
-  .capture-empty { position:relative; z-index:1; width:min(620px,100%); display:flex; flex-direction:column; align-items:center; text-align:center;
-    padding:48px 40px; background:color-mix(in oklab,var(--bg-1) 92%,transparent); border:1.5px dashed var(--border-2); border-radius:18px;
-    animation:ts-fade-in 240ms ease both; }
-  .capture-glyph { width:64px; height:64px; display:flex; align-items:center; justify-content:center; border-radius:16px;
-    background:var(--accent-soft); border:1px solid color-mix(in oklab,var(--accent) 25%,transparent); color:var(--accent); margin-bottom:22px; }
-  .capture-title { font-size:21px; font-weight:600; letter-spacing:var(--letter-tight); margin:0 0 8px; }
-  .capture-sub { font-size:14px; color:var(--text-2); line-height:1.55; margin:0 0 28px; max-width:430px; }
-  .capture-actions { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; align-items:center; }
-  .capture-alt { margin-top:22px; padding-top:20px; border-top:1px solid var(--border-1); width:100%;
-    display:flex; align-items:center; justify-content:center; gap:14px; font-size:12.5px; color:var(--text-3); flex-wrap:wrap; }
-
-  .btn { display:inline-flex; align-items:center; gap:8px; padding:10px 16px; font-size:13.5px; font-weight:500; line-height:1;
-    color:var(--text-1); background:var(--bg-2); border:1px solid var(--border-2); border-radius:var(--r-btn); cursor:pointer;
-    transition:background 120ms ease, border-color 120ms ease, transform 80ms ease; letter-spacing:var(--letter-tight); }
-  .btn:hover { background:var(--bg-3); border-color:var(--border-strong); } .btn:active { transform:translateY(0.5px); }
-  .btn:disabled { opacity:0.45; cursor:not-allowed; }
-  .btn-primary { background:var(--accent); color:var(--accent-on); border-color:var(--accent); font-weight:600; }
-  .btn-primary:hover { background:var(--accent-hover); border-color:var(--accent-hover); }
-  .btn-lg { padding:12px 22px; font-size:14.5px; }
-  .link-btn { background:none; border:none; padding:0; cursor:pointer; color:var(--accent); font-size:12.5px;
-    border-bottom:1px dashed color-mix(in oklab,var(--accent) 40%,transparent); }
-  .link-btn:hover { border-bottom-color:var(--accent); }
-  .dotsep { width:3px; height:3px; border-radius:50%; background:var(--text-mute); }
-
-  /* Workspace */
-  .workspace { position:relative; z-index:1; width:100%; height:100%; display:flex; flex-direction:column; gap:14px; }
-  .workspace-bar { display:flex; align-items:center; gap:8px; flex-shrink:0; align-self:center; padding:5px 6px 5px 14px;
-    background:var(--bg-elev); backdrop-filter:blur(20px); border:1px solid var(--border-2); border-radius:var(--r-pill);
-    box-shadow:var(--shadow-card); font-size:12px; color:var(--text-2); max-width:100%; flex-wrap:wrap; justify-content:center; }
-  .ws-hint { display:inline-flex; align-items:center; gap:7px; padding-right:4px; }
-  .ws-divider { width:1px; height:16px; background:var(--border-2); }
-  .seg { display:inline-flex; background:var(--bg-2); border:1px solid var(--border-1); border-radius:var(--r-pill); padding:2px; }
-  .seg button { border:none; background:transparent; color:var(--text-2); cursor:pointer; font-size:11.5px; font-weight:500;
-    padding:5px 11px; border-radius:var(--r-pill); display:inline-flex; align-items:center; gap:5px; transition:all 120ms ease; }
-  .seg button.active { background:var(--accent); color:var(--accent-on); }
-  .ws-btn { display:inline-flex; align-items:center; gap:6px; padding:6px 11px; background:transparent; border:1px solid transparent;
-    border-radius:var(--r-pill); color:var(--text-2); font-size:12px; cursor:pointer; transition:all 120ms ease; }
-  .ws-btn:hover { background:var(--bg-2); color:var(--text-1); }
-  .ws-btn--accent { color:var(--accent); } .ws-btn--accent:hover { background:var(--accent-soft); color:var(--accent-hover); }
-  .ws-btn--close:hover { background:color-mix(in oklab,var(--danger) 14%,transparent); color:var(--danger); }
-  .ws-btn.is-on { background:var(--accent-soft); color:var(--accent-hover); }
-  .scene-meta { font-family:var(--font-mono); font-size:10px; color:var(--text-3); letter-spacing:0.02em; }
-
-  .canvas-scroll { flex:1; min-height:0; display:flex; align-items:center; justify-content:center; overflow:auto; }
-  .canvas-wrap { position:relative; border-radius:var(--r-card); overflow:hidden; box-shadow:var(--shadow-popup); border:1px solid var(--border-2); }
-  .scene-frame { position:absolute; top:0; left:0; width:1180px; height:740px; transform-origin:top left; overflow:hidden; }
-
-  /* selection */
-  .select-layer { position:absolute; inset:0; cursor:crosshair; z-index:10; }
-  .select-layer.is-busy { cursor:progress; }
-  .sel-tint { position:absolute; background:rgba(0,0,0,0.46); pointer-events:none; }
-  .t-cobalt-light .sel-tint { background:rgba(15,23,42,0.30); }
-  .sel-guide { position:absolute; background:color-mix(in oklab,var(--accent) 40%,transparent); pointer-events:none; }
-  .sel-guide--h { height:1px; left:0; right:0; } .sel-guide--v { width:1px; top:0; bottom:0; }
-  .region-box { position:absolute; border:1.5px solid var(--accent); box-shadow:0 0 0 1px rgba(0,0,0,0.4); pointer-events:none;
-    background:repeating-linear-gradient(45deg,transparent 0 6px,color-mix(in oklab,var(--accent) 7%,transparent) 6px 7px); }
-  .region-corner { position:absolute; width:12px; height:12px; border:2px solid var(--accent); background:var(--bg-0); }
-  .region-corner--tl{top:-6px;left:-6px;border-right:none;border-bottom:none} .region-corner--tr{top:-6px;right:-6px;border-left:none;border-bottom:none}
-  .region-corner--bl{bottom:-6px;left:-6px;border-right:none;border-top:none} .region-corner--br{bottom:-6px;right:-6px;border-left:none;border-top:none}
-  .region-readout { position:absolute; display:inline-flex; align-items:center; gap:8px; padding:5px 9px; background:var(--bg-elev);
-    backdrop-filter:blur(10px); border:1px solid var(--border-2); border-radius:var(--r-btn); font-family:var(--font-mono); font-size:11px;
-    color:var(--text-1); box-shadow:var(--shadow-card); pointer-events:none; white-space:nowrap; z-index:12; }
-  .region-readout .rr-div { width:1px; height:11px; background:var(--border-2); } .region-readout .rr-accent { color:var(--accent); }
-  .select-hint { position:absolute; top:14px; left:50%; transform:translateX(-50%); display:inline-flex; align-items:center; gap:8px;
-    padding:8px 14px; background:var(--bg-elev); backdrop-filter:blur(16px); border:1px solid var(--border-2); border-radius:var(--r-pill);
-    font-size:12px; color:var(--text-2); box-shadow:var(--shadow-card); white-space:nowrap; pointer-events:none; z-index:13; animation:ts-fade-in 240ms ease both; }
-  .select-hint .sh-sep { width:1px; height:14px; background:var(--border-2); margin:0 3px; } .select-hint .sh-label { color:var(--text-3); margin-right:3px; }
-
-  /* Popup */
-  .overlay-layer { position:absolute; inset:0; pointer-events:none; z-index:20; }
-  .popup { position:absolute; pointer-events:auto; width:380px; max-width:calc(100% - 24px); background:var(--bg-elev);
-    backdrop-filter:blur(16px) saturate(140%); border:1px solid var(--border-2); border-radius:var(--r-popup); box-shadow:var(--shadow-popup);
-    color:var(--text-1); overflow:hidden; animation:ts-pop-in 200ms ease both; }
-  .popup-header { display:flex; align-items:center; gap:8px; height:38px; padding:0 8px 0 12px; border-bottom:1px solid var(--border-1);
-    background:linear-gradient(180deg,color-mix(in oklab,var(--bg-2) 60%,transparent),transparent); cursor:move; }
-  .popup-brand { display:inline-flex; align-items:center; gap:7px; flex-shrink:0; }
-  .popup-brand-name { font-size:11px; font-weight:600; letter-spacing:var(--letter-caps); text-transform:uppercase; color:var(--text-2); }
-  .popup-spacer { flex:1; }
-  .popup-status { display:inline-flex; align-items:center; gap:6px; font-size:10.5px; font-family:var(--font-mono); color:var(--text-3); }
-  .popup-status--done { color:var(--text-2); } .popup-status--error { color:var(--danger); }
-  .popup-actions { display:inline-flex; align-items:center; gap:2px; flex-shrink:0; }
-  .popup-iconbtn { display:inline-flex; align-items:center; justify-content:center; width:27px; height:27px; background:transparent;
-    border:1px solid transparent; border-radius:var(--r-btn); color:var(--text-2); cursor:pointer; transition:all 120ms ease; }
-  .popup-iconbtn:hover { background:var(--bg-2); color:var(--text-1); border-color:var(--border-1); }
-  .popup-iconbtn--accent.is-on { background:var(--accent-soft); color:var(--accent-hover); border-color:color-mix(in oklab,var(--accent) 35%,transparent); }
-  .popup-iconbtn--close:hover { background:color-mix(in oklab,var(--danger) 15%,transparent); color:var(--danger); }
-  .popup-iconbtn.copied { color:var(--success); }
-  .popup-divider { width:1px; height:16px; background:var(--border-1); margin:0 3px; }
-  .popup-body { padding:14px 16px; display:flex; flex-direction:column; gap:12px; max-height:54vh; overflow:auto; }
-  .popup-body--loading { gap:10px; }
-  .popup-section { display:flex; flex-direction:column; gap:6px; }
-  .lang-chip { display:inline-flex; align-items:baseline; gap:6px; width:max-content; }
-  .lang-chip-code { font-family:var(--font-mono); font-size:9.5px; letter-spacing:var(--letter-caps); text-transform:uppercase; font-weight:600;
-    color:var(--text-2); background:var(--bg-2); border:1px solid var(--border-1); border-radius:var(--r-pill); padding:2px 6px; line-height:1.2; }
-  .lang-chip-name { font-size:10.5px; color:var(--text-3); }
-  .popup-source { font-family:var(--font-source); font-size:14px; line-height:1.55; color:var(--text-2); text-wrap:pretty;
-    letter-spacing:0.01em; white-space:pre-wrap; word-break:break-word; }
-  .popup-translation { font-family:var(--font-source); font-size:15.5px; font-weight:500; line-height:1.6; color:var(--text-1);
-    text-wrap:pretty; letter-spacing:var(--letter-tight); white-space:pre-wrap; word-break:break-word; }
-  .popup-divider-h { height:1px; background:linear-gradient(90deg,transparent,var(--border-2) 20%,var(--border-2) 80%,transparent); }
-  .popup-footer-hint { font-size:10.5px; color:var(--text-3); padding-top:8px; border-top:1px dashed var(--border-1); }
-  .popup-footer-hint kbd { margin:0 2px; }
-  .skeleton-line { height:13px; border-radius:4px; background:linear-gradient(90deg,var(--bg-2) 0%,color-mix(in oklab,var(--bg-2) 60%,var(--border-2)) 50%,var(--bg-2) 100%); background-size:200% 100%; animation:ts-shimmer 1.4s linear infinite; }
-  .skeleton-line--accent { height:17px; background:linear-gradient(90deg,var(--bg-2) 0%,color-mix(in oklab,var(--accent-soft) 80%,var(--bg-2)) 50%,var(--bg-2) 100%); background-size:200% 100%; animation:ts-shimmer 1.4s linear infinite; }
-  .popup-error { display:flex; gap:12px; padding:12px; background:color-mix(in oklab,var(--danger) 6%,transparent); border:1px solid color-mix(in oklab,var(--danger) 20%,transparent); border-radius:var(--r-card); }
-  .popup-error-icon { width:32px; height:32px; border-radius:var(--r-card); background:color-mix(in oklab,var(--danger) 12%,transparent); color:var(--danger); display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-  .popup-error-title { font-size:13px; font-weight:600; margin-bottom:4px; } .popup-error-msg { font-size:12px; color:var(--text-2); line-height:1.5; }
-
-  /* Overlay (dịch đè) cards — live INSIDE scene-frame so they scale with it */
-  .ov-card { position:absolute; display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--bg-1);
-    border:1px solid color-mix(in oklab,var(--accent) 35%,var(--border-2)); border-left:3px solid var(--accent); border-radius:8px;
-    font-family:var(--font-source); color:var(--text-1); box-shadow:var(--shadow-card); animation:ts-pop-in 220ms ease both; overflow:hidden; }
-  .scene-frame.show-source .ov-card { opacity:0; pointer-events:none; }
-  .ov-num { font-family:var(--font-mono); font-size:11px; color:var(--accent); background:var(--accent-soft); border-radius:4px;
-    padding:2px 5px; align-self:flex-start; flex-shrink:0; }
-  .ov-text { flex:1; line-height:1.35; font-weight:500; }
-
-  /* Text mode */
-  .text-mode { position:relative; z-index:1; width:min(760px,100%); display:flex; flex-direction:column; gap:14px; animation:ts-fade-in 220ms ease both; }
-  .text-card { background:var(--bg-1); border:1px solid var(--border-1); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:12px; }
-  #text-input { width:100%; min-height:150px; resize:vertical; font-family:var(--font-source); font-size:15px; line-height:1.6;
-    color:var(--text-1); background:var(--bg-2); border:1px solid var(--border-2); border-radius:var(--r-input); padding:12px 14px; }
-  #text-input:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
-  .text-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-  .char-count { font-family:var(--font-mono); font-size:11px; color:var(--text-3); }
-  .text-result { background:var(--bg-1); border:1px solid var(--border-1); border-radius:var(--r-card); padding:16px; display:flex; flex-direction:column; gap:12px; }
-
-  /* Status toast */
-  .status { position:fixed; left:50%; bottom:24px; transform:translateX(-50%); display:inline-flex; align-items:center; gap:9px; z-index:50;
-    padding:11px 16px; border-radius:var(--r-pill); font-size:13px; font-weight:500; background:var(--bg-elev); backdrop-filter:blur(16px);
-    border:1px solid var(--border-2); box-shadow:var(--shadow-popup); color:var(--text-1); animation:ts-pop-in 200ms ease both; max-width:calc(100% - 40px); }
-  .status.error { border-color:color-mix(in oklab,var(--danger) 40%,transparent); background:color-mix(in oklab,var(--danger) 12%,var(--bg-elev)); color:var(--danger); }
-  .status.success { border-color:color-mix(in oklab,var(--success) 40%,transparent); color:var(--success); }
-  .spin { animation:ts-spin 0.9s linear infinite; transform-origin:center; }
-
-  /* Footer */
-  .foot { flex-shrink:0; padding:12px 20px; border-top:1px solid var(--border-1); font-size:11.5px; color:var(--text-3);
-    display:flex; align-items:center; gap:8px; flex-wrap:wrap; background:var(--bg-1); }
-  .foot .mono { color:var(--text-2); }
-
-  /* ════ Scene chrome (the fake "screens" being translated) — fixed colors ════ */
-  .scene-app { background:linear-gradient(135deg,#1a2740,#0d1322); }
-  .scene-app .win { position:absolute; left:80px; top:40px; width:1020px; height:660px; background:#fff; border-radius:14px; overflow:hidden; box-shadow:0 40px 90px rgba(0,0,0,.5); }
-  .scene-app .titlebar { position:absolute; left:80px; top:40px; width:1020px; height:52px; background:#f1f2f5; border-radius:14px 14px 0 0; }
-  .scene-app .traffic { position:absolute; top:60px; display:flex; gap:9px; left:104px; }
-  .scene-app .traffic i { width:13px; height:13px; border-radius:50%; display:block; }
-  .scene-app .toggle { position:absolute; width:48px; height:28px; border-radius:14px; background:#4f59e6; }
-  .scene-app .toggle::after { content:""; position:absolute; right:3px; top:3px; width:22px; height:22px; border-radius:50%; background:#fff; }
-  .scene-app .pillbtn { position:absolute; height:42px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:600; }
-  .scene-app .noticebox { position:absolute; background:#fff7ed; border:1.5px solid #fed7aa; border-radius:10px; }
-
-  .scene-web { background:#e9ebf0; }
-  .scene-web .chrome { position:absolute; left:0; top:0; right:0; height:64px; background:#d9dce4; }
-  .scene-web .urlbar { position:absolute; left:120px; top:18px; width:940px; height:30px; background:#fff; border-radius:15px; }
-  .scene-web .traffic { position:absolute; top:25px; left:28px; display:flex; gap:9px; }
-  .scene-web .traffic i { width:13px; height:13px; border-radius:50%; display:block; }
-  .scene-web .page { position:absolute; left:0; top:64px; right:0; bottom:0; background:#fff; }
-
-  .scene-game { background:radial-gradient(120% 120% at 50% 0%, #243049, #0a0d16); }
-  .scene-game .vignette { position:absolute; inset:0; background:linear-gradient(0deg, rgba(0,0,0,.7), transparent 45%); }
-  .scene-game .dlgbox { position:absolute; left:80px; right:80px; bottom:56px; height:200px; background:rgba(10,14,26,.86);
-    border:2px solid rgba(129,140,248,.5); border-radius:16px; box-shadow:0 0 40px rgba(0,0,0,.6); }
-  .scene-game .namebox { position:absolute; left:108px; bottom:236px; padding:8px 22px; background:#6366f1; border-radius:10px; }
-  .scene-game .menu { position:absolute; right:96px; top:120px; width:230px; background:rgba(10,14,26,.82);
-    border:2px solid rgba(129,140,248,.45); border-radius:14px; }
-  .scene-game .quest { position:absolute; left:96px; top:120px; padding:10px 18px; background:rgba(99,102,241,.22);
-    border:1px solid rgba(129,140,248,.6); border-radius:10px; }
-
-  /* Text blocks (the OCR-able regions) */
-  .blk { position:absolute; margin:0; }
-  .blk-eyebrow { font:600 13px/1.2 var(--font-ui); letter-spacing:.12em; text-transform:uppercase; }
-  .blk-h1 { font:700 34px/1.25 var(--font-ui); letter-spacing:-.01em; }
-  .blk-h2 { font:700 26px/1.3 var(--font-source); }
-  .blk-body { font:400 18px/1.5 var(--font-source); }
-  .blk-label { font:600 20px/1.3 var(--font-ui); }
-  .blk-btn { font:600 16px/1 var(--font-ui); display:flex; align-items:center; justify-content:center; }
-  .blk-game { font:500 22px/1.55 var(--font-source); }
-  .blk-game-name { font:700 19px/1 var(--font-source); color:#fff; }
-  .blk-menu { font:600 19px/1 var(--font-source); }
-
-  @media (max-width:720px) { .toolbar{gap:10px;padding:12px 14px} .toolbar-divider{display:none} select{max-width:150px} .stage{padding:14px} .capture-empty{padding:34px 20px} }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
 </head>
-<body class="t-cobalt">
-  <header class="topbar">
-    <div class="brand">
-      <svg width="20" height="20" viewBox="0 0 16 16" fill="none"><path d="M2.5 4.5V3a.7.7 0 0 1 .7-.7H4.5M11.5 2.3H13a.7.7 0 0 1 .7.7v1.5M13.7 11.5V13a.7.7 0 0 1-.7.7h-1.5M4.5 13.7H3a.7.7 0 0 1-.7-.7v-1.5" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/><path d="M6 8h4M8.5 6.5L10 8l-1.5 1.5" stroke="var(--text-1)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-      <span class="brand-name">TransSnip</span><span class="brand-tag">Web</span>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+JP:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{font-family:'Plus Jakarta Sans','Noto Sans JP',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  [data-ts-theme="light"]{
+    --ts-bg:#ffffff;--ts-bg2:#eef2f8;--ts-bg3:#f7f9fc;--ts-text:#0f1729;--ts-muted:#5a6478;
+    --ts-border:#e4e9f1;--ts-border2:#d4dbe7;--ts-accent:#2f6bff;--ts-accent-ink:#ffffff;
+    --ts-accent-weak:#e9f0ff;--ts-good:#1f9d63;--ts-warn:#d98324;
+    --ts-shadow:0 24px 60px rgba(16,28,58,.22);--ts-shadow-sm:0 8px 24px rgba(16,28,58,.14);
+    --ts-desk:radial-gradient(1300px 760px at 78% -12%, #4d72e0 0%, #24356f 46%, #0f1a3c 100%);
+    --ts-taskbar:rgba(11,17,34,.74);--ts-bar:rgba(255,255,255,.82);--ts-bar-brd:rgba(255,255,255,.6);
+  }
+  [data-ts-theme="dark"]{
+    --ts-bg:#171d2a;--ts-bg2:#1f2838;--ts-bg3:#11161f;--ts-text:#eaf0fa;--ts-muted:#94a1ba;
+    --ts-border:#2a3445;--ts-border2:#384256;--ts-accent:#5b8cff;--ts-accent-ink:#08122b;
+    --ts-accent-weak:#1c2944;--ts-good:#36c489;--ts-warn:#e0a050;
+    --ts-shadow:0 24px 60px rgba(0,0,0,.55);--ts-shadow-sm:0 8px 24px rgba(0,0,0,.42);
+    --ts-desk:radial-gradient(1300px 760px at 78% -12%, #243a6e 0%, #131d38 50%, #080d1d 100%);
+    --ts-taskbar:rgba(6,10,20,.82);--ts-bar:rgba(24,31,46,.84);--ts-bar-brd:rgba(120,140,180,.16);
+  }
+  @keyframes ts-spin{to{transform:rotate(360deg)}}
+  @keyframes ts-pop{0%{transform:translateY(6px) scale(.985)}100%{transform:none}}
+  @keyframes ts-fade{0%{opacity:.6}100%{opacity:1}}
+  @keyframes ts-pulse{0%,100%{box-shadow:0 0 0 0 rgba(91,140,255,.5)}50%{box-shadow:0 0 0 8px rgba(91,140,255,0)}}
+  @keyframes ts-rise{0%{transform:translateY(8px)}100%{transform:none}}
+  @keyframes ts-ddin{0%{opacity:0;transform:translateY(-4px)}100%{opacity:1;transform:none}}
+  ::selection{background:rgba(91,140,255,.32)}
+</style>
+</helmet>
+
+<div data-ts-theme="{{ theme }}" onMouseDown="{{ onRootDown }}" style="position:relative;width:100vw;height:100vh;overflow:hidden;background:var(--ts-desk);color:var(--ts-text);font-family:'Plus Jakarta Sans','Noto Sans JP',sans-serif;display:flex;flex-direction:column;user-select:none">
+
+  <div style="position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.05) 1px,transparent 1px);background-size:26px 26px;pointer-events:none"></div>
+
+  <!-- ░░ COMMAND BAR ░░ -->
+  <header data-keep="1" style="position:relative;z-index:30;margin:14px 16px 0;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:10px 14px;border-radius:16px;background:var(--ts-bar);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid var(--ts-bar-brd);box-shadow:var(--ts-shadow-sm)">
+    <div style="display:flex;align-items:center;gap:10px;padding-right:4px">
+      <div style="width:32px;height:32px;border-radius:9px;background:linear-gradient(135deg,#5b8cff,#2f6bff);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:15px;box-shadow:0 4px 12px rgba(47,107,255,.45)">T</div>
+      <div style="line-height:1.05">
+        <div style="font-weight:800;font-size:15px;letter-spacing:-.2px;color:var(--ts-text)">TransSnip</div>
+        <div style="font-size:10.5px;color:var(--ts-muted);font-weight:600;white-space:nowrap">{{ t.tagline }}</div>
+      </div>
+      <span style="margin-left:4px;font-size:9.5px;font-weight:800;letter-spacing:.6px;color:var(--ts-accent);background:var(--ts-accent-weak);border:1px solid var(--ts-accent);padding:3px 7px;border-radius:6px">DEMO</span>
     </div>
-    <div class="topbar-spacer"></div>
-    <a class="provider-pill" id="provider-pill" href="#"><span class="pp-text">google_free</span></a>
-    <button class="icon-btn" id="theme-toggle" title="Đổi sáng / tối">
-      <svg class="sun" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="3"/><path d="M8 1.3v1.6M8 13.1v1.6M1.3 8h1.6M13.1 8h1.6M3.4 3.4l1.1 1.1M11.5 11.5l1.1 1.1M3.4 12.6l1.1-1.1M11.5 4.5l1.1-1.1"/></svg>
-      <svg class="moon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 9.2A5.6 5.6 0 0 1 6.8 2.5 5.6 5.6 0 1 0 13.5 9.2z"/></svg>
+
+    <div style="flex:1"></div>
+
+    <button onClick="{{ onSnip }}" aria-label="{{ t.snip }}" style="display:flex;align-items:center;gap:9px;padding:10px 15px;border-radius:11px;border:none;background:var(--ts-accent);color:var(--ts-accent-ink);font:inherit;font-weight:700;font-size:13.5px;cursor:pointer;box-shadow:0 6px 16px rgba(47,107,255,.38);white-space:nowrap;flex:0 0 auto">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3"/><path d="M16 4h3a1 1 0 0 1 1 1v3"/><path d="M20 16v3a1 1 0 0 1-1 1h-3"/><path d="M8 20H5a1 1 0 0 1-1-1v-3"/></svg>
+      {{ t.snip }}
+      <kbd style="font-family:'JetBrains Mono',monospace;font-size:10.5px;background:rgba(255,255,255,.22);padding:2px 6px;border-radius:5px;font-weight:700">Alt+T</kbd>
+    </button>
+
+    <div style="width:1px;height:30px;background:var(--ts-border2);opacity:.7"></div>
+
+    <!-- provider dropdown -->
+    <div data-dd="1" style="display:flex;flex-direction:column;gap:3px">
+      <span style="font-size:9.5px;font-weight:700;color:var(--ts-muted);letter-spacing:.3px;text-transform:uppercase">{{ t.lblProvider }}</span>
+      <div style="position:relative">
+        <button onClick="{{ onToggleProvider }}" aria-haspopup="listbox" style="display:flex;align-items:center;gap:9px;min-width:150px;background:var(--ts-bg2);color:var(--ts-text);border:1px solid var(--ts-border2);border-radius:9px;padding:7px 11px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer">
+          <span style="flex:1;text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ providerLabel }}</span>
+          <span style="color:var(--ts-muted);font-size:10px">▾</span>
+        </button>
+        <sc-if value="{{ ddProvider }}" hint-placeholder-val="{{ false }}">
+          <div role="listbox" style="position:absolute;top:calc(100% + 6px);left:0;min-width:100%;background:var(--ts-bg);border:1px solid var(--ts-border2);border-radius:10px;box-shadow:var(--ts-shadow);padding:5px;z-index:60;display:flex;flex-direction:column;gap:2px;animation:ts-ddin .12s ease">
+            <sc-for list="{{ providerOpts }}" as="o" hint-placeholder-count="4">
+              <button onClick="{{ o.onPick }}" style="{{ o.style }}"><span style="white-space:nowrap">{{ o.label }}</span><span style="color:var(--ts-accent);font-weight:800">{{ o.check }}</span></button>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <!-- language dropdowns + swap -->
+    <div data-dd="1" style="display:flex;flex-direction:column;gap:3px">
+      <span style="font-size:9.5px;font-weight:700;color:var(--ts-muted);letter-spacing:.3px;text-transform:uppercase">{{ t.lblLang }}</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <div style="position:relative">
+          <button onClick="{{ onToggleSource }}" style="display:flex;align-items:center;gap:8px;background:var(--ts-bg2);color:var(--ts-text);border:1px solid var(--ts-border2);border-radius:9px;padding:7px 11px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">{{ srcLabel }}<span style="color:var(--ts-muted);font-size:10px">▾</span></button>
+          <sc-if value="{{ ddSource }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;top:calc(100% + 6px);left:0;min-width:100%;background:var(--ts-bg);border:1px solid var(--ts-border2);border-radius:10px;box-shadow:var(--ts-shadow);padding:5px;z-index:60;display:flex;flex-direction:column;gap:2px;animation:ts-ddin .12s ease">
+              <sc-for list="{{ sourceOpts }}" as="o" hint-placeholder-count="6">
+                <button onClick="{{ o.onPick }}" style="{{ o.style }}"><span style="white-space:nowrap">{{ o.label }}</span><span style="color:var(--ts-accent);font-weight:800">{{ o.check }}</span></button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+        <button onClick="{{ onSwap }}" aria-label="{{ t.swap }}" title="{{ t.swap }}" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;border-radius:8px;border:1px solid var(--ts-border2);background:var(--ts-bg);color:var(--ts-muted);cursor:pointer;flex:0 0 auto">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3l4 4-4 4"/><path d="M20 7H4"/><path d="M8 21l-4-4 4-4"/><path d="M4 17h16"/></svg>
+        </button>
+        <div style="position:relative">
+          <button onClick="{{ onToggleTarget }}" style="display:flex;align-items:center;gap:8px;background:var(--ts-bg2);color:var(--ts-text);border:1px solid var(--ts-border2);border-radius:9px;padding:7px 11px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer;white-space:nowrap">{{ tgtLabel }}<span style="color:var(--ts-muted);font-size:10px">▾</span></button>
+          <sc-if value="{{ ddTarget }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;top:calc(100% + 6px);right:0;min-width:100%;background:var(--ts-bg);border:1px solid var(--ts-border2);border-radius:10px;box-shadow:var(--ts-shadow);padding:5px;z-index:60;display:flex;flex-direction:column;gap:2px;animation:ts-ddin .12s ease">
+              <sc-for list="{{ targetOpts }}" as="o" hint-placeholder-count="2">
+                <button onClick="{{ o.onPick }}" style="{{ o.style }}"><span style="white-space:nowrap">{{ o.label }}</span><span style="color:var(--ts-accent);font-weight:800">{{ o.check }}</span></button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </div>
+    </div>
+
+    <!-- preset dropdown -->
+    <div data-dd="1" style="display:flex;flex-direction:column;gap:3px">
+      <span style="font-size:9.5px;font-weight:700;color:var(--ts-muted);letter-spacing:.3px;text-transform:uppercase">{{ t.lblPreset }}</span>
+      <div style="position:relative">
+        <button onClick="{{ onTogglePreset }}" style="display:flex;align-items:center;gap:9px;min-width:120px;background:var(--ts-bg2);color:var(--ts-text);border:1px solid var(--ts-border2);border-radius:9px;padding:7px 11px;font:inherit;font-size:12.5px;font-weight:700;cursor:pointer"><span style="flex:1;text-align:left;white-space:nowrap">{{ presetCurLabel }}</span><span style="color:var(--ts-muted);font-size:10px">▾</span></button>
+        <sc-if value="{{ ddPreset }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:calc(100% + 6px);right:0;min-width:100%;background:var(--ts-bg);border:1px solid var(--ts-border2);border-radius:10px;box-shadow:var(--ts-shadow);padding:5px;z-index:60;display:flex;flex-direction:column;gap:2px;animation:ts-ddin .12s ease">
+            <sc-for list="{{ presetOpts }}" as="o" hint-placeholder-count="3">
+              <button onClick="{{ o.onPick }}" style="{{ o.style }}"><span style="white-space:nowrap">{{ o.label }}</span><span style="color:var(--ts-accent);font-weight:800">{{ o.check }}</span></button>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+
+    <div style="width:1px;height:30px;background:var(--ts-border2);opacity:.7"></div>
+
+    <button onClick="{{ onToggleTheme }}" aria-label="{{ t.theme }}" title="{{ t.theme }}" style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:9px;border:1px solid var(--ts-border2);background:var(--ts-bg);color:var(--ts-text);cursor:pointer">
+      <sc-if value="{{ isLight }}" hint-placeholder-val="{{ true }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+      </sc-if>
+      <sc-if value="{{ isDark }}" hint-placeholder-val="{{ false }}">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.8 6.8 0 0 0 9.8 9.8z"/></svg>
+      </sc-if>
+    </button>
+
+    <button onClick="{{ onOpenSettings }}" aria-label="{{ t.settings }}" title="{{ t.settings }}" style="display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:9px;border:1px solid var(--ts-border2);background:var(--ts-bg);color:var(--ts-text);cursor:pointer">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 0 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H23a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
     </button>
   </header>
 
-  <div class="toolbar">
-    <div class="ctl"><label>Ngôn ngữ nguồn</label><div class="select-wrap"><select id="source-lang"></select></div></div>
-    <button class="icon-btn swap" id="swap" title="Đảo ngôn ngữ"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 5h9M9.5 2.5L12 5 9.5 7.5M13 11H4M6.5 8.5L4 11l2.5 2.5"/></svg></button>
-    <div class="ctl"><label>Ngôn ngữ đích</label><div class="select-wrap"><select id="target-lang"></select></div></div>
-    <div class="toolbar-divider"></div>
-    <div class="ctl"><label>Provider</label><div class="select-wrap"><select id="provider"></select></div></div>
-    <div class="ctl"><label>Ngữ cảnh</label><div class="select-wrap"><select id="preset"></select></div></div>
-    <div class="ctl apikey hidden" id="apikey-wrap"><label>API key</label><input class="input" id="api-key" type="password" placeholder="Dán API key — không lưu trên server" /><span class="apikey-hint" id="apikey-hint"></span></div>
-  </div>
+  <!-- ░░ DESKTOP STAGE ░░ -->
+  <main style="position:relative;z-index:5;flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;padding:16px 16px 8px 80px;overflow:hidden">
 
-  <main class="stage">
-    <section class="capture-empty" id="capture-empty">
-      <div class="capture-glyph"><svg width="30" height="30" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.2"/><path d="M5.5 14h5M8 11.2V14"/></svg></div>
-      <h1 class="capture-title">Khoanh vùng trên màn hình &amp; dịch</h1>
-      <p class="capture-sub">Chia sẻ một cửa sổ hoặc màn hình, rồi kéo chọn đúng vùng có chữ — TransSnip sẽ OCR và dịch ngay vùng đó.</p>
-      <div class="capture-actions">
-        <button class="btn btn-primary btn-lg" id="btn-capture"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.2"/><path d="M5.5 14h5M8 11.2V14"/></svg>Chụp màn hình</button>
-        <button class="btn" id="btn-upload"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><circle cx="5.5" cy="6.5" r="1.1"/><path d="M3 11l3-3 2.5 2.5L11 7l2 2"/></svg>Dùng ảnh mẫu</button>
-      </div>
-    </section>
+    <!-- left-margin UI language switch -->
+    <div data-keep="1" style="position:absolute;left:14px;top:50%;transform:translateY(-50%);z-index:20;display:flex;flex-direction:column;gap:6px;align-items:center;padding:9px 7px;border-radius:14px;background:var(--ts-bar);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid var(--ts-bar-brd);box-shadow:var(--ts-shadow-sm)">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ts-muted)" stroke-width="2" style="margin-bottom:1px"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+      <button onClick="{{ onLangVi }}" title="Tiếng Việt" style="{{ langViStyle }}">VN</button>
+      <button onClick="{{ onLangJa }}" title="日本語" style="{{ langJaStyle }}">JP</button>
+    </div>
 
-    <section class="workspace hidden" id="workspace">
-      <div class="workspace-bar">
-        <span class="ws-hint"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v9.3a.7.7 0 0 0 .7.7H14"/><path d="M2 4h9.3a.7.7 0 0 1 .7.7V14"/></svg><span id="ws-hint-text">Kéo để khoanh vùng cần dịch</span></span>
-        <span class="ws-divider"></span>
-        <div class="seg">
-          <button id="mode-popup" class="active" title="Popup nổi"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3.5" width="12" height="9" rx="1.5"/><path d="M4.5 6.5h5M4.5 9.5h7"/></svg>Popup</button>
-          <button id="mode-inline" title="Dịch đè lên chữ gốc"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2l5.5 3L8 8 2.5 5z"/><path d="M2.5 8.5L8 11.5l5.5-3"/></svg>Dịch đè</button>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;justify-content:center">
+      <span style="font-size:11.5px;font-weight:700;color:rgba(255,255,255,.78);margin-right:2px">{{ t.sampleScreens }}</span>
+      <button onClick="{{ onTabArticle }}" style="{{ tabArticleStyle }}">📰 {{ t.tabArticle }}</button>
+      <button onClick="{{ onTabManga }}" style="{{ tabMangaStyle }}">📖 {{ t.tabManga }}</button>
+      <button onClick="{{ onTabGame }}" style="{{ tabGameStyle }}">🎮 {{ t.tabGame }}</button>
+      <button onClick="{{ onTabCode }}" style="{{ tabCodeStyle }}">💻 {{ t.tabCode }}</button>
+    </div>
+
+    <div ref="{{ stageRef }}" style="position:relative;width:100%;max-width:820px;flex:1;min-height:0;border-radius:14px;overflow:hidden;box-shadow:var(--ts-shadow);border:1px solid rgba(255,255,255,.12);display:flex;flex-direction:column">
+
+      <!-- ARTICLE -->
+      <sc-if value="{{ isArticle }}" hint-placeholder-val="{{ true }}">
+        <div data-screen-label="article" style="display:flex;flex-direction:column;height:100%;background:var(--ts-bg)">
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:var(--ts-bg2);border-bottom:1px solid var(--ts-border)">
+            <span style="display:flex;gap:6px"><span style="width:11px;height:11px;border-radius:50%;background:#ff5f57"></span><span style="width:11px;height:11px;border-radius:50%;background:#febc2e"></span><span style="width:11px;height:11px;border-radius:50%;background:#28c840"></span></span>
+            <div style="flex:1;display:flex;align-items:center;gap:8px;background:var(--ts-bg);border:1px solid var(--ts-border2);border-radius:8px;padding:5px 11px;font-size:12px;color:var(--ts-muted);font-weight:600">🔒 techreview.example.com/efficient-models</div>
+          </div>
+          <div style="padding:34px 46px;overflow:auto;flex:1">
+            <div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--ts-accent);margin-bottom:14px">AI · Research</div>
+            <h1 data-block="art-title" style="margin:0 0 14px;font-size:30px;line-height:1.18;font-weight:800;letter-spacing:-.5px;color:var(--ts-text);cursor:text">The race to build smaller, faster language models</h1>
+            <div style="display:flex;align-items:center;gap:10px;color:var(--ts-muted);font-size:13px;font-weight:600;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--ts-border)">By Dana Whitfield · June 9, 2026 · 5 min read</div>
+            <p data-block="art-p1" style="margin:0;font-size:16.5px;line-height:1.72;color:var(--ts-text);max-width:620px;cursor:text">Researchers are increasingly focused on efficiency rather than raw scale. By distilling large models into compact ones, teams can run capable assistants directly on a laptop — keeping private data on the device instead of sending it to the cloud.</p>
+          </div>
         </div>
-        <button class="ws-btn ws-btn--accent hidden" id="ov-all" title="Dịch toàn bộ màn hình"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12M2 8h12M2 12h8"/></svg>Dịch cả màn hình</button>
-        <button class="ws-btn hidden" id="ov-source" title="Giữ để xem bản gốc"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="1.8"/></svg>Bản gốc</button>
-        <span class="ws-divider"></span>
-        <span class="scene-meta" id="scene-meta">Màn hình 1/3</span>
-        <button class="ws-btn" id="ws-recapture" title="Chụp lại (S) — đổi màn hình demo"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8a5.5 5.5 0 1 1-1.7-4"/><path d="M13.5 2v3.5h-3.5"/></svg>Chụp lại</button>
-        <button class="ws-btn ws-btn--close" id="ws-close" title="Đóng"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/></svg></button>
-      </div>
-      <div class="canvas-scroll" id="canvas-scroll">
-        <div class="canvas-wrap" id="canvas-wrap">
-          <div class="scene-frame" id="scene-frame"></div>
-          <div class="select-layer" id="select-layer"></div>
-          <div class="overlay-layer" id="overlay-layer"></div>
-        </div>
-      </div>
-    </section>
+      </sc-if>
 
-    <section class="text-mode hidden" id="panel-text">
-      <button class="link-btn" id="text-back" style="align-self:flex-start">← Quay lại khoanh vùng</button>
-      <div class="text-card">
-        <textarea id="text-input" placeholder="Dán hoặc gõ văn bản cần dịch…"></textarea>
-        <div class="text-row"><span class="char-count" id="char-count">0 ký tự</span><button class="btn btn-primary" id="translate-text">Dịch</button></div>
+      <!-- MANGA -->
+      <sc-if value="{{ isManga }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="manga" style="display:flex;flex-direction:column;height:100%;background:#23262e">
+          <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:#16181d;border-bottom:1px solid #000;color:#c3c8d2;font-size:12px;font-weight:600">
+            <span style="display:flex;gap:6px"><span style="width:11px;height:11px;border-radius:50%;background:#ff5f57"></span><span style="width:11px;height:11px;border-radius:50%;background:#febc2e"></span><span style="width:11px;height:11px;border-radius:50%;background:#28c840"></span></span>
+            🖼️ {{ t.imgViewer }} — doraemon_vol01_p11.jpg
+          </div>
+          <div style="position:relative;flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:14px;background:#2b2f38">
+            <div style="position:absolute;left:16px;top:50%;transform:translateY(-50%);width:160px;display:flex;flex-direction:column;gap:9px;padding:13px 14px;border-radius:12px;background:rgba(17,22,32,.72);border:1px solid rgba(120,140,180,.22);color:#c8d2e4">
+              <div style="display:flex;align-items:center;gap:7px;color:#ffd56b;font-weight:800;font-size:11.5px;letter-spacing:.2px">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg>
+                {{ t.demoNoteTitle }}
+              </div>
+              <div style="font-size:11.5px;line-height:1.55;font-weight:500;color:#aab6cc">{{ t.demoNote1a }}<b style="color:#e6edf8">{{ t.demoNote1b }}</b>{{ t.demoNote1c }}</div>
+              <div style="font-size:11px;line-height:1.5;font-weight:500;color:#7e8aac;padding-top:9px;border-top:1px solid rgba(120,140,180,.18)">{{ t.demoNote2a }}<b style="color:#cdd7e8">{{ t.demoNote2b }}</b>{{ t.demoNote2c }}</div>
+            </div>
+            <div style="position:relative;height:100%;aspect-ratio:474/690;box-shadow:0 8px 30px rgba(0,0,0,.5);border:1px solid #000">
+              <img src="manga-page.webp" alt="manga" draggable="false" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;background:#fff;-webkit-user-drag:none">
+              <div data-block="mg-1" style="position:absolute;left:84%;top:4.5%;width:14%;height:6.5%;border-radius:6px" style-hover="background:rgba(91,140,255,.22);outline:1.5px dashed rgba(91,140,255,.85)"></div>
+              <div data-block="mg-2" style="position:absolute;left:62%;top:14%;width:18%;height:9.5%;border-radius:6px" style-hover="background:rgba(91,140,255,.22);outline:1.5px dashed rgba(91,140,255,.85)"></div>
+              <div data-block="mg-3" style="position:absolute;left:69%;top:29%;width:18%;height:11.5%;border-radius:6px" style-hover="background:rgba(91,140,255,.22);outline:1.5px dashed rgba(91,140,255,.85)"></div>
+              <div data-block="mg-4" style="position:absolute;left:18%;top:51%;width:24%;height:9%;border-radius:6px" style-hover="background:rgba(91,140,255,.22);outline:1.5px dashed rgba(91,140,255,.85)"></div>
+              <div data-block="mg-5" style="position:absolute;left:30%;top:77%;width:28%;height:13%;border-radius:6px" style-hover="background:rgba(91,140,255,.22);outline:1.5px dashed rgba(91,140,255,.85)"></div>
+              <div data-block="mg-6" style="position:absolute;left:75%;top:83%;width:22%;height:10%;border-radius:6px" style-hover="background:rgba(91,140,255,.22);outline:1.5px dashed rgba(91,140,255,.85)"></div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- GAME -->
+      <sc-if value="{{ isGame }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="game" style="position:relative;height:100%;background:radial-gradient(120% 90% at 50% 0%,#3a2c52 0%,#1a1430 55%,#0b0817 100%);overflow:hidden">
+          <div style="position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.06) 1px,transparent 1px);background-size:30px 30px"></div>
+          <div style="position:absolute;top:18px;left:18px;background:rgba(8,8,18,.62);border:1px solid rgba(160,140,255,.35);border-radius:10px;padding:11px 14px;backdrop-filter:blur(4px)">
+            <div style="display:flex;align-items:center;gap:9px;color:#ffd56b;font-weight:800;font-size:13px;margin-bottom:8px"><span style="width:26px;height:26px;border-radius:50%;background:linear-gradient(135deg,#ffd56b,#c98a2a);display:flex;align-items:center;justify-content:center;color:#3a2a00">勇</span>勇者 · Lv.42</div>
+            <div data-block="gm-stat" style="font-family:'Noto Sans SC',sans-serif;font-weight:700;font-size:13px;color:#fff;letter-spacing:.5px;cursor:text">生命值 250/250　魔法值 80/120</div>
+            <div style="display:flex;gap:6px;margin-top:7px"><div style="width:120px;height:7px;border-radius:4px;background:#3a1320;overflow:hidden"><div style="width:100%;height:100%;background:linear-gradient(90deg,#ff5a6e,#ff2d55)"></div></div><div style="width:84px;height:7px;border-radius:4px;background:#102040;overflow:hidden"><div style="width:66%;height:100%;background:linear-gradient(90deg,#5ab0ff,#2d7bff)"></div></div></div>
+          </div>
+          <div style="position:absolute;left:24px;right:24px;bottom:22px;background:rgba(10,10,24,.86);border:1px solid rgba(170,150,255,.45);border-radius:14px;padding:16px 20px;box-shadow:0 0 30px rgba(120,90,255,.25)">
+            <div style="display:flex;align-items:center;gap:9px;margin-bottom:9px"><span style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#9b6bff,#5a2dd6);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-family:'Noto Sans SC',sans-serif">神</span><span style="color:#cbb6ff;font-weight:800;font-size:13.5px;font-family:'Noto Sans SC',sans-serif">守护神</span></div>
+            <div data-block="gm-quest" style="font-family:'Noto Sans SC',sans-serif;font-weight:500;font-size:17px;line-height:1.6;color:#f3eeff;cursor:text">击败魔王后，你将获得传说之剑和 10000 金币。</div>
+            <div style="text-align:right;margin-top:6px;color:#a99bd0;font-size:12px;font-weight:700">▼ 继续</div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- CODE -->
+      <sc-if value="{{ isCode }}" hint-placeholder-val="{{ false }}">
+        <div data-screen-label="code" style="display:flex;flex-direction:column;height:100%;background:#0f1420;font-family:'JetBrains Mono',monospace">
+          <div style="display:flex;align-items:center;gap:12px;padding:0 14px;background:#11161f;border-bottom:1px solid #1d2535;height:38px;color:#8aa0c0;font-size:12px">
+            <span style="display:flex;gap:6px"><span style="width:11px;height:11px;border-radius:50%;background:#ff5f57"></span><span style="width:11px;height:11px;border-radius:50%;background:#febc2e"></span><span style="width:11px;height:11px;border-radius:50%;background:#28c840"></span></span>
+            <span style="background:#0f1420;padding:8px 14px;border-top:2px solid #5b8cff;color:#dce6f5;font-weight:600">client.ts</span>
+          </div>
+          <div style="flex:1;overflow:auto;padding:18px 6px;font-size:13.5px;line-height:1.85;color:#c8d4e6">
+            <div style="display:flex"><span style="width:40px;text-align:right;padding-right:16px;color:#3f4d63;user-select:none">28</span><span><span style="color:#6f7d96">/**</span></span></div>
+            <div style="display:flex"><span style="width:40px;text-align:right;padding-right:16px;color:#3f4d63;user-select:none">29</span><span style="color:#6f7d96"> * <span data-block="cd-doc" style="color:#9fb4d4;cursor:text">Returns a Promise that resolves when the connection is established. Throws a TimeoutError if the server does not respond within the configured interval.</span></span></div>
+            <div style="display:flex"><span style="width:40px;text-align:right;padding-right:16px;color:#3f4d63;user-select:none">30</span><span style="color:#6f7d96"> */</span></div>
+            <div style="display:flex"><span style="width:40px;text-align:right;padding-right:16px;color:#3f4d63;user-select:none">31</span><span><span style="color:#c678dd">async function</span> <span style="color:#61afef">connect</span>(<span style="color:#e0a458">opts</span>) {</span></div>
+            <div style="display:flex"><span style="width:40px;text-align:right;padding-right:16px;color:#3f4d63;user-select:none">32</span><span>&nbsp;&nbsp;<span data-block="cd-comment" style="color:#5c8a5c;cursor:text">// Retry the request up to three times before giving up</span></span></div>
+            <div style="display:flex"><span style="width:40px;text-align:right;padding-right:16px;color:#3f4d63;user-select:none">33</span><span>&nbsp;&nbsp;<span style="color:#c678dd">for</span> (<span style="color:#c678dd">let</span> i = <span style="color:#d19a66">0</span>; i &lt; <span style="color:#d19a66">3</span>; i++) {</span></div>
+            <div style="display:flex"><span style="width:40px;text-align:right;padding-right:16px;color:#3f4d63;user-select:none">34</span><span>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#c678dd">try</span> { <span style="color:#c678dd">return</span> <span style="color:#c678dd">await</span> open(opts); }</span></div>
+            <div style="display:flex"><span style="width:40px;text-align:right;padding-right:16px;color:#3f4d63;user-select:none">35</span><span>&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#c678dd">catch</span> (e) { <span style="color:#c678dd">await</span> sleep(<span style="color:#d19a66">200</span>); }</span></div>
+            <div style="display:flex"><span style="width:40px;text-align:right;padding-right:16px;color:#3f4d63;user-select:none">36</span><span>&nbsp;&nbsp;}</span></div>
+            <div style="display:flex"><span style="width:40px;text-align:right;padding-right:16px;color:#3f4d63;user-select:none">37</span><span>}</span></div>
+          </div>
+        </div>
+      </sc-if>
+
+      <div style="position:absolute;left:50%;bottom:12px;transform:translateX(-50%);display:flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;background:rgba(8,12,24,.66);color:#fff;font-size:11.5px;font-weight:600;backdrop-filter:blur(6px);pointer-events:none">
+        <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#36c489;animation:ts-pulse 2s infinite"></span>
+        {{ t.stageHintPre }} <kbd style="font-family:'JetBrains Mono',monospace;background:rgba(255,255,255,.2);padding:1px 5px;border-radius:4px">Alt+T</kbd> {{ t.stageHintPost }}
       </div>
-      <div class="text-result hidden" id="text-result"></div>
-    </section>
+    </div>
   </main>
 
-  <div id="status" class="status hidden"></div>
-
-  <footer class="foot">
-    <span class="mono">TransSnip Web</span><span class="dotsep"></span>
-    <span>khoanh vùng · OCR · dịch đa ngôn ngữ</span><span class="dotsep"></span>
-    <span style="color:var(--accent)">● Bản mockup demo — minh hoạ luồng sử dụng</span>
+  <!-- ░░ TASKBAR ░░ -->
+  <footer style="position:relative;z-index:30;height:46px;flex:0 0 46px;display:flex;align-items:center;gap:10px;padding:0 16px;background:var(--ts-taskbar);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,.08)">
+    <div style="width:30px;height:30px;border-radius:7px;background:rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;color:#fff"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M3 3h8v8H3zM13 3h8v8h-8zM3 13h8v8H3zM13 13h8v8h-8z"/></svg></div>
+    <div style="flex:1"></div>
+    <div data-keep="1" style="position:relative">
+      <button onClick="{{ onTrayClick }}" aria-label="TransSnip tray" style="display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:8px;border:none;background:rgba(255,255,255,.08);cursor:pointer;color:#fff;font:inherit">
+        <span style="width:20px;height:20px;border-radius:5px;background:linear-gradient(135deg,#5b8cff,#2f6bff);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#fff">T</span>
+        <span style="font-size:11.5px;font-weight:700">TransSnip</span>
+        <span style="width:6px;height:6px;border-radius:50%;background:#36c489;box-shadow:0 0 6px #36c489"></span>
+      </button>
+      <sc-if value="{{ trayOpen }}" hint-placeholder-val="{{ false }}">
+        <div style="position:absolute;right:0;bottom:42px;width:256px;background:var(--ts-bg);border:1px solid var(--ts-border2);border-radius:12px;box-shadow:var(--ts-shadow);padding:12px;animation:ts-pop .16s ease">
+          <div style="display:flex;align-items:center;gap:9px;padding-bottom:10px;border-bottom:1px solid var(--ts-border);margin-bottom:9px">
+            <span style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#5b8cff,#2f6bff);display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff">T</span>
+            <div style="line-height:1.15"><div style="font-weight:800;font-size:13px;color:var(--ts-text)">TransSnip</div><div style="font-size:11px;color:var(--ts-good);font-weight:700">● {{ t.trayRunning }}</div></div>
+          </div>
+          <button onClick="{{ onSnip }}" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 10px;border:none;border-radius:8px;background:var(--ts-accent-weak);color:var(--ts-accent);font:inherit;font-weight:700;font-size:12.5px;cursor:pointer;margin-bottom:5px">✂️ {{ t.snip }} <span style="margin-left:auto;font-family:'JetBrains Mono',monospace;font-size:10px;opacity:.8">Alt+T</span></button>
+          <button onClick="{{ onReplayHelp }}" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 10px;border:none;border-radius:8px;background:transparent;color:var(--ts-text);font:inherit;font-weight:600;font-size:12.5px;cursor:pointer">💡 {{ t.trayReplay }}</button>
+          <button onClick="{{ onOpenSettings }}" style="width:100%;display:flex;align-items:center;gap:8px;padding:9px 10px;border:none;border-radius:8px;background:transparent;color:var(--ts-text);font:inherit;font-weight:600;font-size:12.5px;cursor:pointer">⚙️ {{ t.traySettings }}</button>
+          <a href="#download" style="margin-top:5px;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 10px;border-radius:8px;background:var(--ts-bg2);color:var(--ts-muted);font-weight:700;font-size:11.5px;text-decoration:none;border:1px solid var(--ts-border)">⬇ {{ t.trayDownload }}</a>
+        </div>
+      </sc-if>
+    </div>
+    <div style="color:#fff;text-align:right;line-height:1.15;padding-left:4px">
+      <div style="font-size:12.5px;font-weight:700">{{ clockTime }}</div>
+      <div style="font-size:10px;opacity:.8">{{ clockDate }}</div>
+    </div>
   </footer>
 
-  <script>
-  (function () {
-    "use strict";
-    const $ = (id) => document.getElementById(id);
-    const SW = 1180, SH = 740;
+  <!-- ░░ SNIP OVERLAY ░░ -->
+  <sc-if value="{{ selecting }}" hint-placeholder-val="{{ false }}">
+    <div onMouseDown="{{ onOverlayDown }}" style="position:absolute;inset:0;z-index:60;cursor:crosshair;background:rgba(8,12,24,.32);backdrop-filter:saturate(.7) brightness(.92)">
+      <div style="position:absolute;left:50%;top:22px;transform:translateX(-50%);display:flex;align-items:center;gap:9px;padding:9px 16px;border-radius:999px;background:rgba(8,12,24,.85);color:#fff;font-size:13px;font-weight:600;pointer-events:none">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/></svg>
+        {{ t.snipHint }} <kbd style="font-family:'JetBrains Mono',monospace;background:rgba(255,255,255,.2);padding:1px 6px;border-radius:4px">Esc</kbd> {{ t.snipHintEsc }}
+      </div>
+      <div ref="{{ rubberRef }}" style="position:absolute;display:none;border:2px solid #5b8cff;background:rgba(91,140,255,.16);box-shadow:0 0 0 9999px rgba(8,12,24,.34);border-radius:3px;pointer-events:none"></div>
+    </div>
+  </sc-if>
 
-    /* Icons */
-    const P = { copy:'<rect x="5" y="5" width="8" height="8" rx="1.3"/><path d="M3 11V4a1.3 1.3 0 0 1 1.3-1.3H11"/>',
-      check:'<path d="M3 8.5l3 3 7-7"/>', close:'<path d="M3.5 3.5l9 9M12.5 3.5l-9 9"/>',
-      pin:'<path d="M8 1.8l-2 4-3 1 3.5 3.5L3 14l4.2-3.5L10.7 14l-1-3 3.5-3.5-3-1z"/>',
-      alert:'<path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.3"/>' };
-    const icon = (n,s=16,w=1.5)=>`<svg width="${s}" height="${s}" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${P[n]||""}</svg>`;
-    const spinner = (s=14)=>`<svg class="spin" width="${s}" height="${s}" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.6" stroke-opacity="0.18"/><path d="M14 8a6 6 0 0 0-6-6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>`;
-    const GLYPH = '<svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M2.5 4.5V3a.7.7 0 0 1 .7-.7H4.5M11.5 2.3H13a.7.7 0 0 1 .7.7v1.5M13.7 11.5V13a.7.7 0 0 1-.7.7h-1.5M4.5 13.7H3a.7.7 0 0 1-.7-.7v-1.5" stroke="var(--accent)" stroke-width="1.6" stroke-linecap="round"/><path d="M6 8h4M8.5 6.5L10 8l-1.5 1.5" stroke="var(--text-1)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  <!-- ░░ RESULT POPUP ░░ -->
+  <sc-if value="{{ pShow }}" hint-placeholder-val="{{ false }}">
+    <div data-keep="1" style="position:absolute;z-index:70;width:374px;max-width:calc(100vw - 24px);left:{{ pX }}px;top:{{ pY }}px;max-height:calc(100vh - 16px);background:var(--ts-bg);border:1px solid var(--ts-border2);border-radius:15px;box-shadow:var(--ts-shadow);overflow:hidden auto;animation:ts-pop .17s ease">
+      <div style="display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--ts-border);background:var(--ts-bg2)">
+        <span style="width:22px;height:22px;border-radius:6px;background:linear-gradient(135deg,#5b8cff,#2f6bff);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:11px;color:#fff">T</span>
+        <span style="font-weight:800;font-size:12.5px;color:var(--ts-text)">TransSnip</span>
+        <sc-if value="{{ pDone }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono',monospace;font-size:10.5px;font-weight:700;color:{{ pMetaColor }};background:var(--ts-bg3);border:1px solid var(--ts-border);padding:2px 7px;border-radius:6px">{{ pMeta }}</span></sc-if>
+        <span style="flex:1"></span>
+        <button onClick="{{ onClosePopup }}" aria-label="close" style="width:24px;height:24px;border:none;border-radius:6px;background:transparent;color:var(--ts-muted);cursor:pointer;font-size:15px;line-height:1">✕</button>
+      </div>
 
-    /* Config */
-    const CONFIG = {
-      providers: [
-        { key:"google_free", display_name:"Google Translate (free, no key)", needs_api_key:false, api_key_hint:"" },
-        { key:"gemini", display_name:"Google Gemini (free tier 1500/day)", needs_api_key:true, api_key_hint:"Lấy free tại aistudio.google.com → Get API key" },
-        { key:"claude", display_name:"Anthropic Claude (premium, paid)", needs_api_key:true, api_key_hint:"Lấy tại console.anthropic.com → API Keys" },
-        { key:"openrouter", display_name:"OpenRouter (300+ models, free tier)", needs_api_key:true, api_key_hint:"Lấy free tại openrouter.ai → Keys" },
-      ],
-      languages: [
-        {code:"auto",name:"Tự động nhận diện"},{code:"en",name:"English"},{code:"ja",name:"日本語 (Japanese)"},
-        {code:"ko",name:"한국어 (Korean)"},{code:"zh-Hans",name:"中文 简体 (Chinese)"},{code:"vi",name:"Tiếng Việt (Vietnamese)"},
-        {code:"fr",name:"Français (French)"},{code:"de",name:"Deutsch (German)"},{code:"th",name:"ภาษาไทย (Thai)"},
-      ],
-      presets: [
-        {name:"default",description:"Bản dịch thông thường."},
-        {name:"programming",description:"Tài liệu kỹ thuật, giữ thuật ngữ Anh."},
-        {name:"gaming",description:"Hội thoại / UI game."},
-      ],
+      <sc-if value="{{ pLoading }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:center;gap:12px;padding:26px 18px;color:var(--ts-muted)">
+          <span style="width:20px;height:20px;border:2.5px solid var(--ts-border2);border-top-color:var(--ts-accent);border-radius:50%;animation:ts-spin .7s linear infinite"></span>
+          <span style="font-size:13.5px;font-weight:600;color:var(--ts-text)">{{ t.loading }}</span>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ pEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:20px 18px">
+          <div style="font-size:13.5px;font-weight:600;color:var(--ts-text);line-height:1.5">{{ t.emptyTitle }}</div>
+          <div style="font-size:12.5px;color:var(--ts-muted);margin-top:5px">{{ t.emptyBody }}</div>
+          <button onClick="{{ onSnip }}" style="margin-top:13px;padding:8px 14px;border:none;border-radius:9px;background:var(--ts-accent);color:var(--ts-accent-ink);font:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ t.retry }}</button>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ pDone }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:14px 16px 16px">
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px">
+            <span style="font-size:10px;font-weight:800;letter-spacing:.4px;color:var(--ts-muted);background:var(--ts-bg2);border:1px solid var(--ts-border);padding:2px 8px;border-radius:6px">{{ pSrcChip }}</span>
+            <span style="font-size:10.5px;font-weight:700;color:var(--ts-muted)">{{ t.srcText }}</span>
+          </div>
+          <div style="font-size:13.5px;line-height:1.55;color:var(--ts-muted);font-family:{{ pSrcFont }};margin-bottom:14px">{{ pSrcText }}</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-bottom:6px">
+            <span style="font-size:10px;font-weight:800;letter-spacing:.4px;color:var(--ts-accent);background:var(--ts-accent-weak);border:1px solid var(--ts-accent);padding:2px 8px;border-radius:6px">{{ pTargetLabel }}</span>
+            <span style="font-size:10.5px;font-weight:700;color:var(--ts-muted)">· {{ t.presetCtx }} {{ pPresetLabel }}</span>
+          </div>
+          <div style="font-size:16px;line-height:1.62;color:var(--ts-text);font-weight:600">{{ pTranslation }}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:15px;padding-top:12px;border-top:1px solid var(--ts-border)">
+            <button onClick="{{ onCopy }}" style="display:flex;align-items:center;gap:7px;padding:8px 13px;border:none;border-radius:9px;background:var(--ts-accent);color:var(--ts-accent-ink);font:inherit;font-weight:700;font-size:12.5px;cursor:pointer">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+              {{ t.copy }}
+            </button>
+            <span style="flex:1"></span>
+            <span style="font-size:11px;color:var(--ts-muted);font-weight:600">{{ t.popupTip }} <b style="color:var(--ts-text)">{{ t.popupTipB }}</b> {{ t.popupTipPost }}</span>
+          </div>
+        </div>
+      </sc-if>
+    </div>
+  </sc-if>
+
+  <!-- ░░ SETTINGS ░░ -->
+  <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
+    <div data-keep="1" style="position:absolute;inset:0;z-index:80;background:rgba(8,12,24,.72);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:20px;animation:ts-fade .15s ease">
+      <div style="width:660px;max-width:100%;max-height:88vh;display:flex;flex-direction:column;background:var(--ts-bg);border:1px solid var(--ts-border2);border-radius:16px;box-shadow:var(--ts-shadow);overflow:hidden;animation:ts-pop .18s ease">
+        <div style="display:flex;align-items:center;gap:10px;padding:15px 18px;border-bottom:1px solid var(--ts-border)">
+          <span style="width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#5b8cff,#2f6bff);display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff">⚙</span>
+          <span style="font-weight:800;font-size:15px;color:var(--ts-text)">{{ t.stTitle }}</span>
+          <span style="flex:1"></span>
+          <button onClick="{{ onCloseSettings }}" aria-label="close" style="width:28px;height:28px;border:none;border-radius:7px;background:var(--ts-bg2);color:var(--ts-muted);cursor:pointer;font-size:15px">✕</button>
+        </div>
+        <div style="display:flex;gap:6px;padding:10px 16px 0">
+          <button onClick="{{ onTabDich }}" style="{{ stTabDichStyle }}">{{ t.stTabDich }}</button>
+          <button onClick="{{ onTabNgu }}" style="{{ stTabNguStyle }}">{{ t.stTabNgu }}</button>
+          <button onClick="{{ onTabPhim }}" style="{{ stTabPhimStyle }}">{{ t.stTabPhim }}</button>
+        </div>
+        <div style="flex:1;overflow:auto;padding:18px">
+          <sc-if value="{{ isTabDich }}" hint-placeholder-val="{{ true }}">
+            <div>
+              <div style="font-size:12px;font-weight:700;color:var(--ts-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">{{ t.stProviderHead }}</div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                <sc-for list="{{ providerCards }}" as="pc" hint-placeholder-count="4">
+                  <button onClick="{{ pc.onPick }}" style="{{ pc.style }}">
+                    <span style="display:flex;flex-direction:column;align-items:flex-start;gap:2px;text-align:left">
+                      <span style="font-weight:700;font-size:13.5px;color:var(--ts-text)">{{ pc.name }}</span>
+                      <span style="font-size:11.5px;color:var(--ts-muted);font-weight:500">{{ pc.desc }}</span>
+                    </span>
+                    <span style="margin-left:auto">{{ pc.badge }}</span>
+                  </button>
+                </sc-for>
+              </div>
+
+              <!-- API key block -->
+              <div style="margin-top:16px;padding:14px;border:1px solid var(--ts-border2);border-radius:12px;background:var(--ts-bg2)">
+                <sc-if value="{{ isLLM }}" hint-placeholder-val="{{ false }}">
+                  <div>
+                    <div style="display:flex;align-items:center;gap:7px;font-size:13px;font-weight:700;color:var(--ts-text);margin-bottom:9px">
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--ts-warn)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="4"/><path d="M10.8 12.2 19 4M16 6l2 2M14 8l2 2"/></svg>
+                      {{ t.stApiLabel }} · {{ providerLabel }}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                      <input type="password" value="{{ apiKeyVal }}" onInput="{{ onKeyInput }}" placeholder="{{ t.stApiPlaceholder }}" aria-label="{{ t.stApiLabel }}" style="flex:1;min-width:220px;background:var(--ts-bg);color:var(--ts-text);border:1px solid var(--ts-border2);border-radius:9px;padding:9px 12px;font:inherit;font-size:12.5px;font-family:'JetBrains Mono',monospace">
+                      <sc-if value="{{ hasKey }}" hint-placeholder-val="{{ false }}"><span style="font-size:11.5px;font-weight:700;color:var(--ts-good)">✓ {{ t.stApiSaved }}</span></sc-if>
+                    </div>
+                    <div style="font-size:11px;color:var(--ts-muted);font-weight:600;margin-top:8px">{{ t.stApiNote }} <span style="opacity:.8">({{ keyHint }})</span></div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ isGoogle }}" hint-placeholder-val="{{ true }}">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--ts-muted);font-weight:600"><span style="color:var(--ts-good)">●</span>{{ t.stApiNone }}</div>
+                </sc-if>
+              </div>
+
+              <div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--ts-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">{{ t.stDefaultHead }}</div>
+              <div style="font-size:13px;color:var(--ts-text);line-height:1.7">{{ t.stDefaultBody1 }}<br>{{ t.stDefaultBody2 }}</div>
+
+              <div style="margin-top:16px;font-size:12px;font-weight:700;color:var(--ts-muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px">{{ t.stUiLangHead }}</div>
+              <div style="display:flex;gap:8px">
+                <button onClick="{{ onLangVi }}" style="{{ stLangViStyle }}">🇻🇳 Tiếng Việt</button>
+                <button onClick="{{ onLangJa }}" style="{{ stLangJaStyle }}">🇯🇵 日本語</button>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isTabNgu }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div style="font-size:13px;color:var(--ts-muted);line-height:1.6;margin-bottom:14px">{{ t.stNguIntro }}</div>
+              <div style="display:flex;flex-direction:column;gap:10px">
+                <sc-for list="{{ presetCards }}" as="pr" hint-placeholder-count="3">
+                  <div style="{{ pr.style }}">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px"><span style="font-weight:800;font-size:13.5px;color:var(--ts-text)">{{ pr.name }}</span><span style="{{ pr.tagStyle }}">{{ pr.tag }}</span></div>
+                    <div style="font-size:12.5px;color:var(--ts-muted);line-height:1.55;margin-bottom:6px">{{ pr.desc }}</div>
+                    <div style="font-size:11.5px;color:var(--ts-muted);font-family:'JetBrains Mono',monospace">{{ pr.glossary }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isTabPhim }}" hint-placeholder-val="{{ false }}">
+            <div>
+              <div style="font-size:13px;color:var(--ts-muted);line-height:1.6;margin-bottom:14px">{{ t.stPhimIntro }}</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 15px;border:1px solid var(--ts-border2);border-radius:11px;background:var(--ts-bg2)">
+                <div><div style="font-weight:700;font-size:13.5px;color:var(--ts-text)">{{ t.stPhimName }}</div><div style="font-size:11.5px;color:var(--ts-muted)">{{ t.stPhimDesc }}</div></div>
+                <kbd style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;background:var(--ts-bg);border:1px solid var(--ts-border2);border-bottom-width:2px;padding:6px 12px;border-radius:8px;color:var(--ts-text)">Alt + T</kbd>
+              </div>
+              <div style="font-size:11.5px;color:var(--ts-muted);margin-top:10px">{{ t.stPhimNote }}</div>
+            </div>
+          </sc-if>
+        </div>
+        <div style="display:flex;align-items:center;padding:13px 18px;border-top:1px solid var(--ts-border);background:var(--ts-bg2)">
+          <span style="font-size:11.5px;color:var(--ts-muted)">{{ t.stFooter }}</span>
+          <span style="flex:1"></span>
+          <button onClick="{{ onCloseSettings }}" style="padding:8px 16px;border:none;border-radius:9px;background:var(--ts-accent);color:var(--ts-accent-ink);font:inherit;font-weight:700;font-size:12.5px;cursor:pointer">{{ t.stDone }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ░░ ONBOARDING ░░ -->
+  <sc-if value="{{ obActive }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:90;background:rgba(8,12,24,.82);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:20px;animation:ts-fade .2s ease">
+      <div style="width:430px;max-width:100%;background:var(--ts-bg);border:1px solid var(--ts-border2);border-radius:18px;box-shadow:var(--ts-shadow);overflow:hidden;animation:ts-rise .25s ease">
+        <div style="height:152px;background:linear-gradient(150deg,#2f6bff,#5b8cff);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden">
+          <div style="position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.16) 1px,transparent 1px);background-size:18px 18px"></div>
+          <div style="position:relative;color:#fff;font-size:13px;font-weight:700;text-align:center;line-height:1.5;padding:0 20px">{{ obArt }}</div>
+        </div>
+        <div style="padding:20px 22px 22px">
+          <div style="display:flex;gap:6px;margin-bottom:13px">
+            <span style="{{ obDot0 }}"></span><span style="{{ obDot1 }}"></span><span style="{{ obDot2 }}"></span>
+          </div>
+          <h2 style="margin:0 0 8px;font-size:19px;font-weight:800;letter-spacing:-.3px;color:var(--ts-text)">{{ obTitle }}</h2>
+          <p style="margin:0;font-size:14px;line-height:1.6;color:var(--ts-muted)">{{ obBody }}</p>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:20px">
+            <button onClick="{{ obSkip }}" style="padding:9px 14px;border:none;border-radius:9px;background:transparent;color:var(--ts-muted);font:inherit;font-weight:700;font-size:13px;cursor:pointer">{{ t.obSkip }}</button>
+            <span style="flex:1"></span>
+            <button onClick="{{ obNext }}" style="padding:10px 20px;border:none;border-radius:10px;background:var(--ts-accent);color:var(--ts-accent-ink);font:inherit;font-weight:700;font-size:13.5px;cursor:pointer;box-shadow:0 6px 16px rgba(47,107,255,.38)">{{ obNextLabel }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ░░ TOAST ░░ -->
+  <sc-if value="{{ toastShow }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;z-index:95;left:50%;bottom:64px;transform:translateX(-50%);display:flex;align-items:center;gap:8px;padding:11px 18px;border-radius:11px;background:#0f1729;color:#fff;font-size:13px;font-weight:600;box-shadow:var(--ts-shadow);animation:ts-rise .2s ease">✓ {{ toast }}</div>
+  </sc-if>
+
+  <!-- ░░ MOBILE NOTICE ░░ -->
+  <sc-if value="{{ tooSmall }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;z-index:99;background:linear-gradient(150deg,#24356f,#0f1a3c);display:flex;align-items:center;justify-content:center;padding:30px;text-align:center">
+      <div style="max-width:330px;color:#fff">
+        <div style="width:54px;height:54px;border-radius:14px;background:linear-gradient(135deg,#5b8cff,#2f6bff);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:24px;margin:0 auto 18px">T</div>
+        <div style="font-size:18px;font-weight:800;margin-bottom:10px">{{ t.mobileTitle }}</div>
+        <div style="font-size:14px;line-height:1.6;opacity:.85">{{ t.mobileBody }}</div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+const BLOCKS = {
+  'art-title': { lang:'en', src:"The race to build smaller, faster language models",
+    vi:{ default:"Cuộc đua chế tạo những mô hình ngôn ngữ nhỏ hơn, nhanh hơn", programming:"Cuộc đua xây dựng các language model nhỏ hơn, nhanh hơn" } },
+  'art-p1': { lang:'en', src:"Researchers are increasingly focused on efficiency rather than raw scale. By distilling large models into compact ones, teams can run capable assistants directly on a laptop — keeping private data on the device instead of sending it to the cloud.",
+    vi:{ default:"Giới nghiên cứu ngày càng tập trung vào hiệu quả thay vì quy mô thuần tuý. Bằng cách chưng cất các mô hình lớn thành mô hình gọn nhẹ, các nhóm có thể chạy những trợ lý đủ mạnh ngay trên laptop — giữ dữ liệu riêng tư trên thiết bị thay vì gửi lên đám mây.",
+         programming:"Giới nghiên cứu ngày càng tập trung vào efficiency thay vì raw scale. Bằng cách distill các large model thành model gọn nhẹ, các team có thể chạy assistant đủ mạnh ngay trên laptop — giữ private data trên device thay vì gửi lên cloud." } },
+  'mg-1': { lang:'ja', src:"おやっ。", vi:{ default:"Ơ kìa?" }, en:"Huh?" },
+  'mg-2': { lang:'ja', src:"なんだか さわがしいぞ。", vi:{ default:"Sao mà ồn ào thế nhỉ." }, en:"It's awfully noisy somehow." },
+  'mg-3': { lang:'ja', src:"丸井マリが、公園で ロケやってんだ。サインもらおう！", vi:{ default:"Marui Mari đang quay ngoại cảnh ở công viên đấy. Đi xin chữ ký thôi!" }, en:"Marui Mari is doing a location shoot at the park. Let's get an autograph!" },
+  'mg-4': { lang:'ja', src:"へへへ、じつは ぼくも 大ファンなんだ。", vi:{ default:"Hề hề, thật ra tớ cũng là fan cuồng đấy." }, en:"Heh heh, actually I'm a huge fan too." },
+  'mg-5': { lang:'ja', src:"カメラが こわれて、車の中で なおしてるんだって。", vi:{ default:"Nghe nói máy quay bị hỏng, họ đang sửa trong xe đấy." }, en:"They say the camera broke, so they're fixing it inside the car." },
+  'mg-6': { lang:'ja', src:"いないじゃない？ どこ？ どこ？", vi:{ default:"Có thấy đâu nào? Đâu? Đâu rồi?" }, en:"She's not here, is she? Where? Where?" },
+  'gm-quest': { lang:'zh', src:"击败魔王后，你将获得传说之剑和 10000 金币。",
+    vi:{ default:"Sau khi đánh bại Ma Vương, bạn sẽ nhận được thanh kiếm huyền thoại và 10000 vàng.", gaming:"Sau khi hạ Boss, bạn sẽ nhận được [Legendary Sword] và 10,000 Gold." },
+    en:"After defeating the Demon Lord, you will receive the Legendary Sword and 10,000 gold." },
+  'gm-stat': { lang:'zh', src:"生命值 250/250　魔法值 80/120",
+    vi:{ default:"Sinh lực 250/250   Pháp lực 80/120", gaming:"HP 250/250   MP 80/120" }, en:"HP 250/250   MP 80/120" },
+  'cd-doc': { lang:'en', src:"Returns a Promise that resolves when the connection is established. Throws a TimeoutError if the server does not respond within the configured interval.",
+    vi:{ default:"Trả về một lời hứa sẽ được hoàn tất khi kết nối được thiết lập. Ném ra lỗi hết thời gian chờ nếu máy chủ không phản hồi trong khoảng thời gian đã cấu hình.",
+         programming:"Trả về một Promise sẽ resolve khi connection được thiết lập. Ném TimeoutError nếu server không phản hồi trong interval đã được cấu hình." } },
+  'cd-comment': { lang:'en', src:"// Retry the request up to three times before giving up",
+    vi:{ default:"// Thử lại yêu cầu tối đa ba lần trước khi bỏ cuộc", programming:"// Retry request tối đa 3 lần trước khi bỏ cuộc" } },
+};
+const PMETA = { google_free:'google_free', gemini:'gemini-2.0-flash', claude:'claude-3.5-sonnet', openrouter:'openrouter/gemini' };
+const FONT = { ja:"'Noto Sans JP',sans-serif", zh:"'Noto Sans SC',sans-serif" };
+const KEYHINT = { gemini:'aistudio.google.com', claude:'console.anthropic.com', openrouter:'openrouter.ai/keys' };
+
+const STR = {
+  vi: {
+    tagline:"Dịch màn hình bằng phím tắt", snip:"Khoanh vùng dịch",
+    lblProvider:"Provider", lblLang:"Ngôn ngữ", lblPreset:"Ngữ cảnh",
+    swap:"Đảo nguồn ↔ đích", theme:"Sáng / Tối", settings:"Settings",
+    sampleScreens:"Màn hình mẫu:", imgViewer:"trình xem ảnh",
+    tabArticle:"Bài báo · EN", tabManga:"Manga · JA", tabGame:"Game · ZH", tabCode:"Code · EN",
+    stageHintPre:"Nhấn", stageHintPost:"rồi kéo chọn vùng chữ để dịch",
+    demoNoteTitle:"Bản demo web",
+    demoNote1a:"Chỉ các ", demoNote1b:"khung thoại", demoNote1c:" có dữ liệu mẫu mới khoanh dịch được — tương tác giới hạn.",
+    demoNote2a:"App thật OCR ", demoNote2b:"bất kỳ vùng nào", demoNote2c:" trên màn hình.",
+    trayRunning:"Đang chạy nền", trayReplay:"Xem lại hướng dẫn", traySettings:"Mở Settings", trayDownload:"Tải app thật cho Windows →",
+    snipHint:"Kéo chuột để chọn vùng chữ ·", snipHintEsc:"để huỷ",
+    srcText:"văn bản gốc", presetCtx:"ngữ cảnh:", copy:"Sao chép",
+    popupTip:"Đổi", popupTipB:"Ngữ cảnh", popupTipPost:"để xem bản dịch đổi theo →",
+    loading:"Đang OCR + dịch…",
+    emptyTitle:"Không nhận diện được chữ trong vùng đã chọn.", emptyBody:"Hãy kéo chọn quanh đoạn chữ trong cửa sổ.", retry:"Thử lại",
+    toastCopied:"Đã sao chép bản dịch", auto:"tự động",
+    stTitle:"Settings", stTabDich:"Dịch thuật", stTabNgu:"Ngữ cảnh", stTabPhim:"Phím tắt",
+    stProviderHead:"Provider dịch", stDefaultHead:"Mặc định",
+    stDefaultBody1:"Ngôn ngữ đích mặc định: Tiếng Việt · Ngôn ngữ nguồn: Tự động phát hiện.",
+    stDefaultBody2:"OCR đa ngôn ngữ (Anh · Nhật · Trung · Hàn) chạy ngoại tuyến bằng model đi kèm.",
+    stApiLabel:"API key", stApiPlaceholder:"Dán API key của bạn…", stApiSaved:"Đã lưu cục bộ",
+    stApiNote:"Khoá chỉ nằm trong trình duyệt của bạn — không gửi lên server. (Bản demo)",
+    stApiNone:"Google Translate miễn phí — không cần API key.",
+    stUiLangHead:"Ngôn ngữ giao diện",
+    stNguIntro:"Mỗi preset = một system prompt + glossary áp cho provider LLM, giúp bản dịch hiểu ngữ cảnh và giữ thuật ngữ.",
+    stPhimIntro:"App chạy nền trong khay hệ thống. Phím tắt là toàn cục — hoạt động kể cả khi đang dùng app khác.",
+    stPhimName:"Khoanh vùng dịch", stPhimDesc:"Kéo chọn một vùng chữ → popup dịch nổi", stPhimNote:"Trong app thật, mọi phím tắt đều có thể đổi tại đây.",
+    stFooter:"Lựa chọn được lưu cục bộ trong trình duyệt (demo).", stDone:"Xong",
+    obSkip:"Bỏ qua", obNext:"Tiếp →", obStart:"Bắt đầu dùng thử",
+    ob:[
+      {t:"App chạy nền trong khay hệ thống", b:"TransSnip là app desktop Windows, không có cửa sổ chính. Nó nằm im trong khay hệ thống (góc phải thanh taskbar) và sẵn sàng khi bạn cần.", a:"🖥️  ▸  🔔 khay hệ thống  ·  Alt+T"},
+      {t:"Khoanh vùng → dịch tức thì", b:"Nhấn phím tắt toàn cục Alt+T (hoặc nút “Khoanh vùng dịch”) rồi kéo chuột chọn một vùng chữ. App tự OCR và hiện bản dịch ngay trong một popup nổi.", a:"⬚ ✂️  kéo chọn vùng chữ  →  💬 popup dịch"},
+      {t:"Dịch hiểu ngữ cảnh", b:"Đổi “Ngữ cảnh” (Mặc định · Lập trình · Game) và Provider trên thanh điều khiển — cùng một vùng chữ sẽ cho bản dịch khác nhau. Thử ngay với màn Code hoặc Game!", a:"“Mặc định” ⇄ “Lập trình”  →  bản dịch đổi"}
+    ],
+    mobileTitle:"TransSnip — bản demo", mobileBody:"Đây là mô phỏng một app desktop Windows. Hãy mở trên màn hình lớn (laptop/PC) để trải nghiệm đầy đủ luồng khoanh vùng → dịch.",
+    providers:{ google_free:"Google Translate (free)", gemini:"Google Gemini", claude:"Anthropic Claude", openrouter:"OpenRouter" },
+    providerDesc:{ google_free:"Miễn phí · không cần API key · nhanh, mặc định", gemini:"LLM · free tier ~1500/ngày · hiểu ngữ cảnh", claude:"LLM cao cấp · chất lượng dịch tốt nhất", openrouter:"LLM · 300+ model · có free tier" },
+    langs:{ auto:"Tự động phát hiện", en:"Tiếng Anh", ja:"Tiếng Nhật", zh:"Tiếng Trung", ko:"Tiếng Hàn", vi:"Tiếng Việt" },
+    presets:{ default:"Mặc định", programming:"Lập trình", gaming:"Game" },
+    presetDesc:{ default:"Bản dịch thông thường, thuần Việt, không có chỉ dẫn đặc biệt.", programming:"Giữ nguyên thuật ngữ lập trình, tên thư viện & framework bằng tiếng Anh; văn xuôi dịch tự nhiên.", gaming:"Giữ tên riêng, skill, item và chỉ số game (HP, MP, DPS). Giọng văn thân mật." },
+    presetTag:{ default:"mặc định", programming:"kỹ thuật", gaming:"giải trí" },
+  },
+  ja: {
+    tagline:"ショートカットで画面翻訳", snip:"範囲を選んで翻訳",
+    lblProvider:"プロバイダー", lblLang:"言語", lblPreset:"コンテキスト",
+    swap:"原文 ↔ 訳文 を入れ替え", theme:"ライト / ダーク", settings:"設定",
+    sampleScreens:"サンプル画面:", imgViewer:"画像ビューア",
+    tabArticle:"記事 · EN", tabManga:"漫画 · JA", tabGame:"ゲーム · ZH", tabCode:"コード · EN",
+    stageHintPre:"", stageHintPost:"を押して文字の範囲をドラッグして翻訳",
+    demoNoteTitle:"Web デモ版",
+    demoNote1a:"サンプルデータのある", demoNote1b:"吹き出し", demoNote1c:"のみ翻訳できます — 操作は限定的です。",
+    demoNote2a:"実際のアプリは画面の", demoNote2b:"あらゆる範囲", demoNote2c:"を OCR します。",
+    trayRunning:"バックグラウンドで実行中", trayReplay:"ガイドをもう一度見る", traySettings:"設定を開く", trayDownload:"Windows版アプリをダウンロード →",
+    snipHint:"ドラッグして文字の範囲を選択 ·", snipHintEsc:"でキャンセル",
+    srcText:"原文", presetCtx:"コンテキスト:", copy:"コピー",
+    popupTip:"", popupTipB:"コンテキスト", popupTipPost:"を変えると訳文も変わります →",
+    loading:"OCR + 翻訳中…",
+    emptyTitle:"選択した範囲から文字を認識できませんでした。", emptyBody:"ウィンドウ内の文字の周りをドラッグしてください。", retry:"やり直す",
+    toastCopied:"訳文をコピーしました", auto:"自動",
+    stTitle:"設定", stTabDich:"翻訳", stTabNgu:"コンテキスト", stTabPhim:"ショートカット",
+    stProviderHead:"翻訳プロバイダー", stDefaultHead:"デフォルト",
+    stDefaultBody1:"訳先の言語: ベトナム語 · 原文の言語: 自動検出。",
+    stDefaultBody2:"多言語 OCR（英語 · 日本語 · 中国語 · 韓国語）は同梱モデルでオフライン動作します。",
+    stApiLabel:"API キー", stApiPlaceholder:"API キーを貼り付け…", stApiSaved:"ローカルに保存済み",
+    stApiNote:"キーはブラウザ内にのみ保存され、サーバーには送信されません。（デモ）",
+    stApiNone:"Google 翻訳は無料 — API キー不要です。",
+    stUiLangHead:"表示言語",
+    stNguIntro:"各プリセット = LLM プロバイダーに適用される system prompt + 用語集。文脈を理解し専門用語を保持します。",
+    stPhimIntro:"アプリはシステムトレイで常駐します。ショートカットはグローバル — 他のアプリ使用中でも動作します。",
+    stPhimName:"範囲を選んで翻訳", stPhimDesc:"文字の範囲をドラッグ → 翻訳ポップアップ", stPhimNote:"実際のアプリでは、すべてのショートカットをここで変更できます。",
+    stFooter:"選択内容はブラウザにローカル保存されます（デモ）。", stDone:"完了",
+    obSkip:"スキップ", obNext:"次へ →", obStart:"使ってみる",
+    ob:[
+      {t:"システムトレイで常駐", b:"TransSnip はメインウィンドウのない Windows デスクトップアプリです。システムトレイ（タスクバー右側）で静かに待機し、必要なときにすぐ使えます。", a:"🖥️  ▸  🔔 システムトレイ  ·  Alt+T"},
+      {t:"範囲選択 → 即翻訳", b:"グローバルショートカット Alt+T（または「範囲を選んで翻訳」ボタン）を押して文字の範囲をドラッグ。自動で OCR し、フローティングポップアップに訳文を表示します。", a:"⬚ ✂️  文字の範囲をドラッグ  →  💬 翻訳ポップアップ"},
+      {t:"文脈を理解する翻訳", b:"ツールバーで「コンテキスト」（標準 · プログラミング · ゲーム）とプロバイダーを切り替えると、同じ範囲でも訳文が変わります。コード画面やゲーム画面で試してみてください！", a:"「標準」 ⇄ 「プログラミング」  →  訳文が変化"}
+    ],
+    mobileTitle:"TransSnip — デモ版", mobileBody:"これは Windows デスクトップアプリのデモです。範囲選択 → 翻訳の流れを体験するには、大きな画面（ノート PC / PC）で開いてください。",
+    providers:{ google_free:"Google 翻訳（無料）", gemini:"Google Gemini", claude:"Anthropic Claude", openrouter:"OpenRouter" },
+    providerDesc:{ google_free:"無料 · API キー不要 · 高速・デフォルト", gemini:"LLM · 無料枠 約1500/日 · 文脈理解", claude:"LLM 上位 · 最高品質の翻訳", openrouter:"LLM · 300+ モデル · 無料枠あり" },
+    langs:{ auto:"自動検出", en:"英語", ja:"日本語", zh:"中国語", ko:"韓国語", vi:"ベトナム語" },
+    presets:{ default:"標準", programming:"プログラミング", gaming:"ゲーム" },
+    presetDesc:{ default:"特別な指示のない通常の翻訳。", programming:"プログラミング用語・ライブラリ名・フレームワーク名は英語のまま保持。文章は自然に翻訳。", gaming:"固有名詞・スキル・アイテム・ゲーム数値（HP, MP, DPS）を保持。カジュアルな口調。" },
+    presetTag:{ default:"標準", programming:"技術", gaming:"娯楽" },
+  }
+};
+
+function getTranslation(id, target, preset){
+  const b = BLOCKS[id];
+  if (target === b.lang) return b.src;
+  if (target === 'en') return b.en || (b.vi && (b.vi[preset] || b.vi.default)) || b.src;
+  const vi = b.vi || {};
+  return vi[preset] || vi.default || b.src;
+}
+
+class Component extends DCLogic {
+  loadState(){
+    let v = { theme:'light', provider:'google_free', preset:'default', sourceLang:'auto', targetLang:'vi', apiKeys:{}, seen:false, uiLang:'vi' };
+    try {
+      v.theme = localStorage.getItem('ts_theme') || v.theme;
+      v.provider = localStorage.getItem('ts_provider') || v.provider;
+      v.preset = localStorage.getItem('ts_preset') || v.preset;
+      v.sourceLang = localStorage.getItem('ts_src') || v.sourceLang;
+      v.targetLang = localStorage.getItem('ts_tgt') || v.targetLang;
+      v.uiLang = localStorage.getItem('ts_uilang') || v.uiLang;
+      v.apiKeys = JSON.parse(localStorage.getItem('ts_keys') || '{}');
+      v.seen = localStorage.getItem('ts_seen') === '1';
+    } catch(e){}
+    return {
+      theme:v.theme, provider:v.provider, preset:v.preset, sourceLang:v.sourceLang, targetLang:v.targetLang,
+      uiLang:v.uiLang, apiKeys:v.apiKeys, activeScreen:'article', selecting:false, popup:{show:false},
+      settingsOpen:false, settingsTab:'dich', trayOpen:false, toast:'', openDD:null,
+      obStep: v.seen ? -1 : 0, now:new Date(), tooSmall: (typeof window!=='undefined' && window.innerWidth < 880),
     };
+  }
+  constructor(props){ super(props); this.state = this.loadState();
+    this.rubberRef = React.createRef(); this.stageRef = React.createRef(); this.cache = {}; }
 
-    /* ── Demo scenes. Each block: {x,y,w, kind, cls, src, vi}. ─────────── */
-    const b = (x,y,w,kind,src,vi,cls)=>({x,y,w,kind,src,vi,cls:cls||""});
-    const SCENES = [
-      { id:"app", lang:"en", preset:"programming", title:"Cửa sổ phần mềm (English)",
-        chrome:
-          `<div class="titlebar"></div><div class="win"></div>
-           <div class="traffic"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
-           <div class="toggle" style="left:990px;top:330px"></div>
-           <div class="noticebox" style="left:140px;top:440px;width:760px;height:96px"></div>
-           <div class="pillbtn" style="left:740px;top:600px;width:120px;background:#eef0f4;color:#3a3f4a">Cancel</div>
-           <div class="pillbtn" style="left:880px;top:600px;width:120px;background:#4f59e6;color:#fff">Apply</div>`,
-        blocks:[
-          b(140,118,200,"eyebrow","Aurora Editor — Preferences","Aurora Editor — Tuỳ chọn"),
-          b(140,150,200,"eyebrow","GENERAL","CHUNG"),
-          b(140,182,820,"h1","Restore previous session on startup","Khôi phục phiên làm việc trước khi khởi động"),
-          b(140,242,760,"body","When enabled, the editor reopens all files and panels from your last session. Disable this to always start with a clean, empty workspace.","Khi bật, trình soạn thảo sẽ mở lại toàn bộ tệp và bảng từ phiên gần nhất. Tắt để luôn khởi động với không gian làm việc trống và sạch."),
-          b(140,330,400,"label","Automatic updates","Tự động cập nhật"),
-          b(140,378,700,"body","Download and install updates in the background automatically.","Tự động tải và cài đặt bản cập nhật ở chế độ nền."),
-          b(164,460,720,"label","Unsaved changes will be lost","Các thay đổi chưa lưu sẽ bị mất","blk-h2"),
-          b(164,498,720,"body","Some preferences require a restart to take effect. Make sure to save your work before applying the changes below.","Một số tuỳ chọn cần khởi động lại mới có hiệu lực. Hãy lưu công việc trước khi áp dụng các thay đổi bên dưới."),
-        ],
-        win:{color:"#16181d"} },
+  componentDidMount(){
+    this._clock = setInterval(()=>this.setState({now:new Date()}), 1000*20);
+    this._key = (e)=>this.onKeyDown(e); window.addEventListener('keydown', this._key);
+    this._rz = ()=>this.setState({tooSmall: window.innerWidth < 880}); window.addEventListener('resize', this._rz);
+  }
+  componentWillUnmount(){ clearInterval(this._clock); window.removeEventListener('keydown',this._key); window.removeEventListener('resize',this._rz); clearTimeout(this._tt); clearTimeout(this._toast); }
 
-      { id:"web", lang:"ja", preset:"default", title:"Bài báo tiếng Nhật",
-        chrome:
-          `<div class="chrome"></div><div class="page"></div>
-           <div class="traffic"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i></div>
-           <div class="urlbar"></div>`,
-        urlText:"tech-blog.jp/ai-translation-future",
-        blocks:[
-          b(150,120,300,"eyebrow","AI・機械学習","AI · Học máy"),
-          b(150,152,860,"h1","AI翻訳の未来について","Về tương lai của dịch thuật AI"),
-          b(150,230,820,"body","OCRと大規模言語モデルの組み合わせは、画面上のあらゆるテキストを瞬時に理解できる新しい体験を生み出している。","Sự kết hợp giữa OCR và mô hình ngôn ngữ lớn đang tạo ra một trải nghiệm mới, giúp hiểu tức thì mọi văn bản trên màn hình."),
-          b(150,320,820,"body","近年、画像認識と自然言語処理の技術が急速に発展し、スクリーン上の文字をリアルタイムで翻訳することが可能になった。","Những năm gần đây, công nghệ nhận dạng hình ảnh và xử lý ngôn ngữ tự nhiên phát triển nhanh chóng, giúp dịch chữ trên màn hình theo thời gian thực."),
-          b(150,430,820,"body","これは語学学習者だけでなく、ゲーム実況者やマンガ読者にも大きな影響を与えている。","Điều này ảnh hưởng lớn không chỉ tới người học ngoại ngữ mà cả streamer game lẫn người đọc truyện tranh."),
-        ],
-        win:{color:"#16181d"} },
+  save(k,v){ try{ localStorage.setItem(k,v); }catch(e){} }
 
-      { id:"game", lang:"ja", preset:"gaming", title:"Hội thoại game (RPG)",
-        chrome:
-          `<div class="vignette"></div>
-           <div class="quest" style="left:96px;top:118px"></div>
-           <div class="menu" style="right:96px;top:150px;width:230px;height:230px"></div>
-           <div class="namebox"></div><div class="dlgbox"></div>`,
-        blocks:[
-          b(110,128,360,"game","新しいクエスト：封印の祭壇","Nhiệm vụ mới: Bàn thờ phong ấn","blk-menu"),
-          b(120,170,200,"game","魔導士エレナ","Pháp sư Elena","blk-game-name"),
-          b(110,470,960,"game","古の封印が解かれた…早くこの島から脱出しなければ、我々は皆飲み込まれてしまうだろう。","Phong ấn cổ đã bị phá vỡ… Nếu không mau rời khỏi hòn đảo này, tất cả chúng ta sẽ bị nuốt chửng.","blk-game"),
-          b(990,188,180,"game","スキル","Kỹ năng","blk-menu"),
-          b(990,236,180,"game","アイテム","Vật phẩm","blk-menu"),
-          b(990,284,180,"game","そうび","Trang bị","blk-menu"),
-          b(990,332,180,"game","セーブ","Lưu game","blk-menu"),
-        ],
-        win:{color:"#fff"} },
-    ];
-
-    /* State */
-    let sceneIdx = 0, scale = 1, mode = localStorage.getItem("ts-result-mode") || "popup";
-    let drag = null, statusTimer = null;
-    const state = { view: "empty" };
-
-    /* Init */
-    initTheme(); init();
-    function init() {
-      fillLangs($("source-lang"), CONFIG.languages, "auto");
-      fillLangs($("target-lang"), CONFIG.languages.filter((l)=>l.code!=="auto"), "vi");
-      fillSel($("provider"), CONFIG.providers.map((p)=>({v:p.key,t:p.display_name})));
-      fillSel($("preset"), CONFIG.presets.map((p)=>({v:p.name,t:p.name+" — "+p.description})));
-      wire(); onProviderChange(); syncMode();
-      window.addEventListener("resize", fitScene);
+  onKeyDown(e){
+    if (e.altKey && (e.key==='t'||e.key==='T')){ e.preventDefault(); if(!this.state.selecting) this.startSnip(); return; }
+    if (e.key==='Escape'){
+      if (this.state.selecting){ this.cancelSnip(); }
+      else if (this.state.openDD){ this.setState({openDD:null}); }
+      else if (this.state.popup && this.state.popup.show){ this.setState({popup:{show:false}}); }
+      else if (this.state.settingsOpen){ this.setState({settingsOpen:false}); }
+      else if (this.state.trayOpen){ this.setState({trayOpen:false}); }
     }
-    function fillLangs(sel,langs,def){ sel.innerHTML=""; langs.forEach((l)=>{const o=document.createElement("option");o.value=l.code;o.textContent=l.name;if(l.code===def)o.selected=true;sel.appendChild(o);}); }
-    function fillSel(sel,items){ sel.innerHTML=""; items.forEach((it)=>{const o=document.createElement("option");o.value=it.v;o.textContent=it.t;sel.appendChild(o);}); }
-    function currentProvider(){ return CONFIG.providers.find((p)=>p.key===$("provider").value); }
-    function onProviderChange(){ const p=currentProvider(); $("provider-pill").querySelector(".pp-text").textContent=p?p.key:"";
-      const needs=p&&p.needs_api_key; $("apikey-wrap").classList.toggle("hidden",!needs); $("apikey-hint").textContent=needs?p.api_key_hint:""; }
+  }
 
-    function wire() {
-      $("theme-toggle").addEventListener("click", toggleTheme);
-      $("provider").addEventListener("change", onProviderChange);
-      $("swap").addEventListener("click", ()=>{const s=$("source-lang"),t=$("target-lang"); if(s.value==="auto")return; [s.value,t.value]=[t.value,s.value];});
-      $("btn-capture").addEventListener("click", ()=>loadScene(0));
-      $("btn-upload").addEventListener("click", ()=>loadScene(0));
-      $("text-back").addEventListener("click", ()=>switchView(state.view==="text"&&sceneLoaded?"workspace":"empty"));
-      $("ws-recapture").addEventListener("click", ()=>loadScene(sceneIdx+1));
-      $("ws-close").addEventListener("click", ()=>{ sceneLoaded=false; dismiss(); switchView("empty"); });
-      $("mode-popup").addEventListener("click", ()=>setMode("popup"));
-      $("mode-inline").addEventListener("click", ()=>setMode("inline"));
-      $("ov-all").addEventListener("click", ()=>translateBlocks(SCENES[sceneIdx].blocks, null));
-      $("ov-source").addEventListener("mousedown", ()=>$("scene-frame").classList.add("show-source"));
-      ["mouseup","mouseleave"].forEach(ev=>$("ov-source").addEventListener(ev, ()=>$("scene-frame").classList.remove("show-source")));
-      $("translate-text").addEventListener("click", doTranslateText);
-      $("text-input").addEventListener("input", ()=>{ $("char-count").textContent=$("text-input").value.length+" ký tự"; });
-      const layer=$("select-layer");
-      layer.addEventListener("pointerdown", onDown);
-      layer.addEventListener("pointermove", onMove);
-      window.addEventListener("pointerup", onUp);
-      window.addEventListener("keydown", (e)=>{
-        if(e.key==="Escape"){ if(state.view==="workspace") dismiss(); return; }
-        if(/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
-        if(e.key.toLowerCase()==="s" && state.view==="workspace"){ e.preventDefault(); loadScene(sceneIdx+1); }
-      });
-    }
+  startSnip(){ this.setState({selecting:true, popup:{show:false}, trayOpen:false, settingsOpen:false, openDD:null, obStep:this.state.obStep>=0?-1:this.state.obStep}); }
+  cancelSnip(){ this.detachDrag(); const r=this.rubberRef.current; if(r) r.style.display='none'; this.setState({selecting:false}); }
 
-    function switchView(v){ state.view=v;
-      $("capture-empty").classList.toggle("hidden", v!=="empty");
-      $("workspace").classList.toggle("hidden", v!=="workspace");
-      $("panel-text").classList.toggle("hidden", v!=="text"); }
+  onOverlayDown(e){
+    e.preventDefault();
+    this._sx=e.clientX; this._sy=e.clientY;
+    const r=this.rubberRef.current; if(r){ r.style.display='block'; r.style.left=this._sx+'px'; r.style.top=this._sy+'px'; r.style.width='0px'; r.style.height='0px'; }
+    this._mv=(ev)=>this.onDragMove(ev); this._up=(ev)=>this.onDragUp(ev);
+    window.addEventListener('mousemove', this._mv); window.addEventListener('mouseup', this._up);
+  }
+  onDragMove(e){
+    const x=Math.min(e.clientX,this._sx), y=Math.min(e.clientY,this._sy), w=Math.abs(e.clientX-this._sx), h=Math.abs(e.clientY-this._sy);
+    const r=this.rubberRef.current; if(r){ r.style.left=x+'px'; r.style.top=y+'px'; r.style.width=w+'px'; r.style.height=h+'px'; }
+  }
+  detachDrag(){ if(this._mv) window.removeEventListener('mousemove',this._mv); if(this._up) window.removeEventListener('mouseup',this._up); this._mv=null; this._up=null; }
+  onDragUp(e){
+    this.detachDrag();
+    const x=Math.min(e.clientX,this._sx), y=Math.min(e.clientY,this._sy), w=Math.abs(e.clientX-this._sx), h=Math.abs(e.clientY-this._sy);
+    const r=this.rubberRef.current; if(r) r.style.display='none';
+    this.setState({selecting:false});
+    const rect={left:x,top:y,right:x+w,bottom:y+h};
+    const anchor=this.computeAnchor(rect);
+    if (w<10 || h<10){ this.setState({popup:{show:true,status:'empty',x:anchor.x,y:anchor.y}}); return; }
+    const id=this.pickBlock(rect);
+    if (!id){ this.setState({popup:{show:true,status:'empty',x:anchor.x,y:anchor.y}}); return; }
+    this.doTranslate(this.curSettings(), id, anchor);
+  }
 
-    let sceneLoaded = false;
-    function loadScene(i){
-      sceneIdx = ((i % SCENES.length) + SCENES.length) % SCENES.length;
-      const sc = SCENES[sceneIdx];
-      const f = $("scene-frame");
-      f.className = "scene-frame scene-" + sc.id;
-      let html = sc.chrome || "";
-      sc.blocks.forEach((blk, idx)=>{
-        html += `<div class="blk ${"blk-"+blk.kind} ${blk.cls}" data-i="${idx}" style="left:${blk.x}px;top:${blk.y}px;width:${blk.w}px;color:${sc.win.color}">${escapeHtml(blk.src)}</div>`;
-      });
-      if (sc.urlText) html += `<div style="position:absolute;left:150px;top:25px;font:500 14px var(--font-mono);color:#5a6072">${escapeHtml(sc.urlText)}</div>`;
-      f.innerHTML = html;
-      sceneLoaded = true;
-      dismiss();
-      // auto-pick provider/preset to match the scene for a realistic demo
-      $("source-lang").value = "auto";
-      if ([...$("preset").options].some(o=>o.value===sc.preset)) $("preset").value = sc.preset;
-      $("scene-meta").textContent = `Màn hình ${sceneIdx+1}/${SCENES.length} · ${sc.title}`;
-      switchView("workspace");
-      fitScene();
+  pickBlock(rect){
+    const stage=this.stageRef.current; if(!stage) return null;
+    let best=null, bestA=0;
+    const els=stage.querySelectorAll('[data-block]');
+    els.forEach(el=>{ const b=el.getBoundingClientRect();
+      const ix=Math.max(0,Math.min(rect.right,b.right)-Math.max(rect.left,b.left));
+      const iy=Math.max(0,Math.min(rect.bottom,b.bottom)-Math.max(rect.top,b.top));
+      const a=ix*iy; if(a>bestA){ bestA=a; best=el.getAttribute('data-block'); } });
+    if (best) return best;
+    const sb=stage.getBoundingClientRect();
+    const cx=(rect.left+rect.right)/2, cy=(rect.top+rect.bottom)/2;
+    if (cx>=sb.left && cx<=sb.right && cy>=sb.top && cy<=sb.bottom){
+      let nd=Infinity; els.forEach(el=>{ const b=el.getBoundingClientRect(); const bx=(b.left+b.right)/2, by=(b.top+b.bottom)/2; const d=(bx-cx)*(bx-cx)+(by-cy)*(by-cy); if(d<nd){ nd=d; best=el.getAttribute('data-block'); } });
+      return best;
     }
+    return null;
+  }
+  computeAnchor(rect){
+    const W=374, H=336, vw=window.innerWidth, vh=window.innerHeight;
+    let x=rect.right+14; if (x+W > vw-8) x=rect.left-W-14; if (x<8) x=Math.max(8,(vw-W)/2);
+    let y=rect.top; if (y+H > vh-8) y=vh-H-8; if (y<70) y=70;
+    return {x:Math.round(x), y:Math.round(y)};
+  }
 
-    function fitScene(){
-      if (!sceneLoaded) return;
-      const box = $("canvas-scroll");
-      const availW = box.clientWidth, availH = box.clientHeight;
-      scale = Math.min(availW/SW, availH/SH, 1);
-      const wrap = $("canvas-wrap");
-      wrap.style.width = Math.round(SW*scale)+"px";
-      wrap.style.height = Math.round(SH*scale)+"px";
-      $("scene-frame").style.transform = "scale("+scale+")";
-    }
+  curSettings(){ const s=this.state; return {provider:s.provider, preset:s.preset, sourceLang:s.sourceLang, targetLang:s.targetLang}; }
 
-    /* Selection */
-    const layerRect = ()=>$("select-layer").getBoundingClientRect();
-    function onDown(e){
-      if($("select-layer").classList.contains("is-busy")) return;
-      dismiss();
-      const r=layerRect(); drag={x0:e.clientX-r.left,y0:e.clientY-r.top};
-      try{$("select-layer").setPointerCapture(e.pointerId);}catch(_){}
-      renderSel(drag.x0,drag.y0,0,0);
-    }
-    function onMove(e){
-      if(!drag) return;
-      const r=layerRect();
-      const x=Math.max(0,Math.min(e.clientX-r.left,r.width)), y=Math.max(0,Math.min(e.clientY-r.top,r.height));
-      renderSel(Math.min(drag.x0,x),Math.min(drag.y0,y),Math.abs(x-drag.x0),Math.abs(y-drag.y0));
-    }
-    function onUp(){
-      if(!drag) return; drag=null;
-      const sel=$("select-layer").querySelector(".region-box"); if(!sel) return;
-      const rect={left:parseFloat(sel.style.left),top:parseFloat(sel.style.top),w:parseFloat(sel.style.width),h:parseFloat(sel.style.height)};
-      if(rect.w<14||rect.h<14){ clearSelVisual(); return; }
-      // find blocks whose center is inside the selection (scene px)
-      const scn={left:rect.left/scale,top:rect.top/scale,right:(rect.left+rect.w)/scale,bottom:(rect.top+rect.h)/scale};
-      const hits=SCENES[sceneIdx].blocks.filter((blk)=>{const cx=blk.x+blk.w/2,cy=blk.y+18; return cx>=scn.left&&cx<=scn.right&&cy>=scn.top&&cy<=scn.bottom;});
-      translateBlocks(hits.length?hits:null, rect);
-    }
-    function renderSel(left,top,w,h){
-      const layer=$("select-layer"); clearSelVisual(); const R=layerRect();
-      [[0,0,R.width,top],[0,top+h,R.width,R.height-top-h],[0,top,left,h],[left+w,top,R.width-left-w,h]].forEach((t)=>{
-        const d=document.createElement("div"); d.className="sel-tint";
-        Object.assign(d.style,{left:t[0]+"px",top:t[1]+"px",width:Math.max(0,t[2])+"px",height:Math.max(0,t[3])+"px"}); layer.appendChild(d);
-      });
-      addGuide(layer,"sel-guide--h",{top:(top+h)+"px"}); addGuide(layer,"sel-guide--v",{left:(left+w)+"px"});
-      const box=document.createElement("div"); box.className="region-box";
-      Object.assign(box.style,{left:left+"px",top:top+"px",width:w+"px",height:h+"px"});
-      ["tl","tr","bl","br"].forEach((c)=>{const s=document.createElement("span");s.className="region-corner region-corner--"+c;box.appendChild(s);});
-      layer.appendChild(box);
-      const ro=document.createElement("div"); ro.className="region-readout";
-      ro.innerHTML=`<span>${Math.round(w/scale)} × ${Math.round(h/scale)}</span><span class="rr-div"></span><span class="rr-accent">px</span>`;
-      layer.appendChild(ro);
-      let rx=left+w+8, ry=top+h+8;
-      if(rx+ro.offsetWidth>R.width) rx=Math.max(0,left+w-ro.offsetWidth);
-      if(ry+ro.offsetHeight>R.height) ry=Math.max(0,top-ro.offsetHeight-8);
-      ro.style.left=rx+"px"; ro.style.top=ry+"px";
-    }
-    function addGuide(layer,cls,style){const g=document.createElement("div");g.className="sel-guide "+cls;Object.assign(g.style,style);layer.appendChild(g);}
-    function clearSelVisual(){ $("select-layer").querySelectorAll(".sel-tint,.sel-guide,.region-box,.region-readout").forEach(n=>n.remove()); }
-    function dismiss(){ clearSelVisual(); $("overlay-layer").innerHTML=""; const f=$("scene-frame"); f.querySelectorAll(".ov-card").forEach(n=>n.remove()); f.classList.remove("show-source"); }
+  doTranslate(cfg, id, anchor){
+    const b=BLOCKS[id];
+    const key=`${id}|${cfg.targetLang}|${cfg.preset}|${cfg.provider}`;
+    const wasCached=!!this.cache[key];
+    this.setState({popup:{show:true, status:'loading', blockId:id, x:anchor.x, y:anchor.y}});
+    const delay = wasCached ? 0 : (300 + Math.floor(Math.random()*400));
+    clearTimeout(this._tt);
+    this._tt=setTimeout(()=>{
+      this.cache[key]=true;
+      const translation=getTranslation(id, cfg.targetLang, cfg.preset);
+      const meta = wasCached ? '⚡ cached · 0ms' : `${PMETA[cfg.provider]} · ${(delay/1000).toFixed(1)}s`;
+      this.setState({ popup:{ show:true, status:'done', blockId:id, x:anchor.x, y:anchor.y,
+        srcText:b.src, srcFont:(FONT[b.lang]||"inherit"),
+        detCode:b.lang, srcIsAuto:cfg.sourceLang==='auto', srcCode:cfg.sourceLang,
+        targetCode:cfg.targetLang, presetCode:cfg.preset, translation, meta, cached:wasCached } });
+    }, delay);
+  }
+  retrans(cfg){ const p=this.state.popup; if(p && p.show && p.blockId){ this.doTranslate(cfg, p.blockId, {x:p.x, y:p.y}); } }
 
-    /* Translate selected blocks */
-    function translateBlocks(blocks, rect){
-      const sc=SCENES[sceneIdx];
-      $("select-layer").classList.add("is-busy");
-      if(mode==="popup"){
-        const anchor = rect || bbox(blocks||sc.blocks);
-        showPopup(anchor, {loading:true});
-        setTimeout(()=>{
-          if(!blocks){ showPopup(anchor,{error:"OCR không tìm thấy chữ trong vùng này. Hãy chọn vùng có văn bản."}); $("select-layer").classList.remove("is-busy"); return; }
-          showPopup(anchor, {data:{
-            source_text: blocks.map(b=>b.src).join("\n"),
-            translated_text: blocks.map(b=>b.vi).join("\n"),
-            source_lang: sc.lang, target_lang:$("target-lang").value, provider:$("provider").value, engine:"rapid",
-          }});
-          $("select-layer").classList.remove("is-busy");
-        }, 720);
-      } else {
-        // overlay (dịch đè)
-        showPopup(rect||{left:0,top:0,w:0,h:0}, {loading:true, mini:true});
-        setTimeout(()=>{
-          $("overlay-layer").innerHTML="";
-          renderOverlay(blocks||sc.blocks);
-          $("select-layer").classList.remove("is-busy");
-          clearSelVisual();
-          toast("success", (blocks||sc.blocks).length+" khối đã dịch · giữ \u201cBản gốc\u201d để đối chiếu");
-        }, 720);
-      }
-    }
-    function bbox(blocks){ const xs=blocks.map(b=>b.x),ys=blocks.map(b=>b.y),xe=blocks.map(b=>b.x+b.w),ye=blocks.map(b=>b.y+40);
-      const l=Math.min(...xs),t=Math.min(...ys),r=Math.max(...xe),btm=Math.max(...ye);
-      return {left:l*scale,top:t*scale,w:(r-l)*scale,h:(btm-t)*scale}; }
+  toggleDD(name){ this.setState({openDD: this.state.openDD===name?null:name}); }
+  setProvider(v){ this.save('ts_provider',v); this.setState({provider:v, openDD:null}); this.retrans({...this.curSettings(), provider:v}); }
+  setPreset(v){ this.save('ts_preset',v); this.setState({preset:v, openDD:null}); this.retrans({...this.curSettings(), preset:v}); }
+  setSource(v){ this.save('ts_src',v); this.setState({sourceLang:v, openDD:null}); this.retrans({...this.curSettings(), sourceLang:v}); }
+  setTarget(v){ this.save('ts_tgt',v); this.setState({targetLang:v, openDD:null}); this.retrans({...this.curSettings(), targetLang:v}); }
+  onSwap(){ let ns=this.state.targetLang; let nt=this.state.sourceLang==='auto'?'vi':this.state.sourceLang; if(nt==='auto') nt='vi';
+    this.save('ts_src',ns); this.save('ts_tgt',nt); this.setState({sourceLang:ns, targetLang:nt}); this.retrans({...this.curSettings(), sourceLang:ns, targetLang:nt}); }
 
-    function renderOverlay(blocks){
-      const f=$("scene-frame");
-      blocks.forEach((blk,i)=>{
-        const card=document.createElement("div"); card.className="ov-card";
-        const fs = blk.kind==="h1"?26: blk.kind==="label"?19: (blk.cls==="blk-h2")?22: blk.kind==="game"?(blk.cls==="blk-game"?22:18): blk.kind==="eyebrow"?13:16;
-        card.style.left=blk.x+"px"; card.style.top=(blk.y-6)+"px"; card.style.width=Math.max(blk.w,140)+"px"; card.style.fontSize=fs+"px";
-        card.innerHTML=`<span class="ov-num">${i+1}</span><span class="ov-text">${escapeHtml(blk.vi)}</span>`;
-        f.appendChild(card);
-      });
-    }
+  setUiLang(l){ this.save('ts_uilang',l); this.setState({uiLang:l}); }
 
-    /* Popup */
-    function showPopup(rect, opt){
-      const layer=$("overlay-layer"); layer.innerHTML="";
-      const R=layerRect(); const pop=document.createElement("div"); pop.className="popup";
-      if(opt.loading){
-        pop.innerHTML=head("ocr")+`<div class="popup-body popup-body--loading">
-          <div class="skeleton-line" style="width:80%"></div><div class="skeleton-line" style="width:55%"></div>
-          <div class="skeleton-line skeleton-line--accent" style="width:72%"></div><div class="skeleton-line skeleton-line--accent" style="width:48%"></div></div>`;
-      } else if(opt.error){
-        pop.innerHTML=head("error")+`<div class="popup-body"><div class="popup-error"><div class="popup-error-icon">${icon("alert",18)}</div>
-          <div><div class="popup-error-title">Không thể dịch</div><div class="popup-error-msg">${escapeHtml(opt.error)}</div></div></div></div>`;
-      } else {
-        const d=opt.data; const eng=d.engine?` · OCR: ${escapeHtml(d.engine)}`:"";
-        pop.innerHTML=head("done",`${escapeHtml(d.provider)}${eng}`)+`<div class="popup-body">
-          <div class="popup-section">${chip(d.source_lang)}<div class="popup-source">${escapeHtml(d.source_text)}</div></div>
-          <div class="popup-divider-h"></div>
-          <div class="popup-section">${chip(d.target_lang)}<div class="popup-translation" id="pop-tr">${escapeHtml(d.translated_text)}</div></div>
-          <div class="popup-footer-hint"><kbd>Esc</kbd> đóng · kéo header để di chuyển · chọn lại vùng để dịch tiếp</div></div>`;
-      }
-      layer.appendChild(pop);
-      positionPopup(pop, rect, R); wirePopup(pop);
-    }
-    function head(status,meta){
-      let s = status==="ocr" ? `<div class="popup-status">${spinner(11)}<span>Đang OCR + dịch…</span></div>`
-        : status==="error" ? `<div class="popup-status popup-status--error">${icon("alert",11)}<span>error</span></div>`
-        : `<div class="popup-status popup-status--done"><span>${meta||""}</span></div>`;
-      const act = status==="done"
-        ? `<button class="popup-iconbtn" data-act="copy" title="Copy">${icon("copy",14)}</button><button class="popup-iconbtn popup-iconbtn--accent" data-act="pin" title="Ghim">${icon("pin",14)}</button><div class="popup-divider"></div><button class="popup-iconbtn popup-iconbtn--close" data-act="close" title="Đóng">${icon("close",14)}</button>`
-        : `<button class="popup-iconbtn popup-iconbtn--close" data-act="close" title="Đóng">${icon("close",14)}</button>`;
-      return `<div class="popup-header"><div class="popup-brand">${GLYPH}<span class="popup-brand-name">TransSnip</span></div>${s}<div class="popup-spacer"></div><div class="popup-actions">${act}</div></div>`;
-    }
-    function wirePopup(pop){
-      pop.querySelectorAll("[data-act]").forEach((bn)=>{
-        const a=bn.dataset.act;
-        if(a==="close") bn.addEventListener("click", dismiss);
-        if(a==="pin") bn.addEventListener("click", ()=>bn.classList.toggle("is-on"));
-        if(a==="copy") bn.addEventListener("click", ()=>{ const t=pop.querySelector("#pop-tr")?.textContent||""; navigator.clipboard?.writeText(t);
-          bn.classList.add("copied"); bn.innerHTML=icon("check",14); setTimeout(()=>{bn.classList.remove("copied");bn.innerHTML=icon("copy",14);},1400); });
-      });
-      const h=pop.querySelector(".popup-header"); let pd=null;
-      h.addEventListener("pointerdown",(e)=>{ if(e.target.closest("[data-act]"))return; pd={x:e.clientX,y:e.clientY,l:parseFloat(pop.style.left),t:parseFloat(pop.style.top)}; try{h.setPointerCapture(e.pointerId);}catch(_){} });
-      h.addEventListener("pointermove",(e)=>{ if(!pd)return; pop.style.left=(pd.l+e.clientX-pd.x)+"px"; pop.style.top=(pd.t+e.clientY-pd.y)+"px"; });
-      h.addEventListener("pointerup",()=>{pd=null;});
-    }
-    function positionPopup(pop,rect,R){
-      const pw=pop.offsetWidth,ph=pop.offsetHeight; let left=rect.left, top=rect.top+rect.h+10;
-      if(top+ph>R.height) top=Math.max(8, rect.top-ph-10); if(top<8) top=8;
-      left=Math.max(8,Math.min(left,R.width-pw-8)); pop.style.left=left+"px"; pop.style.top=top+"px";
-    }
+  onToggleTheme(){ const v=this.state.theme==='light'?'dark':'light'; this.save('ts_theme',v); this.setState({theme:v}); }
+  onOpenSettings(){ this.setState({settingsOpen:true, trayOpen:false, openDD:null}); }
+  onCloseSettings(){ this.setState({settingsOpen:false}); }
+  onKeyInput(e){ const keys={...this.state.apiKeys, [this.state.provider]: e.target.value}; this.setState({apiKeys:keys}); this.save('ts_keys', JSON.stringify(keys)); }
+  onTrayClick(e){ e.stopPropagation(); this.setState({trayOpen:!this.state.trayOpen, openDD:null}); }
+  onReplayHelp(){ this.setState({obStep:0, trayOpen:false}); }
 
-    /* Text mode */
-    function doTranslateText(){
-      const text=$("text-input").value.trim(); if(!text) return toast("error","Nhập text cần dịch.");
-      toast("loading","Đang dịch…"); $("translate-text").disabled=true;
-      setTimeout(()=>{
-        let vi=null; for(const sc of SCENES) for(const blk of sc.blocks) if(blk.src.toLowerCase()===text.toLowerCase()){vi=blk.vi;break;}
-        if(!vi) vi="「"+text.slice(0,80)+"」 → bản dịch mô phỏng (mockup không gọi server thật).";
-        hideStatus();
-        const box=$("text-result"); box.classList.remove("hidden");
-        box.innerHTML=`<div class="popup-header" style="cursor:default;margin:-16px -16px 0;border-radius:10px 10px 0 0">
-            <div class="popup-brand">${GLYPH}<span class="popup-brand-name">Kết quả</span></div><div class="popup-spacer"></div>
-            <div class="popup-status popup-status--done"><span>${escapeHtml($("provider").value)}</span></div>
-            <div class="popup-actions"><button class="popup-iconbtn" id="txt-copy">${icon("copy",14)}</button></div></div>
-          <div class="popup-section">${chip($("source-lang").value)}<div class="popup-source">${escapeHtml(text)}</div></div>
-          <div class="popup-divider-h"></div>
-          <div class="popup-section">${chip($("target-lang").value)}<div class="popup-translation" id="txt-out">${escapeHtml(vi)}</div></div>`;
-        box.querySelector("#txt-copy").addEventListener("click",(e)=>{ navigator.clipboard?.writeText(box.querySelector("#txt-out").textContent);
-          const bn=e.currentTarget; bn.classList.add("copied"); bn.innerHTML=icon("check",14); setTimeout(()=>{bn.classList.remove("copied");bn.innerHTML=icon("copy",14);},1400); });
-        $("translate-text").disabled=false;
-      }, 650);
-    }
+  onCopy(){ const t=this.state.popup.translation||''; try{ navigator.clipboard.writeText(t); }catch(e){} this.toastMsg(STR[this.state.uiLang].toastCopied); }
+  toastMsg(m){ this.setState({toast:m}); clearTimeout(this._toast); this._toast=setTimeout(()=>this.setState({toast:''}),1700); }
+  onClosePopup(){ this.setState({popup:{show:false}}); }
 
-    /* Mode */
-    function setMode(m){ mode=m; localStorage.setItem("ts-result-mode",m); dismiss(); syncMode(); }
-    function syncMode(){
-      $("mode-popup").classList.toggle("active", mode==="popup");
-      $("mode-inline").classList.toggle("active", mode==="inline");
-      const ov = mode==="inline";
-      $("ov-all").classList.toggle("hidden", !ov);
-      $("ov-source").classList.toggle("hidden", !ov);
-      $("ws-hint-text").textContent = ov ? "Kéo để dịch một vùng, hoặc bấm Dịch cả màn hình" : "Kéo để khoanh vùng cần dịch";
-    }
+  onRootDown(e){
+    if (this.state.selecting) return;
+    const inDD = e.target.closest && e.target.closest('[data-dd]');
+    if (this.state.openDD && !inDD) this.setState({openDD:null});
+    const keep = e.target.closest && e.target.closest('[data-keep]');
+    if (this.state.trayOpen && !keep) this.setState({trayOpen:false});
+    if (this.state.popup && this.state.popup.show && !keep) this.setState({popup:{show:false}});
+  }
 
-    /* Helpers */
-    function chip(code){ const l=CONFIG.languages.find(x=>x.code===code); const name=l?l.name.replace(/\s*\(.*\)$/,""):"";
-      return `<div class="lang-chip"><span class="lang-chip-code">${escapeHtml(code||"?")}</span>${name?`<span class="lang-chip-name">${escapeHtml(name)}</span>`:""}</div>`; }
-    function escapeHtml(s){ return String(s).replace(/[&<>"']/g,(c)=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
-    function toast(kind,msg){ const s=$("status"); clearTimeout(statusTimer); s.className="status "+kind;
-      s.innerHTML=(kind==="loading"?spinner(15):kind==="error"?icon("alert",15):icon("check",15))+`<span>${escapeHtml(msg)}</span>`; s.classList.remove("hidden");
-      if(kind!=="loading") statusTimer=setTimeout(hideStatus, kind==="error"?5000:2800); }
-    function hideStatus(){ $("status").classList.add("hidden"); }
+  setScreen(s){ this.setState({activeScreen:s, popup:{show:false}, openDD:null}); }
 
-    function initTheme(){ document.body.className=(localStorage.getItem("ts-theme")==="cobalt-light")?"t-cobalt-light":"t-cobalt"; }
-    function toggleTheme(){ const light=document.body.classList.toggle("t-cobalt-light"); document.body.classList.toggle("t-cobalt",!light);
-      localStorage.setItem("ts-theme", light?"cobalt-light":"cobalt"); }
-  })();
-  </script>
+  obNext(){ const n=this.state.obStep; if(n>=2){ this.save('ts_seen','1'); this.setState({obStep:-1}); } else this.setState({obStep:n+1}); }
+  obSkip(){ this.save('ts_seen','1'); this.setState({obStep:-1}); }
+
+  tabStyle(active){
+    return active
+      ? "display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:10px;border:1px solid rgba(255,255,255,.5);background:rgba(255,255,255,.95);color:#16223d;font:inherit;font-weight:700;font-size:12.5px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.2)"
+      : "display:flex;align-items:center;gap:6px;padding:7px 13px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.1);color:rgba(255,255,255,.92);font:inherit;font-weight:600;font-size:12.5px;cursor:pointer";
+  }
+  stTab(active){
+    return active
+      ? "padding:8px 15px;border:none;border-bottom:2px solid var(--ts-accent);background:transparent;color:var(--ts-accent);font:inherit;font-weight:700;font-size:13px;cursor:pointer"
+      : "padding:8px 15px;border:none;border-bottom:2px solid transparent;background:transparent;color:var(--ts-muted);font:inherit;font-weight:600;font-size:13px;cursor:pointer";
+  }
+  optStyle(active){
+    return `display:flex;align-items:center;justify-content:space-between;gap:14px;padding:8px 11px;border:none;border-radius:7px;background:${active?'var(--ts-accent-weak)':'transparent'};color:var(--ts-text);font:inherit;font-size:12.5px;font-weight:600;cursor:pointer;text-align:left;width:100%`;
+  }
+  langPill(active){
+    return active
+      ? "width:42px;padding:7px 0;border-radius:9px;border:none;background:var(--ts-accent);color:var(--ts-accent-ink);font:inherit;font-weight:800;font-size:12px;cursor:pointer"
+      : "width:42px;padding:7px 0;border-radius:9px;border:1px solid var(--ts-border2);background:var(--ts-bg);color:var(--ts-muted);font:inherit;font-weight:800;font-size:12px;cursor:pointer";
+  }
+  stLangBtn(active){
+    return active
+      ? "display:flex;align-items:center;gap:7px;padding:9px 15px;border-radius:10px;border:1.5px solid var(--ts-accent);background:var(--ts-accent-weak);color:var(--ts-text);font:inherit;font-weight:700;font-size:13px;cursor:pointer"
+      : "display:flex;align-items:center;gap:7px;padding:9px 15px;border-radius:10px;border:1.5px solid var(--ts-border2);background:var(--ts-bg2);color:var(--ts-text);font:inherit;font-weight:600;font-size:13px;cursor:pointer";
+  }
+
+  renderVals(){
+    const s=this.state;
+    const t=STR[s.uiLang]||STR.vi;
+    const isLLM = s.provider!=='google_free';
+
+    const provOrder=['google_free','gemini','claude','openrouter'];
+    const providerOpts = provOrder.map(k=>({ label:t.providers[k], check:s.provider===k?'✓':'', onPick:()=>this.setProvider(k), style:this.optStyle(s.provider===k) }));
+    const srcOrder=['auto','en','ja','zh','ko','vi'];
+    const sourceOpts = srcOrder.map(k=>({ label:t.langs[k], check:s.sourceLang===k?'✓':'', onPick:()=>this.setSource(k), style:this.optStyle(s.sourceLang===k) }));
+    const tgtOrder=['vi','en'];
+    const targetOpts = tgtOrder.map(k=>({ label:t.langs[k], check:s.targetLang===k?'✓':'', onPick:()=>this.setTarget(k), style:this.optStyle(s.targetLang===k) }));
+    const presOrder=['default','programming','gaming'];
+    const presetOpts = presOrder.map(k=>({ label:t.presets[k], check:s.preset===k?'✓':'', onPick:()=>this.setPreset(k), style:this.optStyle(s.preset===k) }));
+
+    const providerCards = provOrder.map(k=>{
+      const active=s.provider===k, need=k!=='google_free', has=!!(s.apiKeys[k]);
+      return { name:t.providers[k], desc:t.providerDesc[k], badge: active?'✓':(need?(has?'🔑✓':'🔑'):''), onPick:()=>this.setProvider(k),
+        style:`display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:12px 14px;border-radius:11px;border:1.5px solid ${active?'var(--ts-accent)':'var(--ts-border2)'};background:${active?'var(--ts-accent-weak)':'var(--ts-bg2)'};color:var(--ts-text);font:inherit;cursor:pointer` };
+    });
+    const glossaries={ default:'glossary: —', programming:'glossary: function→hàm · library→thư viện · class→lớp', gaming:'glossary: HP→máu · MP→mana · DPS→sát thương/giây' };
+    const presetCards = presOrder.map(k=>({ name:t.presets[k], tag:t.presetTag[k], desc:t.presetDesc[k], glossary:glossaries[k],
+      tagStyle:'font-size:9.5px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;color:var(--ts-accent);background:var(--ts-accent-weak);border:1px solid var(--ts-accent);padding:2px 7px;border-radius:5px',
+      style:'padding:13px 15px;border:1px solid var(--ts-border2);border-radius:12px;background:var(--ts-bg2)' }));
+
+    const p=s.popup||{show:false};
+    const step=Math.max(0,s.obStep);
+    return {
+      t,
+      theme:s.theme, isLight:s.theme==='light', isDark:s.theme==='dark',
+      clockTime: s.now.toLocaleTimeString('vi-VN',{hour:'2-digit',minute:'2-digit'}),
+      clockDate: s.now.toLocaleDateString('vi-VN',{day:'2-digit',month:'2-digit',year:'numeric'}),
+      provider:s.provider, providerLabel:t.providers[s.provider], isLLM, isGoogle:!isLLM,
+      apiKeyVal:s.apiKeys[s.provider]||'', hasKey:!!(s.apiKeys[s.provider]), keyHint:KEYHINT[s.provider]||'',
+      srcLabel:t.langs[s.sourceLang], tgtLabel:t.langs[s.targetLang], presetCurLabel:t.presets[s.preset],
+      ddProvider:s.openDD==='provider', ddSource:s.openDD==='source', ddTarget:s.openDD==='target', ddPreset:s.openDD==='preset',
+      providerOpts, sourceOpts, targetOpts, presetOpts,
+      isArticle:s.activeScreen==='article', isManga:s.activeScreen==='manga', isGame:s.activeScreen==='game', isCode:s.activeScreen==='code',
+      tabArticleStyle:this.tabStyle(s.activeScreen==='article'), tabMangaStyle:this.tabStyle(s.activeScreen==='manga'),
+      tabGameStyle:this.tabStyle(s.activeScreen==='game'), tabCodeStyle:this.tabStyle(s.activeScreen==='code'),
+      selecting:s.selecting, rubberRef:this.rubberRef, stageRef:this.stageRef, trayOpen:s.trayOpen,
+      pShow:p.show, pLoading:p.status==='loading', pDone:p.status==='done', pEmpty:p.status==='empty',
+      pX:p.x||0, pY:p.y||0, pSrcText:p.srcText, pSrcFont:p.srcFont,
+      pSrcChip: p.srcIsAuto ? (t.langs[p.detCode]+' · '+t.auto) : t.langs[p.srcCode],
+      pTargetLabel:t.langs[p.targetCode], pPresetLabel:t.presets[p.presetCode],
+      pTranslation:p.translation, pMeta:p.meta, pMetaColor: p.cached?'var(--ts-good)':'var(--ts-muted)',
+      settingsOpen:s.settingsOpen, isTabDich:s.settingsTab==='dich', isTabNgu:s.settingsTab==='ngu', isTabPhim:s.settingsTab==='phim',
+      stTabDichStyle:this.stTab(s.settingsTab==='dich'), stTabNguStyle:this.stTab(s.settingsTab==='ngu'), stTabPhimStyle:this.stTab(s.settingsTab==='phim'),
+      providerCards, presetCards,
+      langViStyle:this.langPill(s.uiLang==='vi'), langJaStyle:this.langPill(s.uiLang==='ja'),
+      stLangViStyle:this.stLangBtn(s.uiLang==='vi'), stLangJaStyle:this.stLangBtn(s.uiLang==='ja'),
+      obActive:s.obStep>=0, obTitle:t.ob[step].t, obBody:t.ob[step].b, obArt:t.ob[step].a,
+      obNextLabel: s.obStep>=2 ? t.obStart : t.obNext,
+      obDot0:this.dot(s.obStep===0), obDot1:this.dot(s.obStep===1), obDot2:this.dot(s.obStep===2),
+      toast:s.toast, toastShow:!!s.toast, tooSmall:s.tooSmall,
+      onSnip:()=>this.startSnip(),
+      onToggleProvider:(e)=>{e.stopPropagation();this.toggleDD('provider');}, onToggleSource:(e)=>{e.stopPropagation();this.toggleDD('source');},
+      onToggleTarget:(e)=>{e.stopPropagation();this.toggleDD('target');}, onTogglePreset:(e)=>{e.stopPropagation();this.toggleDD('preset');},
+      onSwap:()=>this.onSwap(),
+      onToggleTheme:()=>this.onToggleTheme(), onOpenSettings:()=>this.onOpenSettings(), onCloseSettings:()=>this.onCloseSettings(),
+      onKeyInput:(e)=>this.onKeyInput(e), onCopy:()=>this.onCopy(), onClosePopup:()=>this.onClosePopup(),
+      onOverlayDown:(e)=>this.onOverlayDown(e), onRootDown:(e)=>this.onRootDown(e), onTrayClick:(e)=>this.onTrayClick(e), onReplayHelp:()=>this.onReplayHelp(),
+      onTabArticle:()=>this.setScreen('article'), onTabManga:()=>this.setScreen('manga'), onTabGame:()=>this.setScreen('game'), onTabCode:()=>this.setScreen('code'),
+      onTabDich:()=>this.setState({settingsTab:'dich'}), onTabNgu:()=>this.setState({settingsTab:'ngu'}), onTabPhim:()=>this.setState({settingsTab:'phim'}),
+      onLangVi:()=>this.setUiLang('vi'), onLangJa:()=>this.setUiLang('ja'),
+      obNext:()=>this.obNext(), obSkip:()=>this.obSkip(),
+    };
+  }
+  dot(active){ return `width:8px;height:8px;border-radius:50%;display:inline-block;background:${active?'var(--ts-accent)':'var(--ts-border2)'};transition:background .2s`; }
+}
+</script>
 </body>
 </html>
