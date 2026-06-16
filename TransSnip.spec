@@ -27,6 +27,23 @@ for _pkg in ("rapidocr", "onnxruntime", "winsdk"):
     binaries += _b
     hiddenimports += _h
 
+# Audio-subtitle runtime (Alt+A). This branch's installer BUNDLES it (CPU) so the
+# feature works out-of-box; the lean default build on `main` excludes it instead.
+# collect_all grabs each package's data + native DLLs + submodules:
+#   faster_whisper → assets/silero_vad_v6.onnx (vad_filter crashes without it)
+#   ctranslate2    → CT2 + MKL/OpenMP DLLs (the actual inference engine, CPU)
+#   av             → bundled FFmpeg DLLs (faster_whisper audio decode path)
+#   pyaudiowpatch  → portaudio DLL (WASAPI loopback capture)
+# The huge NVIDIA CUDA wheels (~1.9GB) are EXCLUDED below — GPU is opt-in via a
+# separate `pip install nvidia-cublas-cu12 nvidia-cudnn-cu12`; the app's
+# warmup-fallback (asr/whisper.py) drops to CPU when they're absent.
+for _pkg in ("faster_whisper", "ctranslate2", "av", "pyaudiowpatch"):
+    _d, _b, _h = collect_all(_pkg)
+    datas += _d
+    binaries += _b
+    hiddenimports += _h
+hiddenimports += ["scipy.signal"]  # resample_poly (48k→16k in capture/audio.py)
+
 # wordninja is a SINGLE-FILE module whose word-frequency list lives in a
 # `wordninja/` SUBDIR next to it (it loads `<dir(__file__)>/wordninja/
 # wordninja_words.txt.gz`). collect_all can't grab that, so bundle it explicitly
@@ -76,12 +93,11 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    # Audio-subtitle deps are OPTIONAL + source-install only (ctranslate2+MKL adds
-    # ~100-200MB). Exclude them so PyInstaller's analysis doesn't pull them into
-    # the default installer via the lazy imports in transsnip/asr + capture/audio.
-    # The app degrades gracefully (asr_available()/audio_capture_available() →
-    # False → "cài gói audio" toast). numpy/scipy stay (OCR needs them).
-    excludes=["faster_whisper", "ctranslate2", "pyaudiowpatch", "av"],
+    # Keep the 1.9GB NVIDIA CUDA wheels OUT of the bundle — audio runs on CPU in
+    # the installer; GPU is opt-in via a separate pip install (see collect_all
+    # block above + asr/whisper.py warmup-fallback). Excluding the `nvidia`
+    # namespace stops PyInstaller from vacuuming cublas/cudnn into the installer.
+    excludes=["nvidia"],
     noarchive=False,
 )
 
