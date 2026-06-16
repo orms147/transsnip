@@ -5,6 +5,7 @@ import logging
 import os
 import sys
 
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
 from transsnip.app import AppController
@@ -53,6 +54,10 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("TransSnip")
+    # Brand every Qt window (popup / settings / about / history) on the taskbar
+    # and alt-tab. Loaded frozen-aware from assets/TransSnip.ico (no-op if absent).
+    from transsnip.ui.branding import app_qicon
+    app.setWindowIcon(app_qicon())
 
     # Install the global Cobalt stylesheet before any widget is built.
     # Restore the user's saved theme choice (dark / light / auto) so the
@@ -75,7 +80,15 @@ def main() -> int:
     hotkeys.triggered.connect(controller.handle_hotkey)
     # Hand the manager to the controller so it can rebind on settings-save.
     controller.set_hotkey_manager(hotkeys)
+    # Bind immediately (fast path for a manual launch)…
     hotkeys.apply_from_settings(controller.settings.hotkeys)
+    # …and re-bind shortly after the event loop starts. On Windows AUTO-START
+    # (Run key at login) the app launches before the input desktop is fully
+    # ready, so the very first `keyboard.add_hotkey` can silently fail to attach
+    # — which is why hotkeys only worked after opening Settings and saving
+    # (that re-applies them). A delayed idempotent re-apply fixes auto-start
+    # without the user having to touch Settings.
+    QTimer.singleShot(1500, lambda: hotkeys.apply_from_settings(controller.settings.hotkeys))
     app.aboutToQuit.connect(hotkeys.unbind_all)
 
     return app.exec()

@@ -107,11 +107,18 @@ class TrayController(QSystemTrayIcon):
 
 
 def _build_tray_pixmap(*, dev_mode: bool, size: int = 64) -> QIcon:
-    """Build the tray monogram — crop brackets + chevron, themed by accent.
+    """Build the tray icon.
 
-    Dev mode tints the bracket color red so a developer running both
-    dev and prod sees which is which at a glance.
+    Production uses the real app logo (assets/TransSnip.ico) when present. Dev
+    mode keeps the procedural red-tinted monogram so a developer running both
+    dev and prod can tell them apart at a glance. Falls back to the procedural
+    monogram if the .ico is missing.
     """
+    if not dev_mode:
+        from transsnip.ui.branding import app_qicon, has_app_icon
+        if has_app_icon():
+            return app_qicon()
+
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)

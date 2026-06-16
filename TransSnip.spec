@@ -56,6 +56,13 @@ if not _model_files:
     )
 datas += [(str(p), "resources/models") for p in _model_files]
 
+# App icon — bundle so QApplication.setWindowIcon can load it at runtime via
+# sys._MEIPASS/assets (see transsnip/ui/branding.py). The EXE icon below uses
+# the same file at build time.
+_app_ico = Path("assets/TransSnip.ico")
+if _app_ico.exists():
+    datas.append((str(_app_ico), "assets"))
+
 # keyring picks its backend (Windows Credential Manager) at runtime via
 # entry-point plugins — pull the backend submodules in explicitly.
 hiddenimports += collect_submodules("keyring.backends")
@@ -91,7 +98,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,                # set to "assets\\app.ico" once an icon exists
+    icon="assets\\TransSnip.ico",  # Explorer .exe icon + shortcut/taskbar fallback
 )
 
 coll = COLLECT(

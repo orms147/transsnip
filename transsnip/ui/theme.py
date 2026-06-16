@@ -28,11 +28,50 @@ import sys
 from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
 
 from transsnip.ui.tokens import DARK, LIGHT, Palette, ThemeMode, palette_for
 
 log = logging.getLogger(__name__)
+
+
+def _build_qpalette(p: Palette) -> QPalette:
+    """Build a QPalette from the theme palette.
+
+    ROOT-CAUSE FIX: the app previously set ONLY a stylesheet, never a QPalette.
+    Any widget/popup whose colour the stylesheet didn't fully cover (native
+    dialogs, QCompleter popups, future widgets…) fell back to the SYSTEM palette
+    — dark on a dark Windows — so text/background came out wrong in light mode.
+    Setting a complete palette makes EVERY widget render with theme colours by
+    default, closing the whole class of "this popup is dark in light mode" bugs
+    at the source instead of patching one widget type at a time.
+
+    Only solid hex tokens are used (rgba tokens like border_1 aren't valid for
+    QColor and aren't needed for palette roles).
+    """
+    c = QColor
+    role = QPalette.ColorRole
+    grp_disabled = QPalette.ColorGroup.Disabled
+    pal = QPalette()
+    pal.setColor(role.Window, c(p.bg_1))
+    pal.setColor(role.WindowText, c(p.text_1))
+    pal.setColor(role.Base, c(p.bg_2))
+    pal.setColor(role.AlternateBase, c(p.bg_3))
+    pal.setColor(role.Text, c(p.text_1))
+    pal.setColor(role.Button, c(p.bg_2))
+    pal.setColor(role.ButtonText, c(p.text_1))
+    pal.setColor(role.BrightText, c(p.text_1))
+    pal.setColor(role.ToolTipBase, c(p.bg_2))
+    pal.setColor(role.ToolTipText, c(p.text_1))
+    pal.setColor(role.PlaceholderText, c(p.text_3))
+    pal.setColor(role.Highlight, c(p.accent))
+    pal.setColor(role.HighlightedText, c(p.accent_on))
+    pal.setColor(role.Link, c(p.accent))
+    # Disabled group — keep muted but legible.
+    for r in (role.WindowText, role.Text, role.ButtonText):
+        pal.setColor(grp_disabled, r, c(p.text_mute))
+    return pal
 
 
 class Theme(QObject):
@@ -68,6 +107,7 @@ class Theme(QObject):
             return  # no actual change → skip stylesheet rebuild
         self._palette = new_palette
         if self._app is not None:
+            self._app.setPalette(_build_qpalette(new_palette))
             self._app.setStyleSheet(_build_app_stylesheet(new_palette))
             # Force re-polish: Qt's CSS engine doesn't automatically reapply
             # the global stylesheet to widgets that already inherited from it.
@@ -90,6 +130,7 @@ class Theme(QObject):
         """Install the current stylesheet onto the QApplication. Call once
         at startup; subsequent `set_mode` calls refresh automatically."""
         self._app = app
+        app.setPalette(_build_qpalette(self._palette))
         app.setStyleSheet(_build_app_stylesheet(self._palette))
 
     # ── Internals ──────────────────────────────────────────────────────────
@@ -156,9 +197,15 @@ def _build_app_stylesheet(p: Palette) -> str:
     return f"""
 * {{ font-family: {p.font_ui}; outline: none; }}
 
+/* No global `background: transparent` here — that was the root cause of
+   top-level standard widgets (QMessageBox, QCompleter popup, …) rendering with
+   the system window colour. Backgrounds now come from the QPalette (set in
+   Theme.apply) plus the explicit per-widget rules below. Custom translucent
+   windows (popup/overlay/settings) set WA_TranslucentBackground + paint
+   themselves, and their child containers don't autofill, so they stay
+   see-through without this rule. */
 QWidget {{
     color: {p.text_1};
-    background: transparent;
     font-size: 12px;
 }}
 
@@ -169,6 +216,19 @@ QToolTip {{
     border-radius: 4px;
     padding: 4px 8px;
     font-size: 11px;
+}}
+
+/* Top-level dialogs (QMessageBox / QInputDialog used in Settings) — the base
+   `QWidget {{ background: transparent }}` left these falling through to the
+   SYSTEM window color, so in light mode the box stayed dark with dark text
+   (unreadable). Give them an explicit themed surface + label color. */
+QDialog, QMessageBox, QInputDialog {{
+    background: {p.bg_1};
+    color: {p.text_1};
+}}
+QMessageBox QLabel, QInputDialog QLabel {{
+    color: {p.text_1};
+    background: transparent;
 }}
 
 QPushButton {{
@@ -252,6 +312,25 @@ QComboBox QAbstractItemView {{
     selection-color: {p.text_1};
     padding: 4px;
 }}
+
+/* QCompleter (typeahead on the editable source/target language combos) shows
+   its suggestions in a SEPARATE top-level QListView — NOT the combo's own view,
+   so `QComboBox QAbstractItemView` above doesn't reach it. Without this it fell
+   through to the transparent base and rendered dark-on-dark in light mode.
+   (QListWidget is a QListView subclass but keeps its own more-specific rule.) */
+QListView {{
+    background: {p.bg_2};
+    color: {p.text_1};
+    border: 1px solid {p.border_2};
+    border-radius: {p.r_input}px;
+    selection-background-color: {p.accent_soft};
+    selection-color: {p.text_1};
+    outline: none;
+    padding: 4px;
+}}
+QListView::item {{ padding: 5px 8px; border-radius: 5px; color: {p.text_1}; }}
+QListView::item:selected {{ background: {p.accent_soft}; color: {p.text_1}; }}
+QListView::item:hover {{ background: {p.bg_3}; }}
 
 QMenu {{
     background: {p.bg_1};

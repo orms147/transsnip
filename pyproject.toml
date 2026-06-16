@@ -1,6 +1,6 @@
 [project]
 name = "transsnip"
-version = "0.1.0"
+version = "0.2.6"
 description = "Screen translation app for Windows — hotkey-driven OCR + multi-provider translation with context-aware results"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -12,8 +12,15 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import QRectF, Qt, Signal
-from PySide6.QtGui import QBrush, QColor, QPainter, QPaintEvent, QPen
+from PySide6.QtCore import QRectF, Qt, QUrl, Signal
+from PySide6.QtGui import (
+    QBrush,
+    QColor,
+    QDesktopServices,
+    QPainter,
+    QPaintEvent,
+    QPen,
+)
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -28,9 +35,11 @@ from transsnip.ui.atoms import CustomTitlebar, IconButton
 from transsnip.ui.theme import get_theme
 
 
-_VERSION = "v0.2.0-mvp"
+_VERSION = "v0.2.6"
 _BUILD = "cobalt-dark · 2026"
 _REPO_URL = "github.com/orms147/transsnip"
+_GITHUB_URL = "https://github.com/orms147"
+_EMAIL = "orms147@gmail.com"
 
 _DEPS = [
     ("RapidOCR", "ONNX OCR fallback"),
@@ -58,6 +67,17 @@ class _AppIconLarge(QWidget):
         self.setFixedSize(size, size)
 
     def paintEvent(self, event: QPaintEvent) -> None:
+        # Prefer the real app logo (assets/TransSnip.ico); fall back to the
+        # procedural gradient-tile monogram if it's missing.
+        from transsnip.ui.branding import app_pixmap
+        pm = app_pixmap(self._size)
+        if not pm.isNull():
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            painter.drawPixmap(0, 0, self._size, self._size, pm)
+            painter.end()
+            return
+
         p = get_theme().palette
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -338,7 +358,7 @@ class AboutDialog(QWidget):
         avatar_row.addStretch(1)
         layout.addLayout(avatar_row)
 
-        name_label = QLabel("orms147")
+        name_label = QLabel("Bach Nguyen")
         name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_label.setStyleSheet("font-size: 16px; font-weight: 600;")
         layout.addWidget(name_label)
@@ -348,15 +368,12 @@ class AboutDialog(QWidget):
         handle.setProperty("hint", True)
         layout.addWidget(handle)
 
-        line = QLabel("Made for ĐATN ITSS in Japanese · ITSS K67 HUST")
-        line.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        line.setProperty("hint", True)
-        layout.addWidget(line)
-
         social_row = QHBoxLayout()
         social_row.addStretch(1)
-        gh = IconButton("link", size=32, icon_size=15, tooltip="GitHub")
-        mail = IconButton("mail", size=32, icon_size=15, tooltip="Email")
+        gh = IconButton("link", size=32, icon_size=15, tooltip=f"GitHub — {_GITHUB_URL}")
+        gh.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(_GITHUB_URL)))
+        mail = IconButton("mail", size=32, icon_size=15, tooltip=f"Email — {_EMAIL}")
+        mail.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(f"mailto:{_EMAIL}")))
         social_row.addWidget(gh)
         social_row.addWidget(mail)
         social_row.addStretch(1)

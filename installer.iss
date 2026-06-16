@@ -8,8 +8,8 @@
 ;   3. Result: dist\installer\TransSnip-Setup.exe
 
 #define MyAppName "TransSnip"
-#define MyAppVersion "0.1.0"
-#define MyAppPublisher "orms147"
+#define MyAppVersion "0.2.6"
+#define MyAppPublisher "Bach Nguyen"
 #define MyAppExeName "TransSnip.exe"
 
 [Setup]
@@ -32,7 +32,11 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; No elevation: per-user install, and the HKCU "run on startup" entry lands
 ; in the correct user's profile (this also clears the admin/HKCU warning).
 PrivilegesRequired=lowest
-; SetupIconFile=assets\app.ico   ; uncomment once an .ico exists
+; Brand the setup wizard window + the Add/Remove Programs (Programs & Features)
+; entry. UninstallDisplayIcon points at the installed EXE, which already carries
+; the icon via PyInstaller (TransSnip.spec).
+SetupIconFile=assets\TransSnip.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
 Name: "vietnamese"; MessagesFile: "compiler:Default.isl"

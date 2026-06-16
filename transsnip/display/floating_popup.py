@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
+    QScrollBar,
     QSpacerItem,
     QSizePolicy,
     QVBoxLayout,
@@ -162,6 +163,17 @@ class _AppGlyph(QWidget):
         self.setFixedSize(size, size)
 
     def paintEvent(self, event: QPaintEvent) -> None:
+        # Prefer the real app logo (assets/TransSnip.ico); fall back to the
+        # procedural monogram if it's missing.
+        from transsnip.ui.branding import app_pixmap
+        pm = app_pixmap(self._size)
+        if not pm.isNull():
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+            painter.drawPixmap(0, 0, self._size, self._size, pm)
+            painter.end()
+            return
+
         p = get_theme().palette
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -1305,6 +1317,11 @@ class FloatingPopup(QWidget):
         if not self.isVisible():
             return super().eventFilter(watched, event)
         inside = self._is_self_or_descendant(watched)
+        # The vertical scrollbar sits ON the right resize edge. Without this,
+        # hovering/clicking it showed the ↔ resize cursor and started a resize
+        # instead of scrolling. When the pointer is over the scrollbar, suppress
+        # edge-resize so it behaves like a normal scrollbar.
+        over_scrollbar = isinstance(watched, QScrollBar)
 
         if et == QEvent.Type.MouseButtonPress:
             try:
@@ -1315,7 +1332,7 @@ class FloatingPopup(QWidget):
                 # Near an edge → START resize even though a selectable label is
                 # under the cursor; consume so it doesn't begin a text selection
                 # instead of resizing.
-                if event.button() == Qt.MouseButton.LeftButton:
+                if event.button() == Qt.MouseButton.LeftButton and not over_scrollbar:
                     edges = self._edges_at(self.mapFromGlobal(gp))
                     if edges:
                         self._begin_resize(edges, gp)
@@ -1335,7 +1352,7 @@ class FloatingPopup(QWidget):
                 gp = event.globalPosition().toPoint()
             except AttributeError:
                 return super().eventFilter(watched, event)
-            edges = self._edges_at(self.mapFromGlobal(gp))
+            edges = 0 if over_scrollbar else self._edges_at(self.mapFromGlobal(gp))
             if edges:
                 self.setCursor(self._cursor_for_edges(edges))
                 self._edge_cursor_active = True
