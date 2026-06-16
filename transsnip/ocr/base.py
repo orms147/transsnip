@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
@@ -8,6 +9,28 @@ from PIL import Image
 
 class OCRError(Exception):
     """Raised when no OCR engine can produce a result."""
+
+
+# List-item markers at the START of a line: "a." "b)" "1." "2、" "•" "①" …
+# (ASCII + fullwidth). A line that starts one — or sits right after one — is a
+# separate list item and must NOT be merged into the previous paragraph by
+# Stage 2's wrap-merge (which would collapse "a. …" and "b. …" into one line and
+# lose the list structure). Single letter/number markers require a trailing
+# space so we don't false-match things like "U.S.A" or "I am".
+_LIST_MARKER_RE = re.compile(
+    r"^\s*(?:"
+    r"[•·‣◦►・]\s*"               # bullet glyphs (trailing space optional)
+    r"|[\-\*]\s"                  # - or *  (need a space, avoid minus/emphasis)
+    r"|[0-9０-９]{1,3}[.)、]\s"      # 1.  2)  ３、
+    r"|[A-Za-zＡ-Ｚａ-ｚ][.)]\s"      # a.  b)  Ｂ.
+    r"|[①-⑳⓪]"     # ① … ⑳, ⓪ circled numbers (text may follow directly)
+    r")"
+)
+
+
+def _starts_list_item(text: str) -> bool:
+    """True if `text` begins with a list-item marker (bullet / a. / 1. / ① …)."""
+    return bool(_LIST_MARKER_RE.match(text))
 
 
 # Sentence-terminating punctuation, both fullwidth (CJK) and ASCII. When an OCR
@@ -155,7 +178,13 @@ class OCRResult:
             gap = cur_top - prev_bot
             avg_h = (prev_h + cur_h) / 2
             prev_ends_sentence = paragraphs[-1].rstrip().endswith(_SENTENCE_TERMINATORS)
-            if gap < avg_h * 0.8 and not prev_ends_sentence:
+            # List-item boundary: the current line starts a new item ("b. …"),
+            # or the previous paragraph is itself a list item ("a. …") — in the
+            # latter case the next line is a sibling item (its marker may have
+            # been dropped by the OCR engine), not a wrap. Either way, keep them
+            # on separate lines so the list structure survives.
+            list_boundary = _starts_list_item(cur_text) or _starts_list_item(paragraphs[-1])
+            if gap < avg_h * 0.8 and not prev_ends_sentence and not list_boundary:
                 # Reuse the smart joiner so CJK lines merge without a phantom
                 # space appearing mid-sentence at the wrap point.
                 paragraphs[-1] = _join_blocks_smart([paragraphs[-1], cur_text])

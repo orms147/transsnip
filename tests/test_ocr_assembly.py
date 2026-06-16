@@ -38,5 +38,27 @@ def test_wrapped_sentence_merges():
     assert "\n" not in OCRResult("t", blocks).text
 
 
+def test_list_items_not_merged():
+    # Two list items "a." / "b." on close lines (no 。 terminator) must NOT be
+    # merged into one paragraph — the wrap-merge would otherwise collapse them.
+    blocks = [
+        OCRBlock("a. 進捗管理シートのURL", (0, 0, 200, 20)),
+        OCRBlock("b. アプリが動作するURL", (0, 26, 200, 20)),
+    ]
+    out = OCRResult("t", blocks).text
+    assert "\n" in out, out
+    assert out.startswith("a.") and "b." in out.split("\n")[1]
+
+
+def test_list_item_with_dropped_marker_not_merged():
+    # Engine dropped "b." — the second line has no marker, but the PREVIOUS line
+    # is a list item ("a. …"), so they still stay on separate lines.
+    blocks = [
+        OCRBlock("a. 進捗管理シートのURL", (0, 0, 200, 20)),
+        OCRBlock("アプリが動作するURL", (0, 26, 200, 20)),  # marker dropped
+    ]
+    assert "\n" in OCRResult("t", blocks).text
+
+
 def test_empty_result():
     assert OCRResult("t", []).text == ""
