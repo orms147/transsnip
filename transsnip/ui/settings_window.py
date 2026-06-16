@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 
 from transsnip.config.keyring_store import get_api_key, set_api_key
 from transsnip.config.settings import (
+    AudioSettings,
     DisplaySettings,
     HotkeySettings,
     PresetSettings,
@@ -287,6 +288,7 @@ class SettingsWindow(QWidget):
             ("hotkeys", "keyboard", "Hotkeys"),
             ("display", "eye", "Display"),
             ("voice", "volume", "Voice"),
+            ("audio", "subtitles", "Audio"),
         ]
         from PySide6.QtCore import QSize
         for tab_id, icon_name, label in self._tabs_meta:
@@ -309,6 +311,7 @@ class SettingsWindow(QWidget):
         self._stack.addWidget(self._build_tab_hotkeys())
         self._stack.addWidget(self._build_tab_display())
         self._stack.addWidget(self._build_tab_voice())
+        self._stack.addWidget(self._build_tab_audio())
         root.addWidget(self._stack, stretch=1)
 
         # Footer.
@@ -608,6 +611,7 @@ class SettingsWindow(QWidget):
             ("region_translate", "crop", "Region translate", "Snipping-tool style"),
             ("fullscreen_translate", "fullscreen", "Fullscreen translate", "Dịch toàn màn hình hiện tại"),
             ("video_subtitle_translate", "subtitles", "Video subtitle", "Auto-translate phụ đề real-time"),
+            ("audio_subtitle_translate", "volume", "Audio subtitle", "Dịch audio video không có phụ đề (cần gói audio)"),
             ("open_settings", "settings", "Mở Settings", "Mở cửa sổ cài đặt từ bàn phím"),
         ]
         for action_id, icon_name, label, desc in rows:
@@ -781,6 +785,44 @@ class SettingsWindow(QWidget):
         layout.addStretch(1)
         return self._wrap_in_scroll(body)
 
+    # ── Tab: Audio (dịch audio video không có phụ đề) ─────────────────────────
+
+    def _build_tab_audio(self) -> QWidget:
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(20)
+
+        layout.addWidget(SectionHead(
+            "Audio subtitle (Alt+A)",
+            "Dịch lời nói trong video KHÔNG có phụ đề: nghe tiếng hệ thống → Whisper "
+            "→ dịch → thanh phụ đề dưới màn hình. Bấm Alt+A để bật/tắt.",
+        ))
+
+        self._whisper_tier_combo = _ComboBox()
+        for tier, label in [
+            ("tiny", "tiny (~75MB, nhanh nhất, kém chính xác)"),
+            ("base", "base (~145MB, nhẹ)"),
+            ("small", "small (~460MB, cân bằng — khuyến nghị)"),
+            ("medium", "medium (~1.5GB, chính xác hơn, chậm ~3x — máy mạnh)"),
+            ("large-v3", "large-v3 (~3GB, chính xác nhất — cần GPU NVIDIA)"),
+        ]:
+            self._whisper_tier_combo.addItem(label, tier)
+        tier_form = QFormLayout()
+        tier_form.addRow("Model Whisper:", self._whisper_tier_combo)
+        layout.addLayout(tier_form)
+
+        hint = QLabel(
+            "Chạy hoàn toàn trên máy (CPU), không cần API key. Độ trễ ~3-8s tuỳ máy. "
+            "Model tải về một lần, lưu ở %APPDATA%\\transsnip\\whisper-models."
+        )
+        hint.setWordWrap(True)
+        hint.setProperty("hint", True)
+        layout.addWidget(hint)
+
+        layout.addStretch(1)
+        return self._wrap_in_scroll(body)
+
     # ── Load / Save ───────────────────────────────────────────────────────
 
     def _load_from_model(self) -> None:
@@ -821,6 +863,9 @@ class SettingsWindow(QWidget):
         self._hotkey_editors["video_subtitle_translate"].setKeySequence(
             QKeySequence(_hotkey_to_qt(s.hotkeys.video_subtitle_translate))
         )
+        self._hotkey_editors["audio_subtitle_translate"].setKeySequence(
+            QKeySequence(_hotkey_to_qt(s.hotkeys.audio_subtitle_translate))
+        )
         self._hotkey_editors["open_settings"].setKeySequence(
             QKeySequence(_hotkey_to_qt(s.hotkeys.open_settings))
         )
@@ -842,6 +887,8 @@ class SettingsWindow(QWidget):
         self._volume_slider.setValue(s.voice.volume)
         self._autoplay_toggle.setChecked(s.voice.autoplay_en)
         self._cache_audio_toggle.setChecked(s.voice.cache_audio)
+        # Audio
+        _select_by_data(self._whisper_tier_combo, s.audio.whisper_tier)
 
     def _on_save(self) -> None:
         s = self._settings
@@ -878,6 +925,7 @@ class SettingsWindow(QWidget):
             region_translate=_qt_to_hotkey(self._hotkey_editors["region_translate"].keySequence()),
             fullscreen_translate=_qt_to_hotkey(self._hotkey_editors["fullscreen_translate"].keySequence()),
             video_subtitle_translate=_qt_to_hotkey(self._hotkey_editors["video_subtitle_translate"].keySequence()),
+            audio_subtitle_translate=_qt_to_hotkey(self._hotkey_editors["audio_subtitle_translate"].keySequence()),
             open_settings=_qt_to_hotkey(self._hotkey_editors["open_settings"].keySequence()),
         )
 
@@ -904,6 +952,12 @@ class SettingsWindow(QWidget):
             volume=self._volume_slider.value(),
             autoplay_en=self._autoplay_toggle.isChecked(),
             cache_audio=self._cache_audio_toggle.isChecked(),
+        )
+
+        # Audio
+        s.audio = AudioSettings(
+            whisper_tier=self._whisper_tier_combo.currentData() or "small",
+            compute_type=s.audio.compute_type,
         )
 
         save_settings(s)

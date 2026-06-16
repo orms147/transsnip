@@ -25,10 +25,13 @@ TransSnip lives in the system tray and stays out of your way until you call it.
 |------|--------|--------------|
 | **Region translate** | `Alt+T` | Drag a box (snipping-tool style) → a floating popup shows the translation next to it |
 | **Full-screen translate** | `Alt+F` | OCRs the whole screen → overlays each translated block on top of the original text |
-| **Video subtitle** | `Alt+V` | Pick the subtitle area once → a live bar below it keeps translating subtitles in real time |
+| **Video subtitle** | `Alt+V` | Pick the subtitle area once → a live bar below it keeps translating on-screen subtitles in real time |
+| **Audio subtitle** | `Alt+A` | Translate the *spoken audio* of a video that has **no subtitles** → live bar at the bottom of the screen (Whisper ASR). *Optional* |
 | **Open Settings** | `Ctrl+Alt+S` | Settings window (all hotkeys are rebindable) |
 
 > Hotkeys are global — they work even while another app has focus, and can be changed in **Settings → Hotkeys**.
+>
+> **Audio subtitle** is optional + heavier: install the extra (`pip install -e ".[audio]"`), then just press **Alt+A** (no enable flag — pressing it is the opt-in). On first use it downloads a Whisper model (~460 MB for `small`) to `%APPDATA%\transsnip\whisper-models`. Runs on-device: CPU by default (~3–8 s latency), or an NVIDIA GPU automatically if CUDA libs are present (`pip install nvidia-cublas-cu12 nvidia-cudnn-cu12`). Pick the model size in **Settings → Audio**. Not bundled in the default installer.
 
 ## Features
 

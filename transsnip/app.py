@@ -94,6 +94,18 @@ class AppController(QObject):
         # Stop the background loop cleanly on quit so its QThread doesn't block
         # process exit.
         self._app.aboutToQuit.connect(self._video.stop)
+
+        # Audio subtitle mode (Alt+A): translate the spoken audio of a video that
+        # has NO on-screen text. Shares the one SubtitleBar with video mode.
+        # Heavy (Whisper) — built lazily; deps optional (`[audio]` extra).
+        from transsnip.modes.audio_subtitle import AudioSubtitleController
+        self._audio = AudioSubtitleController(self)
+        self._audio.text_ready.connect(self._on_audio_text)
+        self._audio.status.connect(self._subtitle_bar.set_status)
+        self._audio.error.connect(lambda msg: self._notify(f"Audio subtitle: {msg}"))
+        self._audio.stopped.connect(self._subtitle_bar.stop)
+        self._app.aboutToQuit.connect(self._audio.stop)
+        self._transcriber = None  # asr.whisper.WhisperTranscriber, built on first start
         # AboutDialog instance — created lazily on first open so app start
         # stays snappy (it's never needed during the snipe-and-translate flow).
         # Typed as the actual AboutDialog via a TYPE_CHECKING-guarded import to
@@ -170,9 +182,18 @@ class AppController(QObject):
             if self._video.is_running():
                 self._stop_video()
                 return
+            self._audio.stop()  # share one SubtitleBar — stop the other mode first
             self._popup.hide_popup()
             self._region_target = "video"
             self._region_selector.start()
+        elif action_id == "audio_subtitle_translate":
+            # Toggle: Alt+A starts/stops audio translation. No region needed —
+            # it captures system audio and starts immediately.
+            if self._audio.is_running():
+                self._stop_audio()
+                return
+            self._video.stop()  # share one SubtitleBar
+            self._start_audio()
         elif action_id == "open_settings":
             self._open_settings()
         else:
@@ -221,6 +242,43 @@ class AppController(QObject):
         self._video.stop()
         self._subtitle_bar.stop()
         self._notify("Video subtitle: đã dừng.")
+
+    # ── Audio subtitle flow ─────────────────────────────────────────────────
+
+    def _start_audio(self) -> None:
+        """Begin live audio→subtitle translation (no region — captures system audio).
+
+        Pressing Alt+A IS the opt-in — no separate enable flag. If the optional
+        audio deps aren't installed, the controller emits a clear error toast.
+        """
+        from transsnip.asr.whisper import WhisperTranscriber
+        if self._transcriber is None:
+            # Use the configured source language as the Whisper hint — a FIXED
+            # language is more accurate than per-chunk auto-detect (no zh→ru→en
+            # jitter, no wrong-language hallucination) and skips detection.
+            # WhisperTranscriber normalizes BCP-47 → ISO ("zh-Hans" → "zh"); a
+            # None/"auto" setting falls back to auto-detect + language lock.
+            # compute_type left "auto" so the transcriber picks per device
+            # (CUDA→float16, CPU→int8) — see WhisperTranscriber._resolve_device.
+            self._transcriber = WhisperTranscriber(
+                tier=self._settings.audio.whisper_tier,
+                source_lang=self._settings.translate.source_lang,
+            )
+        self._subtitle_bar.set_bg_opacity(self._settings.display.subtitle_bg_opacity)
+        self._subtitle_bar.set_font_pt(self._settings.display.subtitle_font_pt)
+        self._subtitle_bar.start_anchored(active_monitor_logical_rect())
+        self._audio.start(self._transcriber, self._translation_pipeline, self._translation_ctx)
+        mb = self._transcriber.expected_download_mb()
+        self._notify(f"Audio subtitle: đang nghe… (lần đầu tải model ~{mb}MB). Bấm Alt+A để dừng.")
+
+    def _on_audio_text(self, text: str) -> None:
+        log.info("audio subtitle → %r", text)   # visible: translated line reaching the bar
+        self._subtitle_bar.set_text(text)
+
+    def _stop_audio(self) -> None:
+        self._audio.stop()
+        self._subtitle_bar.stop()
+        self._notify("Audio subtitle: đã dừng.")
 
     def _capture_and_ocr(self, rect: QRect) -> None:
         try:
@@ -506,6 +564,9 @@ class AppController(QObject):
             openrouter_model=self._settings.translate.openrouter_model,
         )
         self._translation_ctx = _build_translation_ctx(self._settings)
+        # Drop the cached transcriber so a changed Whisper tier / source-lang
+        # takes effect on the next Alt+A (rebuilt lazily in _start_audio).
+        self._transcriber = None
         self._popup.set_voice_settings(self._settings.voice)
         self._popup.set_display_mode(self._settings.translate.display_mode)
         self._popup.set_click_outside_close(self._settings.display.click_outside_close)

@@ -16,7 +16,9 @@ playback; stopping is via the controller (toggle Alt+V).
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, Qt
+import time
+
+from PySide6.QtCore import QPoint, QRect, Qt, QTimer
 from PySide6.QtGui import (
     QColor,
     QFont,
@@ -37,6 +39,15 @@ _GAP = 8           # px between the source region and the bar
 _MIN_W = 280
 _FONT_PT = 15
 _STATUS_PT = 10
+_BOTTOM_MARGIN = 80  # px above the monitor bottom for the audio-anchored bar
+
+# Readability pacing: a freshly shown line stays on screen for at least the time
+# it takes to read it (chars ÷ reading speed), so back-to-back translations don't
+# flash past unread. Lines that arrive during that window are coalesced (only the
+# newest is kept) and shown once the current one has had its dwell.
+_READING_CPS = 15      # characters/second a viewer reads comfortably (Vietnamese)
+_MIN_DWELL_MS = 1200   # even a 2-word line lingers this long
+_MAX_DWELL_MS = 7000   # never hold longer than this (else subtitles desync badly)
 
 
 class SubtitleBar(QWidget):
@@ -53,21 +64,47 @@ class SubtitleBar(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setCursor(Qt.CursorShape.OpenHandCursor)
         self._region = QRect()
+        self._anchor_monitor: QRect | None = None  # set by start_anchored (audio mode)
         self._text = ""
         self._status = "Đang nghe phụ đề…"   # shown until the first translation lands
         self._bg_alpha = 235                  # 0-255; set via set_bg_opacity()
         self._font_pt = _FONT_PT              # set via set_font_pt()
         self._user_moved = False              # once dragged, stop auto-anchoring
         self._drag_offset: QPoint | None = None
+        # Readability pacing (see set_text / _display).
+        self._shown_at = 0.0                  # time.monotonic() of the current line
+        self._shown_dwell_ms = 0              # min ms the current line must stay
+        self._pending: str | None = None      # latest line waiting for the dwell
+        self._dwell_timer = QTimer(self)
+        self._dwell_timer.setSingleShot(True)
+        self._dwell_timer.timeout.connect(self._show_pending)
 
     # ── Public API ───────────────────────────────────────────────────────────
 
     def start_for_region(self, region: QRect) -> None:
         """Anchor the bar below `region` (logical coords) and show the waiting state."""
         self._region = region
+        self._anchor_monitor = None
         self._text = ""
         self._status = "Đang nghe phụ đề…"
         self._user_moved = False
+        self._reset_pacing()
+        self._relayout()
+        self.show()
+        self.raise_()
+
+    def start_anchored(self, monitor_rect: QRect) -> None:
+        """Audio mode: no source region — anchor near the BOTTOM of `monitor_rect`.
+
+        `_region` is left null so the self-capture nudge (`_nudge_out_of_region`,
+        which guards the OCR video mode) becomes a no-op here.
+        """
+        self._region = QRect()
+        self._anchor_monitor = monitor_rect
+        self._text = ""
+        self._status = "Đang nghe âm thanh…"
+        self._user_moved = False
+        self._reset_pacing()
         self._relayout()
         self.show()
         self.raise_()
@@ -88,15 +125,50 @@ class SubtitleBar(QWidget):
         self.update()
 
     def set_text(self, text: str) -> None:
-        """Show a freshly translated line (clears the status indicator)."""
-        self._text = text.strip()
+        """Queue a freshly translated line, respecting the current line's dwell.
+
+        If the line on screen has been visible long enough to read, show the new
+        one immediately. Otherwise hold it (coalescing to the newest) until the
+        current line has had its minimum on-screen time — so dense, back-to-back
+        translations don't flash past before the viewer can read them.
+        """
+        text = text.strip()
+        if not text:
+            return
+        elapsed_ms = (time.monotonic() - self._shown_at) * 1000.0
+        if self._status or elapsed_ms >= self._shown_dwell_ms:
+            self._dwell_timer.stop()
+            self._pending = None
+            self._display(text)
+        else:
+            self._pending = text   # newest wins; shown when the dwell expires
+            self._dwell_timer.start(int(max(0.0, self._shown_dwell_ms - elapsed_ms)))
+
+    def _show_pending(self) -> None:
+        if self._pending is not None:
+            text, self._pending = self._pending, None
+            self._display(text)
+
+    def _display(self, text: str) -> None:
+        self._text = text
         self._status = ""
+        self._shown_at = time.monotonic()
+        self._shown_dwell_ms = int(
+            max(_MIN_DWELL_MS, min(_MAX_DWELL_MS, len(text) * 1000.0 / _READING_CPS))
+        )
         self._relayout()
         self.update()
+
+    def _reset_pacing(self) -> None:
+        self._dwell_timer.stop()
+        self._pending = None
+        self._shown_at = 0.0
+        self._shown_dwell_ms = 0
 
     def stop(self) -> None:
         self.hide()
         self._text = ""
+        self._reset_pacing()
 
     # ── Drag-to-move ─────────────────────────────────────────────────────────
 
@@ -141,6 +213,26 @@ class SubtitleBar(QWidget):
 
     def _relayout(self) -> None:
         """Size to the text. Anchor below the region unless the user moved it."""
+        # Audio mode: no source region → anchor near the bottom-center of the monitor.
+        if self._anchor_monitor is not None and self._region.isNull():
+            mon = self._anchor_monitor
+            width = max(_MIN_W, int(mon.width() * 0.6))
+            inner_w = width - 2 * _PAD_X
+            body = self._text or self._status
+            bound = QFontMetrics(self._font()).boundingRect(
+                QRect(0, 0, inner_w, 10_000),
+                int(Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignHCenter),
+                body or " ",
+            )
+            height = bound.height() + 2 * _PAD_Y
+            if self._user_moved:
+                self.resize(width, height)
+                return
+            x = mon.x() + (mon.width() - width) // 2
+            y = mon.bottom() - height - _BOTTOM_MARGIN
+            self.setGeometry(x, y, width, height)
+            return
+
         region = self._region
         width = max(region.width(), _MIN_W)
         inner_w = width - 2 * _PAD_X

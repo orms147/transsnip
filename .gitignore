@@ -51,6 +51,10 @@ secrets.json
 resources/models/*.onnx
 resources/models/*.txt
 
+# Whisper ASR models (audio-subtitle mode) — fetched on demand to %APPDATA%,
+# but ignore any local copy just in case.
+whisper-models/
+
 # ─── Claude Code tooling (internal — not shared on the public repo) ───────
 .claude/
 

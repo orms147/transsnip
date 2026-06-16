@@ -58,6 +58,17 @@ tts = [
 learning = [
     "eng-to-ipa>=0.0.2",
 ]
+audio = [
+    # Audio-subtitle mode (Alt+A): translate the spoken audio of a video that has
+    # no on-screen text. WASAPI loopback capture + faster-whisper ASR, all local.
+    # The Whisper model (~460MB for `small`) is fetched on first use, NOT bundled.
+    # Optional + source-install only — NOT in the default .exe (ctranslate2+MKL is
+    # heavy; see TransSnip.spec excludes). See transsnip/asr/whisper.py + docs.
+    "pyaudiowpatch>=0.2.12; sys_platform == 'win32'",  # WASAPI loopback capture
+    "faster-whisper>=1.0",                              # multilingual REQUIRED (Vietnamese)
+    "numpy>=1.24",
+    "scipy>=1.11",                                      # 48k→16k resample
+]
 dev = [
     "pytest>=8.0.0",
     "pytest-qt>=4.4.0",

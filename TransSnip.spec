@@ -76,7 +76,12 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    # Audio-subtitle deps are OPTIONAL + source-install only (ctranslate2+MKL adds
+    # ~100-200MB). Exclude them so PyInstaller's analysis doesn't pull them into
+    # the default installer via the lazy imports in transsnip/asr + capture/audio.
+    # The app degrades gracefully (asr_available()/audio_capture_available() →
+    # False → "cài gói audio" toast). numpy/scipy stay (OCR needs them).
+    excludes=["faster_whisper", "ctranslate2", "pyaudiowpatch", "av"],
     noarchive=False,
 )
 

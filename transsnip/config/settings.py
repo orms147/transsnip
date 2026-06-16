@@ -30,6 +30,7 @@ class HotkeySettings(BaseModel):
     region_translate: str = "alt+t"
     fullscreen_translate: str = "alt+f"
     video_subtitle_translate: str = "alt+v"
+    audio_subtitle_translate: str = "alt+a"
     open_settings: str = "ctrl+alt+s"
 
 
@@ -167,15 +168,31 @@ class VoiceSettings(BaseModel):
     cache_max_mb: int = 100
 
 
+class AudioSettings(BaseModel):
+    """Audio-subtitle mode (Settings → Audio tab) — translate the spoken audio of
+    a video that has no on-screen text via Whisper ASR.
+
+    Optional/heavy: needs the `[audio]` extra installed; the Whisper model
+    (~460MB for `small`) is fetched on first use, not bundled. The Alt+A hotkey
+    is the opt-in — there's no separate enable flag (pressing it = intent).
+    """
+
+    whisper_tier: str = "small"   # tiny / base / small (CPU sweet spot = small)
+    compute_type: str = "int8"
+
+
 class Settings(BaseModel):
-    """Top-level settings. New tabs (display, voice) become new sub-models here."""
+    """Top-level settings. New tabs (display, voice, audio) become new sub-models here."""
 
     translate: TranslateSettings = Field(default_factory=TranslateSettings)
     hotkeys: HotkeySettings = Field(default_factory=HotkeySettings)
     presets: list[PresetSettings] = Field(default_factory=_default_presets)
     display: DisplaySettings = Field(default_factory=DisplaySettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
-    schema_version: int = 4  # bump when migrating settings.json shape
+    audio: AudioSettings = Field(default_factory=AudioSettings)
+    # v5: added AudioSettings (Whisper audio-subtitle). No migration needed —
+    # Pydantic fills the all-default sub-model, so v4 settings.json loads fine.
+    schema_version: int = 5
 
 
 def get_preset(settings: Settings, name: str) -> PresetSettings:
