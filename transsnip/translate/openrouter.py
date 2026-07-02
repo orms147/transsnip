@@ -101,6 +101,9 @@ class OpenRouterTranslator(Translator):
             self._client = OpenAI(
                 api_key=self._api_key,
                 base_url=_API_BASE,
+                # Bounded timeout so a dead connection errors out instead of
+                # pinning a QThreadPool slot forever ("Đang dịch…" hang).
+                timeout=30.0,
                 default_headers={
                     "HTTP-Referer": "https://github.com/transsnip",
                     "X-Title": "TransSnip",
@@ -175,6 +178,11 @@ class OpenRouterTranslator(Translator):
         target_name = _LANG_NAMES.get(ctx.target_lang, ctx.target_lang)
         parts: list[str] = [
             f"You are a professional translator. Translate the user's text into {target_name}.",
+            f"Your ENTIRE response MUST be written in {target_name}. Never reply in the "
+            f"source language; if the text is already in {target_name}, return it unchanged.",
+            "Translate exactly what is given even if it is fragmented, incomplete, or "
+            "contains transcription/OCR errors — do NOT fix, rephrase, complete, or "
+            "comment on the source; just translate it as-is.",
             "Output ONLY the translation — no quotes, no markdown fences, no preface, no explanation.",
             "Preserve formatting (line breaks, lists). Keep proper nouns and code identifiers in their original form.",
         ]

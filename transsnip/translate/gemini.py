@@ -114,7 +114,9 @@ class GeminiTranslator(Translator):
         if ctx.want_word_breakdown:
             from transsnip.linguistic.word_breakdown import build_breakdown_prompt, parse_breakdown
             try:
-                response = self._ensure_model().generate_content(build_breakdown_prompt(text, ctx))
+                response = self._ensure_model().generate_content(
+                    build_breakdown_prompt(text, ctx), request_options={"timeout": 30}
+                )
             except Exception as exc:
                 raise TranslationError(f"Gemini API call failed: {exc}") from exc
             raw = (response.text or "").strip()
@@ -134,7 +136,9 @@ class GeminiTranslator(Translator):
 
         prompt = self._build_prompt(text, ctx)
         try:
-            response = self._ensure_model().generate_content(prompt)
+            response = self._ensure_model().generate_content(
+                prompt, request_options={"timeout": 30}
+            )
         except Exception as exc:  # SDK raises a variety of types
             raise TranslationError(f"Gemini API call failed: {exc}") from exc
 
@@ -168,7 +172,9 @@ class GeminiTranslator(Translator):
         try:
             # `generate_content` accepts a mixed list of text + PIL.Image — the SDK
             # encodes the image as inline base64 automatically.
-            response = self._ensure_model().generate_content([prompt, image])
+            response = self._ensure_model().generate_content(
+                [prompt, image], request_options={"timeout": 45}
+            )
         except Exception as exc:
             raise TranslationError(f"Gemini Vision call failed: {exc}") from exc
 

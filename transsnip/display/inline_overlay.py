@@ -29,6 +29,8 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QWidget
 
+from transsnip.utils.win_focus import force_foreground
+
 log = logging.getLogger(__name__)
 
 # Visual constants (kept inline — the overlay is the only consumer).
@@ -96,6 +98,10 @@ class InlineOverlay(QWidget):
         self.show()
         self.raise_()
         self.activateWindow()
+        # Opened while another app owns the foreground (Alt+F is a global
+        # hotkey) — activateWindow() alone is silently blocked by Windows,
+        # leaving Esc dead. See utils/win_focus.py.
+        force_foreground(self)
         self.setFocus()
 
     def close_overlay(self) -> None:

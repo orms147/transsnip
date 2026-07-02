@@ -10,8 +10,18 @@ from PySide6.QtGui import QCursor, QGuiApplication
 log = logging.getLogger(__name__)
 
 
-def _device_pixel_ratio() -> float:
-    screen = QGuiApplication.primaryScreen()
+def _device_pixel_ratio(rect: QRect | None = None) -> float:
+    """DPR of the screen containing `rect` (its center), not always the primary.
+
+    On mixed-DPI setups (primary at 150%, secondary at 100%) scaling a
+    secondary-monitor rect by the primary's ratio grabs a shifted/oversized
+    region — OCR then reads the wrong pixels.
+    """
+    screen = None
+    if rect is not None:
+        screen = QGuiApplication.screenAt(rect.center())
+    if screen is None:
+        screen = QGuiApplication.primaryScreen()
     return float(screen.devicePixelRatio()) if screen is not None else 1.0
 
 
@@ -38,7 +48,7 @@ def capture_rect(rect: QRect, *, dpr: float | None = None) -> Image.Image:
     125% / 150% / 175% scaling come out offset and clipped.
     """
     if dpr is None:
-        dpr = _device_pixel_ratio()
+        dpr = _device_pixel_ratio(rect)
     monitor = {
         "left": int(rect.x() * dpr),
         "top": int(rect.y() * dpr),

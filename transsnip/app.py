@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 from transsnip.capture.region_selector import RegionSelector
 from transsnip.capture.screen import active_monitor_logical_rect, capture_rect
 from transsnip.config.history import HistoryEntry, HistoryStore
-from transsnip.config.settings import Settings, get_preset, load_settings
+from transsnip.config.settings import Settings, get_preset, load_settings, save_settings
 from transsnip.display.floating_popup import FloatingPopup
 from transsnip.display.inline_overlay import InlineOverlay
 from transsnip.display.subtitle_bar import SubtitleBar
@@ -76,6 +76,9 @@ class AppController(QObject):
         # New Cobalt-design signals from the rebuilt popup.
         self._popup.retry_requested.connect(self._on_popup_retry)
         self._popup.switch_provider_requested.connect(self._open_settings)
+        # In-popup language switching: persist the pair and re-translate the
+        # cached source text (no re-capture / re-OCR).
+        self._popup.lang_pair_changed.connect(self._on_popup_lang_changed)
 
         self._overlay = InlineOverlay()
         self._overlay.refresh_requested.connect(self._on_overlay_refresh)
@@ -94,6 +97,18 @@ class AppController(QObject):
         # Stop the background loop cleanly on quit so its QThread doesn't block
         # process exit.
         self._app.aboutToQuit.connect(self._video.stop)
+
+        # Audio subtitle mode (Alt+A): translate the spoken audio of a video that
+        # has NO on-screen text. Shares the one SubtitleBar with video mode.
+        # Heavy (Whisper) — built lazily; deps optional (`[audio]` extra).
+        from transsnip.modes.audio_subtitle import AudioSubtitleController
+        self._audio = AudioSubtitleController(self)
+        self._audio.text_ready.connect(self._on_audio_text)
+        self._audio.status.connect(self._subtitle_bar.set_status)
+        self._audio.error.connect(lambda msg: self._notify(f"Audio subtitle: {msg}"))
+        self._audio.stopped.connect(self._subtitle_bar.stop)
+        self._app.aboutToQuit.connect(self._audio.stop)
+        self._transcriber = None  # asr.whisper.WhisperTranscriber, built on first start
         # AboutDialog instance — created lazily on first open so app start
         # stays snappy (it's never needed during the snipe-and-translate flow).
         # Typed as the actual AboutDialog via a TYPE_CHECKING-guarded import to
@@ -110,6 +125,9 @@ class AppController(QObject):
         # and which monitor to paint when the translation eventually lands.
         self._fullscreen_blocks: list[OCRBlock] = []
         self._fullscreen_monitor_rect: QRect | None = None
+        # Monotonic session counter — async OCR/translate results tagged with
+        # an older generation are stale and dropped (see _start_fullscreen_translate).
+        self._fullscreen_gen = 0
 
         # Set later via `set_hotkey_manager()` — main() owns the manager so it
         # can wire `triggered` to `handle_hotkey` before we get a reference. We
@@ -170,9 +188,18 @@ class AppController(QObject):
             if self._video.is_running():
                 self._stop_video()
                 return
+            self._audio.stop()  # share one SubtitleBar — stop the other mode first
             self._popup.hide_popup()
             self._region_target = "video"
             self._region_selector.start()
+        elif action_id == "audio_subtitle_translate":
+            # Toggle: Alt+A starts/stops audio translation. No region needed —
+            # it captures system audio and starts immediately.
+            if self._audio.is_running():
+                self._stop_audio()
+                return
+            self._video.stop()  # share one SubtitleBar
+            self._start_audio()
         elif action_id == "open_settings":
             self._open_settings()
         else:
@@ -222,6 +249,43 @@ class AppController(QObject):
         self._subtitle_bar.stop()
         self._notify("Video subtitle: đã dừng.")
 
+    # ── Audio subtitle flow ─────────────────────────────────────────────────
+
+    def _start_audio(self) -> None:
+        """Begin live audio→subtitle translation (no region — captures system audio).
+
+        Pressing Alt+A IS the opt-in — no separate enable flag. If the optional
+        audio deps aren't installed, the controller emits a clear error toast.
+        """
+        from transsnip.asr.whisper import WhisperTranscriber
+        if self._transcriber is None:
+            # Use the configured source language as the Whisper hint — a FIXED
+            # language is more accurate than per-chunk auto-detect (no zh→ru→en
+            # jitter, no wrong-language hallucination) and skips detection.
+            # WhisperTranscriber normalizes BCP-47 → ISO ("zh-Hans" → "zh"); a
+            # None/"auto" setting falls back to auto-detect + language lock.
+            # compute_type left "auto" so the transcriber picks per device
+            # (CUDA→float16, CPU→int8) — see WhisperTranscriber._resolve_device.
+            self._transcriber = WhisperTranscriber(
+                tier=self._settings.audio.whisper_tier,
+                source_lang=self._settings.translate.source_lang,
+            )
+        self._subtitle_bar.set_bg_opacity(self._settings.display.subtitle_bg_opacity)
+        self._subtitle_bar.set_font_pt(self._settings.display.subtitle_font_pt)
+        self._subtitle_bar.start_anchored(active_monitor_logical_rect())
+        self._audio.start(self._transcriber, self._translation_pipeline, self._translation_ctx)
+        mb = self._transcriber.expected_download_mb()
+        self._notify(f"Audio subtitle: đang nghe… (lần đầu tải model ~{mb}MB). Bấm Alt+A để dừng.")
+
+    def _on_audio_text(self, text: str) -> None:
+        log.info("audio subtitle → %r", text)   # visible: translated line reaching the bar
+        self._subtitle_bar.set_text(text)
+
+    def _stop_audio(self) -> None:
+        self._audio.stop()
+        self._subtitle_bar.stop()
+        self._notify("Audio subtitle: đã dừng.")
+
     def _capture_and_ocr(self, rect: QRect) -> None:
         try:
             image = capture_rect(rect)
@@ -238,6 +302,9 @@ class AppController(QObject):
         # popup. (Showing it earlier would risk having its own UI overlap the
         # capture region and leak status text into the OCR input.)
         self._popup.show_for_region(rect)
+        self._popup.set_lang_pair(
+            self._settings.translate.source_lang, self._settings.translate.target_lang
+        )
 
         if self._translation_pipeline.supports_vision():
             # Vision-capable provider (Gemini Vision, Claude Vision...) handles
@@ -343,8 +410,14 @@ class AppController(QObject):
     # every provider.
 
     def _start_fullscreen_translate(self) -> None:
+        # Each invocation gets a generation number; async results carry it and
+        # are dropped when stale. Without this, pressing Alt+F twice quickly
+        # zips run 1's translations with run 2's bboxes (shared state) — text
+        # lands in the wrong boxes and run 2's result gets discarded.
+        self._fullscreen_gen += 1
+        gen = self._fullscreen_gen
         monitor_rect = active_monitor_logical_rect()
-        log.info("Fullscreen translate on monitor %s", monitor_rect)
+        log.info("Fullscreen translate on monitor %s (gen=%d)", monitor_rect, gen)
         self._tray.showMessage(
             "TransSnip",
             "Đang OCR + dịch toàn màn hình…",
@@ -359,16 +432,19 @@ class AppController(QObject):
             return
         log.debug("Fullscreen captured: %dx%d", image.width, image.height)
         self._fullscreen_monitor_rect = monitor_rect
-        self._submit_fullscreen_ocr(image, lang=self._settings.translate.source_lang)
+        self._submit_fullscreen_ocr(image, lang=self._settings.translate.source_lang, gen=gen)
 
-    def _submit_fullscreen_ocr(self, image: Image.Image, *, lang: str | None) -> None:
+    def _submit_fullscreen_ocr(self, image: Image.Image, *, lang: str | None, gen: int) -> None:
         worker = OCRWorker(image, lang, self._ocr_pipeline)
-        worker.signals.done.connect(self._on_fullscreen_ocr_done)
+        worker.signals.done.connect(lambda r, g=gen: self._on_fullscreen_ocr_done(r, g))
         worker.signals.failed.connect(self._on_fullscreen_ocr_failed)
         QThreadPool.globalInstance().start(worker)
 
-    @Slot(object)
-    def _on_fullscreen_ocr_done(self, result: OCRResult) -> None:
+    def _on_fullscreen_ocr_done(self, result: OCRResult, gen: int) -> None:
+        if gen != self._fullscreen_gen:
+            log.debug("Fullscreen OCR result from gen %d dropped (current gen %d)",
+                      gen, self._fullscreen_gen)
+            return
         blocks = [b for b in result.blocks if b.text.strip()]
         if not blocks:
             self._notify("Fullscreen: không tìm thấy text trên màn hình.")
@@ -385,7 +461,7 @@ class AppController(QObject):
         # this fine; Google Translate sometimes re-orders the brackets but
         # `_parse_numbered_batch` salvages whatever it gets back).
         batch = "\n".join(f"[{i + 1}] {b.text}" for i, b in enumerate(blocks))
-        self._submit_fullscreen_translation(batch)
+        self._submit_fullscreen_translation(batch, gen=gen)
 
     @Slot(str)
     def _on_fullscreen_ocr_failed(self, error: str) -> None:
@@ -394,14 +470,17 @@ class AppController(QObject):
         self._fullscreen_blocks = []
         self._fullscreen_monitor_rect = None
 
-    def _submit_fullscreen_translation(self, batch: str) -> None:
+    def _submit_fullscreen_translation(self, batch: str, *, gen: int) -> None:
         worker = TranslationWorker(batch, self._translation_ctx, self._translation_pipeline)
-        worker.signals.done.connect(self._on_fullscreen_translation_done)
+        worker.signals.done.connect(lambda r, g=gen: self._on_fullscreen_translation_done(r, g))
         worker.signals.failed.connect(self._on_fullscreen_translation_failed)
         QThreadPool.globalInstance().start(worker)
 
-    @Slot(object)
-    def _on_fullscreen_translation_done(self, result: TranslationResult) -> None:
+    def _on_fullscreen_translation_done(self, result: TranslationResult, gen: int) -> None:
+        if gen != self._fullscreen_gen:
+            log.debug("Fullscreen translation from gen %d dropped (current gen %d)",
+                      gen, self._fullscreen_gen)
+            return
         blocks = self._fullscreen_blocks
         monitor_rect = self._fullscreen_monitor_rect
         self._fullscreen_blocks = []
@@ -488,6 +567,25 @@ class AppController(QObject):
         if self._last_region_for_retry is not None:
             self._capture_and_ocr(self._last_region_for_retry)
 
+    @Slot(object, str)
+    def _on_popup_lang_changed(self, source_lang, target_lang: str) -> None:
+        """User picked a new language pair via the popup chips / swap button.
+
+        Persists to global settings (the next snip almost always wants the
+        same pair — a popup-local override would leave retry and the other
+        modes on a different pair) and re-translates the already-captured
+        source text in place.
+        """
+        t = self._settings.translate
+        t.source_lang = source_lang or None
+        t.target_lang = target_lang
+        save_settings(self._settings)
+        self._translation_ctx = _build_translation_ctx(self._settings)
+        log.info("Popup lang pair changed: %s -> %s", source_lang or "auto", target_lang)
+        text = self._popup.last_source_text().strip()
+        if text:
+            self._submit_translation(text)
+
     @Slot()
     def _on_overlay_refresh(self) -> None:
         """Overlay toolbar's Refresh button — re-capture the active monitor
@@ -506,11 +604,22 @@ class AppController(QObject):
             openrouter_model=self._settings.translate.openrouter_model,
         )
         self._translation_ctx = _build_translation_ctx(self._settings)
+        # Drop the cached transcriber so a changed Whisper tier / source-lang
+        # takes effect on the next Alt+A (rebuilt lazily in _start_audio).
+        self._transcriber = None
         self._popup.set_voice_settings(self._settings.voice)
         self._popup.set_display_mode(self._settings.translate.display_mode)
         self._popup.set_click_outside_close(self._settings.display.click_outside_close)
         if self._hotkey_manager is not None:
-            self._hotkey_manager.apply_from_settings(self._settings.hotkeys)
+            failed = self._hotkey_manager.apply_from_settings(self._settings.hotkeys)
+            if failed:
+                labels = ", ".join(
+                    getattr(self._settings.hotkeys, aid, aid) or aid for aid in failed
+                )
+                self._notify(
+                    f"Không đăng ký được hotkey: {labels} — có thể app khác đang giữ tổ hợp này. "
+                    "Hãy chọn tổ hợp khác trong Settings."
+                )
         log.info(
             "Settings reloaded — provider=%s target=%s",
             self._settings.translate.provider,
@@ -521,6 +630,21 @@ class AppController(QObject):
         # provider / preset without having to re-open Settings.
         self._tray.set_provider_summary(self._translation_pipeline.provider_name)
         self._tray.set_preset_summary(self._settings.translate.preset_name)
+
+        # A running subtitle session captured its pipeline/ctx at start() and
+        # keeps translating with the OLD config — say so instead of letting
+        # the user believe the change took effect.
+        running_modes = []
+        if self._video.is_running():
+            running_modes.append("Video (Alt+V)")
+        if self._audio.is_running():
+            running_modes.append("Audio (Alt+A)")
+        if running_modes:
+            self._notify(
+                f"{' và '.join(running_modes)} đang chạy với config cũ — "
+                "tắt/bật lại để áp dụng thay đổi.",
+                timeout_ms=5000,
+            )
 
         # Success toast (different tone from generic _notify so it shows the
         # green check icon + progress bar).

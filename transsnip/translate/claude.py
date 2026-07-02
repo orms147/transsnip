@@ -82,7 +82,9 @@ class ClaudeTranslator(Translator):
     def _ensure_client(self) -> Any:
         if self._client is None:
             from anthropic import Anthropic
-            self._client = Anthropic(api_key=self._api_key)
+            # Bounded timeout so a black-holed connection fails with an error
+            # instead of pinning a QThreadPool slot forever ("Đang dịch…" hang).
+            self._client = Anthropic(api_key=self._api_key, timeout=30.0)
         return self._client
 
     def translate(self, text: str, ctx: TranslationContext) -> TranslationResult:

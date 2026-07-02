@@ -121,7 +121,13 @@ class LangChip(QWidget):
 
     Replaces the JSX `<div className="lang-chip">`. Used in popup section
     headers (above each source/translation block) and in the overlay toolbar.
+
+    `set_interactive(True)` turns the chip into a click target (pointer
+    cursor + a ▾ affordance + `clicked` signal) — the popup uses this to
+    open a language picker without adding a separate button.
     """
+
+    clicked = Signal()
 
     def __init__(
         self,
@@ -132,6 +138,7 @@ class LangChip(QWidget):
         super().__init__(parent)
         self._code = code
         self._name = name
+        self._interactive = False
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
         self._layout = QHBoxLayout(self)
@@ -147,8 +154,38 @@ class LangChip(QWidget):
             self._name_label = QLabel(name)
             self._layout.addWidget(self._name_label)
 
+        self._chevron_label: Optional[QLabel] = None
+
         self._apply_style()
         get_theme().mode_changed.connect(lambda _p: self._apply_style())
+
+    def set_interactive(self, interactive: bool) -> None:
+        if interactive == self._interactive:
+            return
+        self._interactive = interactive
+        if interactive:
+            if self._chevron_label is None:
+                self._chevron_label = QLabel("▾")
+                self._layout.addWidget(self._chevron_label)
+            self._chevron_label.show()
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
+            # A plain QWidget ignores stylesheet background/border rules unless
+            # WA_StyledBackground is set — without it the chip renders as bare
+            # labels and doesn't read as a button at all. WA_Hover makes the
+            # :hover stylesheet rule live so the accent border answers the mouse.
+            self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+            self.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+        else:
+            if self._chevron_label is not None:
+                self._chevron_label.hide()
+            self.unsetCursor()
+        self._apply_style()
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if self._interactive and self.isEnabled() and event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            return
+        super().mousePressEvent(event)
 
     def set_lang(self, code: str, name: Optional[str] = None) -> None:
         """Update the chip's code/name in place — used when popup source
@@ -177,23 +214,38 @@ class LangChip(QWidget):
         # Outer pill background + chip styling. The two inner labels get
         # their own color rules so the mono code (text_2) and the name
         # (text_1) read at different weights even in a single chip.
+        # Interactive chips get a stronger border + accent hover so they read
+        # as buttons (they open the language picker), not static labels.
+        hover_rule = (
+            f"LangChip:hover {{ border: 1px solid {p.accent}; background: {p.bg_3}; }}"
+            if self._interactive else ""
+        )
+        border = p.border_2 if self._interactive else p.border_1
         self.setStyleSheet(f"""
             LangChip {{
                 background: {p.bg_2};
-                border: 1px solid {p.border_1};
+                border: 1px solid {border};
                 border-radius: {p.r_pill}px;
                 padding: 0;
             }}
+            {hover_rule}
         """)
         self._code_label.setStyleSheet(
             f"color: {p.text_2}; font-family: {p.font_mono}; "
             f"font-size: 10px; font-weight: 600; letter-spacing: {p.letter_caps}; "
             f"padding: 2px 4px 2px 8px;"
         )
+        # The trailing element (name, or code when name-less) keeps the 8px
+        # right padding unless the ▾ chevron takes over as the last child.
+        name_pad_r = 0 if self._interactive else 8
         if self._name_label:
             self._name_label.setStyleSheet(
                 f"color: {p.text_1}; font-size: 11px; font-weight: 500; "
-                f"padding: 2px 8px 2px 0;"
+                f"padding: 2px {name_pad_r}px 2px 0;"
+            )
+        if self._chevron_label is not None:
+            self._chevron_label.setStyleSheet(
+                f"color: {p.text_2}; font-size: 10px; padding: 2px 8px 2px 0;"
             )
 
 

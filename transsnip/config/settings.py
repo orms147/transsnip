@@ -10,26 +10,32 @@ from pydantic import BaseModel, Field
 log = logging.getLogger(__name__)
 
 
-def _settings_path() -> Path:
-    """%APPDATA%\\transsnip\\settings.json on Windows, ~/.transsnip/settings.json elsewhere."""
+def config_dir() -> Path:
+    """%APPDATA%\\transsnip on Windows, ~/.transsnip/transsnip elsewhere."""
     base = os.environ.get("APPDATA") or os.path.expanduser("~/.transsnip")
-    path = Path(base) / "transsnip" / "settings.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = Path(base) / "transsnip"
+    path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _settings_path() -> Path:
+    return config_dir() / "settings.json"
 
 
 class HotkeySettings(BaseModel):
     """Global hotkey bindings.
 
-    Format follows the `keyboard` Python library: lowercase, `+`-separated,
-    modifiers first (e.g. `ctrl+shift+t`, `alt+f`). The Settings UI uses
-    `QKeySequenceEdit` for input and normalizes its output to this format.
-    Empty string disables the binding for that action.
+    Format: lowercase, `+`-separated, modifiers first (e.g. `ctrl+shift+t`,
+    `alt+f`) — parsed by `hotkeys.manager.parse_hotkey` into Win32
+    RegisterHotKey arguments. The Settings UI uses `QKeySequenceEdit` for
+    input and normalizes its output to this format. Empty string disables
+    the binding for that action.
     """
 
     region_translate: str = "alt+t"
     fullscreen_translate: str = "alt+f"
     video_subtitle_translate: str = "alt+v"
+    audio_subtitle_translate: str = "alt+a"
     open_settings: str = "ctrl+alt+s"
 
 
@@ -167,15 +173,31 @@ class VoiceSettings(BaseModel):
     cache_max_mb: int = 100
 
 
+class AudioSettings(BaseModel):
+    """Audio-subtitle mode (Settings → Audio tab) — translate the spoken audio of
+    a video that has no on-screen text via Whisper ASR.
+
+    Optional/heavy: needs the `[audio]` extra installed; the Whisper model
+    (~460MB for `small`) is fetched on first use, not bundled. The Alt+A hotkey
+    is the opt-in — there's no separate enable flag (pressing it = intent).
+    """
+
+    whisper_tier: str = "small"   # tiny / base / small (CPU sweet spot = small)
+    compute_type: str = "int8"
+
+
 class Settings(BaseModel):
-    """Top-level settings. New tabs (display, voice) become new sub-models here."""
+    """Top-level settings. New tabs (display, voice, audio) become new sub-models here."""
 
     translate: TranslateSettings = Field(default_factory=TranslateSettings)
     hotkeys: HotkeySettings = Field(default_factory=HotkeySettings)
     presets: list[PresetSettings] = Field(default_factory=_default_presets)
     display: DisplaySettings = Field(default_factory=DisplaySettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
-    schema_version: int = 4  # bump when migrating settings.json shape
+    audio: AudioSettings = Field(default_factory=AudioSettings)
+    # v5: added AudioSettings (Whisper audio-subtitle). No migration needed —
+    # Pydantic fills the all-default sub-model, so v4 settings.json loads fine.
+    schema_version: int = 5
 
 
 def get_preset(settings: Settings, name: str) -> PresetSettings:
@@ -207,11 +229,20 @@ def load_settings() -> Settings:
 
 def save_settings(settings: Settings) -> None:
     path = _settings_path()
+    # Write-then-rename so a crash / power loss mid-write can never leave a
+    # truncated settings.json behind (load_settings would silently fall back
+    # to defaults, losing every preset and key the user configured).
+    tmp = path.with_suffix(".json.tmp")
     try:
-        path.write_text(
+        tmp.write_text(
             json.dumps(settings.model_dump(), indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        os.replace(tmp, path)
         log.info("Saved settings to %s", path)
     except OSError as exc:
         log.error("Failed to write %s: %s", path, exc)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass

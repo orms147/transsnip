@@ -1,6 +1,6 @@
 [project]
 name = "transsnip"
-version = "0.2.6"
+version = "0.3.0"
 description = "Screen translation app for Windows — hotkey-driven OCR + multi-provider translation with context-aware results"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -15,8 +15,9 @@ dependencies = [
     "Pillow>=10.2.0",
     # System tray (PySide6 has QSystemTrayIcon, but pystray is a fallback)
     "pystray>=0.19.5",
-    # Global hotkeys
-    "keyboard>=0.13.5",
+    # Global hotkeys: Win32 RegisterHotKey via ctypes (no external dependency).
+    # The old `keyboard` lib was dropped — its WH_KEYBOARD_LL hook got silently
+    # removed by Windows under load and never re-attached (dead hotkeys at boot).
     # Config & API key storage
     "pydantic>=2.6.0",
     "pydantic-settings>=2.2.0",
@@ -57,6 +58,17 @@ tts = [
 ]
 learning = [
     "eng-to-ipa>=0.0.2",
+]
+audio = [
+    # Audio-subtitle mode (Alt+A): translate the spoken audio of a video that has
+    # no on-screen text. WASAPI loopback capture + faster-whisper ASR, all local.
+    # The Whisper model (~460MB for `small`) is fetched on first use, NOT bundled.
+    # Optional + source-install only — NOT in the default .exe (ctranslate2+MKL is
+    # heavy; see TransSnip.spec excludes). See transsnip/asr/whisper.py + docs.
+    "pyaudiowpatch>=0.2.12; sys_platform == 'win32'",  # WASAPI loopback capture
+    "faster-whisper>=1.0",                              # multilingual REQUIRED (Vietnamese)
+    "numpy>=1.24",
+    "scipy>=1.11",                                      # 48k→16k resample
 ]
 dev = [
     "pytest>=8.0.0",
