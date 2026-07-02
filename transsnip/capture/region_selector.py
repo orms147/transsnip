@@ -30,6 +30,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QWidget
 
 from transsnip.ui.theme import get_theme
+from transsnip.utils.win_focus import force_foreground
 
 log = logging.getLogger(__name__)
 
@@ -79,9 +80,12 @@ class RegionSelector(QWidget):
         if self.isVisible():
             log.debug("Region selector already visible — ignoring re-trigger")
             return
-        screen = QGuiApplication.primaryScreen()
+        # Cover the monitor the CURSOR is on, not always the primary — the
+        # user aims at the screen they're about to snip (Alt+F already picks
+        # its monitor the same way via active_monitor_logical_rect).
+        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
         if screen is None:
-            log.error("No primary screen available")
+            log.error("No screen available")
             self.cancelled.emit()
             return
         self._origin = None
@@ -92,6 +96,11 @@ class RegionSelector(QWidget):
         self.showFullScreen()
         self.raise_()
         self.activateWindow()
+        # activateWindow() alone fails silently here: the hotkey fired while
+        # another app owned the foreground, and Windows blocks background
+        # processes from stealing it — without this, Esc/Enter never arrive
+        # (mouse still works, which made the bug look like "Esc is broken").
+        force_foreground(self)
         self.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _current_rect(self) -> QRect | None:
@@ -255,6 +264,18 @@ class RegionSelector(QWidget):
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Escape:
             self._finish(cancelled=True)
+            return
+        # The hint promises "Enter xác nhận": confirm the in-progress drag
+        # at its current extent without waiting for mouse release.
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            local = self._current_rect()
+            if (
+                local is not None
+                and local.width() >= _MIN_SELECTION
+                and local.height() >= _MIN_SELECTION
+            ):
+                global_rect = QRect(self.mapToGlobal(local.topLeft()), local.size())
+                self._finish(cancelled=False, result=global_rect)
             return
         super().keyPressEvent(event)
 

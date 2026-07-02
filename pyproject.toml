@@ -15,8 +15,9 @@ dependencies = [
     "Pillow>=10.2.0",
     # System tray (PySide6 has QSystemTrayIcon, but pystray is a fallback)
     "pystray>=0.19.5",
-    # Global hotkeys
-    "keyboard>=0.13.5",
+    # Global hotkeys: Win32 RegisterHotKey via ctypes (no external dependency).
+    # The old `keyboard` lib was dropped — its WH_KEYBOARD_LL hook got silently
+    # removed by Windows under load and never re-attached (dead hotkeys at boot).
     # Config & API key storage
     "pydantic>=2.6.0",
     "pydantic-settings>=2.2.0",
