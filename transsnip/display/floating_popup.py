@@ -40,6 +40,7 @@ from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,
+    QMenu,
     QPushButton,
     QScrollArea,
     QScrollBar,
@@ -72,6 +73,14 @@ _DEFAULT_HEIGHT = 360
 _MIN_WIDTH = 320
 _MIN_HEIGHT = 140
 _MARGIN_FROM_EDGE = 16
+
+# Languages offered in the popup's quick lang-picker menus (code order = menu
+# order). The full ~100-language list stays in Settings; "Ngôn ngữ khác…" at
+# the bottom of the menu routes there.
+_COMMON_LANGS: list[str] = [
+    "en", "vi", "ja", "ko", "zh-Hans", "zh-Hant",
+    "fr", "de", "es", "ru", "th", "ar",
+]
 _GAP_FROM_REGION = 12
 _RESIZE_MARGIN = 8
 
@@ -720,6 +729,10 @@ class FloatingPopup(QWidget):
     retry_requested = Signal()
     switch_provider_requested = Signal()
     pin_changed = Signal(bool)
+    # (source_lang: str | None, target_lang: str) — user picked a new pair via
+    # the chip menus / swap button. AppController persists it and re-translates
+    # the cached source text (no re-capture, no re-OCR).
+    lang_pair_changed = Signal(object, str)
 
     def __init__(self) -> None:
         super().__init__(
@@ -738,6 +751,9 @@ class FloatingPopup(QWidget):
         self._last_source_text: str = ""
         self._last_source_lang: Optional[str] = None
         self._last_target_lang: str = "vi"
+        # Source lang the user *asked* for (None = auto-detect) — distinct from
+        # `_last_source_lang`, which reflects what OCR / the provider detected.
+        self._requested_source_lang: Optional[str] = None
         self._show_phonetic_active: bool = False
         self._filter_installed = False
         # Whether clicking outside the popup dismisses it (Settings → Display).
@@ -815,6 +831,11 @@ class FloatingPopup(QWidget):
 
         # Body sub-widgets (lazy-built per state).
         self._source_chip = LangChip("", "")
+        self._source_chip.set_interactive(True)
+        self._source_chip.setToolTip("Đổi ngôn ngữ nguồn")
+        self._source_chip.clicked.connect(
+            lambda: self._open_lang_menu(self._source_chip, is_source=True)
+        )
         self._source_chip.hide()
         self._learning_tag = QLabel("Learning mode")
         self._learning_tag.hide()
@@ -838,6 +859,11 @@ class FloatingPopup(QWidget):
         self._divider.hide()
 
         self._target_chip = LangChip("VI", "Tiếng Việt")
+        self._target_chip.set_interactive(True)
+        self._target_chip.setToolTip("Đổi ngôn ngữ đích")
+        self._target_chip.clicked.connect(
+            lambda: self._open_lang_menu(self._target_chip, is_source=False)
+        )
         self._target_chip.hide()
         self._translation_label = QLabel()
         self._translation_label.setWordWrap(True)
@@ -878,6 +904,14 @@ class FloatingPopup(QWidget):
         tx_head = QHBoxLayout()
         tx_head.setSpacing(6)
         tx_head.addWidget(self._target_chip)
+        # Swap translation direction. Mostly useful when the pair was set
+        # backwards (snipped Vietnamese while set to EN→VI) — with an Auto
+        # source it swaps using the DETECTED language.
+        self._swap_btn = IconButton("swap", size=24, icon_size=13,
+                                    tooltip="Đảo chiều dịch")
+        self._swap_btn.clicked.connect(self._on_swap_langs)
+        self._swap_btn.hide()
+        tx_head.addWidget(self._swap_btn)
         tx_head.addStretch(1)
         # Speak the TRANSLATION in a target-language voice (Standard/Learning).
         self._speak_dst_btn = IconButton("volume", size=24, icon_size=13,
@@ -981,6 +1015,13 @@ class FloatingPopup(QWidget):
             self._render_source_block(
                 _truncate(result.source_text), result.source_lang or self._last_source_lang
             )
+        elif result.source_lang and result.source_lang != "auto":
+            # Same text, but the provider DETECTED the source language — update
+            # the chip so an Auto-detect source doesn't sit at "??" forever.
+            self._last_source_lang = result.source_lang
+            self._source_chip.set_lang(
+                result.source_lang.upper(), _lang_display_name(result.source_lang)
+            )
 
         self._last_translation = result.translated_text
         self._translation_label.setText(result.translated_text)
@@ -1072,6 +1113,11 @@ class FloatingPopup(QWidget):
         # Divider + target section only on done state.
         self._divider.setVisible(is_done and source_visible)
         self._target_chip.setVisible(is_done)
+        self._swap_btn.setVisible(is_done)
+        # Language switching only makes sense once a result is on screen; while
+        # a (re-)translation is in flight the controls stay locked so two
+        # workers can't race to fill the popup out of order.
+        self._set_lang_controls_enabled(is_done)
         self._translation_label.setVisible(is_done)
         # Speak-translation button: Standard/Learning modes, once there's a result.
         self._speak_dst_btn.setVisible(
@@ -1096,8 +1142,8 @@ class FloatingPopup(QWidget):
     def _render_source_block(self, text: str, source_lang: Optional[str]) -> None:
         # Update chip in place (LangChip.set_lang) — avoids re-parenting which
         # fights with the layout we already placed the chip into.
-        code = (source_lang or "??").upper()
-        name = _lang_display_name(source_lang)
+        code = (source_lang or "auto").upper()
+        name = _lang_display_name(source_lang) or ("Auto" if not source_lang else "")
         self._source_chip.set_lang(code, name)
         if self._show_phonetic_active:
             self._phonetic.set_text(
@@ -1119,6 +1165,83 @@ class FloatingPopup(QWidget):
     def set_click_outside_close(self, enabled: bool) -> None:
         """Whether a click outside the popup dismisses it (Settings → Display)."""
         self._click_outside_close = enabled
+
+    # ── In-popup language switching ───────────────────────────────────────
+
+    def set_lang_pair(self, source_lang: Optional[str], target_lang: str) -> None:
+        """Sync the requested pair from settings — AppController calls this on
+        each show_for_region so the chip menus reflect the current config."""
+        self._requested_source_lang = source_lang
+        self._last_target_lang = target_lang or "vi"
+
+    def last_source_text(self) -> str:
+        """Full (untruncated) OCR/vision source text of the current session —
+        AppController re-submits this on a language change (no re-capture)."""
+        return self._last_source_text
+
+    def _open_lang_menu(self, anchor: QWidget, *, is_source: bool) -> None:
+        menu = QMenu(self)
+        current = self._requested_source_lang if is_source else self._last_target_lang
+        if is_source:
+            auto = menu.addAction("Auto-detect")
+            auto.setCheckable(True)
+            auto.setChecked(current is None)
+            auto.triggered.connect(lambda: self._pick_lang(None, is_source=True))
+            menu.addSeparator()
+        for code in _COMMON_LANGS:
+            action = menu.addAction(f"{code.upper()}  ·  {_lang_display_name(code)}")
+            action.setCheckable(True)
+            action.setChecked(code == current)
+            action.triggered.connect(
+                lambda _checked=False, c=code, s=is_source: self._pick_lang(c, is_source=s)
+            )
+        menu.addSeparator()
+        other = menu.addAction("Ngôn ngữ khác…")
+        other.triggered.connect(self.settings_requested.emit)
+        menu.exec(anchor.mapToGlobal(QPoint(0, anchor.height() + 4)))
+
+    def _pick_lang(self, code: Optional[str], *, is_source: bool) -> None:
+        if is_source:
+            if code == self._requested_source_lang:
+                return
+            self._requested_source_lang = code
+            self._source_chip.set_lang(
+                (code or "auto").upper(), _lang_display_name(code) or "Auto"
+            )
+        else:
+            if not code or code == self._last_target_lang:
+                return
+            self._last_target_lang = code
+            self._target_chip.set_lang(code.upper(), _lang_display_name(code))
+        self._emit_lang_pair()
+
+    def _on_swap_langs(self) -> None:
+        # Explicit request wins; with an Auto source fall back to what was
+        # actually detected, then to English.
+        old_source = self._requested_source_lang or self._last_source_lang
+        if old_source in (None, "auto"):
+            old_source = "en"
+        new_source = self._last_target_lang
+        if new_source == old_source:
+            return
+        self._requested_source_lang = new_source
+        self._last_target_lang = old_source
+        self._source_chip.set_lang(new_source.upper(), _lang_display_name(new_source))
+        self._target_chip.set_lang(old_source.upper(), _lang_display_name(old_source))
+        self._emit_lang_pair()
+
+    def _emit_lang_pair(self) -> None:
+        # Lock the switch controls until the re-translation lands
+        # (update_translation → _set_state re-enables) — prevents two
+        # in-flight workers racing to fill the popup out of order.
+        self._set_lang_controls_enabled(False)
+        self._header.set_status("translating")
+        self.lang_pair_changed.emit(self._requested_source_lang, self._last_target_lang)
+
+    def _set_lang_controls_enabled(self, enabled: bool) -> None:
+        self._source_chip.setEnabled(enabled)
+        self._target_chip.setEnabled(enabled)
+        self._swap_btn.setEnabled(enabled)
 
     def _on_pin_toggled(self, pinned: bool) -> None:
         # Pinned popups survive clicks elsewhere; only Esc / close dismisses them.

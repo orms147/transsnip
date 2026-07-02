@@ -155,6 +155,11 @@ _ICON_BODIES: dict[str, str] = {
         'a.8.8 0 0 1 .8.8V3" />'
     ),
     "play": '<path d="M5 3.5l7 4.5-7 4.5z" />',
+    # Two opposing arrows — swap translation direction (popup lang chips).
+    "swap": (
+        '<path d="M2.5 5.5h9M9 2.5l3 3-3 3" />'
+        '<path d="M13.5 10.5h-9M7 7.5l-3 3 3 3" />'
+    ),
     "arrow": '<path d="M2.5 8h11M9.5 4l4 4-4 4" />',
     "monitor": (
         '<rect x="1.8" y="2.8" width="12.4" height="8.4" rx="1.2" />'

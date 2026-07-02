@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 from transsnip.capture.region_selector import RegionSelector
 from transsnip.capture.screen import active_monitor_logical_rect, capture_rect
 from transsnip.config.history import HistoryEntry, HistoryStore
-from transsnip.config.settings import Settings, get_preset, load_settings
+from transsnip.config.settings import Settings, get_preset, load_settings, save_settings
 from transsnip.display.floating_popup import FloatingPopup
 from transsnip.display.inline_overlay import InlineOverlay
 from transsnip.display.subtitle_bar import SubtitleBar
@@ -76,6 +76,9 @@ class AppController(QObject):
         # New Cobalt-design signals from the rebuilt popup.
         self._popup.retry_requested.connect(self._on_popup_retry)
         self._popup.switch_provider_requested.connect(self._open_settings)
+        # In-popup language switching: persist the pair and re-translate the
+        # cached source text (no re-capture / re-OCR).
+        self._popup.lang_pair_changed.connect(self._on_popup_lang_changed)
 
         self._overlay = InlineOverlay()
         self._overlay.refresh_requested.connect(self._on_overlay_refresh)
@@ -122,6 +125,9 @@ class AppController(QObject):
         # and which monitor to paint when the translation eventually lands.
         self._fullscreen_blocks: list[OCRBlock] = []
         self._fullscreen_monitor_rect: QRect | None = None
+        # Monotonic session counter — async OCR/translate results tagged with
+        # an older generation are stale and dropped (see _start_fullscreen_translate).
+        self._fullscreen_gen = 0
 
         # Set later via `set_hotkey_manager()` — main() owns the manager so it
         # can wire `triggered` to `handle_hotkey` before we get a reference. We
@@ -296,6 +302,9 @@ class AppController(QObject):
         # popup. (Showing it earlier would risk having its own UI overlap the
         # capture region and leak status text into the OCR input.)
         self._popup.show_for_region(rect)
+        self._popup.set_lang_pair(
+            self._settings.translate.source_lang, self._settings.translate.target_lang
+        )
 
         if self._translation_pipeline.supports_vision():
             # Vision-capable provider (Gemini Vision, Claude Vision...) handles
@@ -401,8 +410,14 @@ class AppController(QObject):
     # every provider.
 
     def _start_fullscreen_translate(self) -> None:
+        # Each invocation gets a generation number; async results carry it and
+        # are dropped when stale. Without this, pressing Alt+F twice quickly
+        # zips run 1's translations with run 2's bboxes (shared state) — text
+        # lands in the wrong boxes and run 2's result gets discarded.
+        self._fullscreen_gen += 1
+        gen = self._fullscreen_gen
         monitor_rect = active_monitor_logical_rect()
-        log.info("Fullscreen translate on monitor %s", monitor_rect)
+        log.info("Fullscreen translate on monitor %s (gen=%d)", monitor_rect, gen)
         self._tray.showMessage(
             "TransSnip",
             "Đang OCR + dịch toàn màn hình…",
@@ -417,16 +432,19 @@ class AppController(QObject):
             return
         log.debug("Fullscreen captured: %dx%d", image.width, image.height)
         self._fullscreen_monitor_rect = monitor_rect
-        self._submit_fullscreen_ocr(image, lang=self._settings.translate.source_lang)
+        self._submit_fullscreen_ocr(image, lang=self._settings.translate.source_lang, gen=gen)
 
-    def _submit_fullscreen_ocr(self, image: Image.Image, *, lang: str | None) -> None:
+    def _submit_fullscreen_ocr(self, image: Image.Image, *, lang: str | None, gen: int) -> None:
         worker = OCRWorker(image, lang, self._ocr_pipeline)
-        worker.signals.done.connect(self._on_fullscreen_ocr_done)
+        worker.signals.done.connect(lambda r, g=gen: self._on_fullscreen_ocr_done(r, g))
         worker.signals.failed.connect(self._on_fullscreen_ocr_failed)
         QThreadPool.globalInstance().start(worker)
 
-    @Slot(object)
-    def _on_fullscreen_ocr_done(self, result: OCRResult) -> None:
+    def _on_fullscreen_ocr_done(self, result: OCRResult, gen: int) -> None:
+        if gen != self._fullscreen_gen:
+            log.debug("Fullscreen OCR result from gen %d dropped (current gen %d)",
+                      gen, self._fullscreen_gen)
+            return
         blocks = [b for b in result.blocks if b.text.strip()]
         if not blocks:
             self._notify("Fullscreen: không tìm thấy text trên màn hình.")
@@ -443,7 +461,7 @@ class AppController(QObject):
         # this fine; Google Translate sometimes re-orders the brackets but
         # `_parse_numbered_batch` salvages whatever it gets back).
         batch = "\n".join(f"[{i + 1}] {b.text}" for i, b in enumerate(blocks))
-        self._submit_fullscreen_translation(batch)
+        self._submit_fullscreen_translation(batch, gen=gen)
 
     @Slot(str)
     def _on_fullscreen_ocr_failed(self, error: str) -> None:
@@ -452,14 +470,17 @@ class AppController(QObject):
         self._fullscreen_blocks = []
         self._fullscreen_monitor_rect = None
 
-    def _submit_fullscreen_translation(self, batch: str) -> None:
+    def _submit_fullscreen_translation(self, batch: str, *, gen: int) -> None:
         worker = TranslationWorker(batch, self._translation_ctx, self._translation_pipeline)
-        worker.signals.done.connect(self._on_fullscreen_translation_done)
+        worker.signals.done.connect(lambda r, g=gen: self._on_fullscreen_translation_done(r, g))
         worker.signals.failed.connect(self._on_fullscreen_translation_failed)
         QThreadPool.globalInstance().start(worker)
 
-    @Slot(object)
-    def _on_fullscreen_translation_done(self, result: TranslationResult) -> None:
+    def _on_fullscreen_translation_done(self, result: TranslationResult, gen: int) -> None:
+        if gen != self._fullscreen_gen:
+            log.debug("Fullscreen translation from gen %d dropped (current gen %d)",
+                      gen, self._fullscreen_gen)
+            return
         blocks = self._fullscreen_blocks
         monitor_rect = self._fullscreen_monitor_rect
         self._fullscreen_blocks = []
@@ -546,6 +567,25 @@ class AppController(QObject):
         if self._last_region_for_retry is not None:
             self._capture_and_ocr(self._last_region_for_retry)
 
+    @Slot(object, str)
+    def _on_popup_lang_changed(self, source_lang, target_lang: str) -> None:
+        """User picked a new language pair via the popup chips / swap button.
+
+        Persists to global settings (the next snip almost always wants the
+        same pair — a popup-local override would leave retry and the other
+        modes on a different pair) and re-translates the already-captured
+        source text in place.
+        """
+        t = self._settings.translate
+        t.source_lang = source_lang or None
+        t.target_lang = target_lang
+        save_settings(self._settings)
+        self._translation_ctx = _build_translation_ctx(self._settings)
+        log.info("Popup lang pair changed: %s -> %s", source_lang or "auto", target_lang)
+        text = self._popup.last_source_text().strip()
+        if text:
+            self._submit_translation(text)
+
     @Slot()
     def _on_overlay_refresh(self) -> None:
         """Overlay toolbar's Refresh button — re-capture the active monitor
@@ -571,7 +611,15 @@ class AppController(QObject):
         self._popup.set_display_mode(self._settings.translate.display_mode)
         self._popup.set_click_outside_close(self._settings.display.click_outside_close)
         if self._hotkey_manager is not None:
-            self._hotkey_manager.apply_from_settings(self._settings.hotkeys)
+            failed = self._hotkey_manager.apply_from_settings(self._settings.hotkeys)
+            if failed:
+                labels = ", ".join(
+                    getattr(self._settings.hotkeys, aid, aid) or aid for aid in failed
+                )
+                self._notify(
+                    f"Không đăng ký được hotkey: {labels} — có thể app khác đang giữ tổ hợp này. "
+                    "Hãy chọn tổ hợp khác trong Settings."
+                )
         log.info(
             "Settings reloaded — provider=%s target=%s",
             self._settings.translate.provider,
@@ -582,6 +630,21 @@ class AppController(QObject):
         # provider / preset without having to re-open Settings.
         self._tray.set_provider_summary(self._translation_pipeline.provider_name)
         self._tray.set_preset_summary(self._settings.translate.preset_name)
+
+        # A running subtitle session captured its pipeline/ctx at start() and
+        # keeps translating with the OLD config — say so instead of letting
+        # the user believe the change took effect.
+        running_modes = []
+        if self._video.is_running():
+            running_modes.append("Video (Alt+V)")
+        if self._audio.is_running():
+            running_modes.append("Audio (Alt+A)")
+        if running_modes:
+            self._notify(
+                f"{' và '.join(running_modes)} đang chạy với config cũ — "
+                "tắt/bật lại để áp dụng thay đổi.",
+                timeout_ms=5000,
+            )
 
         # Success toast (different tone from generic _notify so it shows the
         # green check icon + progress bar).
