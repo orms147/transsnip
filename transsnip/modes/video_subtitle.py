@@ -134,7 +134,49 @@ class _TranslateWorker(QThread):
                 self.text_ready.emit(result.translated_text)
 
 
-class VideoSubtitleController(QObject):
+class _PipelineControllerBase(QObject):
+    """Shared stop-safety for the subtitle pipeline controllers (video/audio).
+
+    Dropping the last Python ref to a RUNNING QThread deletes the C++ object
+    and hard-aborts the process ("QThread: Destroyed while thread is still
+    running"). A pipeline thread can easily overrun the stop wait — a
+    translate call hanging on the network, or the ASR loop mid multi-minute
+    Whisper model download — so `_retire` parks such threads in `_zombies`
+    (keeping them alive, signals detached) until `finished` fires.
+    """
+
+    def __init__(self, parent: QObject | None = None) -> None:
+        super().__init__(parent)
+        self._zombies: list[QThread] = []
+
+    def _retire(self, thread) -> None:
+        if thread is None:
+            return
+        # A parked thread must not keep feeding the UI / a retired sibling.
+        for sig_name in ("new_source", "status", "error", "text_ready"):
+            sig = getattr(thread, sig_name, None)
+            if sig is not None:
+                try:
+                    sig.disconnect()
+                except RuntimeError:
+                    pass  # already had no receivers
+        self._zombies.append(thread)
+        thread.finished.connect(lambda t=thread: self._release_zombie(t))
+        thread.stop()
+        if thread.wait(2000):
+            self._release_zombie(thread)
+        else:
+            log.warning("%s still running after stop — parked until it finishes",
+                        type(thread).__name__)
+
+    def _release_zombie(self, thread: QThread) -> None:
+        try:
+            self._zombies.remove(thread)
+        except ValueError:
+            pass
+
+
+class VideoSubtitleController(_PipelineControllerBase):
     """Owns the capture loop + translate worker; re-emits their events on the
     main thread.
 
@@ -180,9 +222,7 @@ class VideoSubtitleController(QObject):
         if self._capture is None and self._translator_worker is None:
             return
         for t in (self._capture, self._translator_worker):
-            if t is not None:
-                t.stop()
-                t.wait(2000)
+            self._retire(t)
         self._capture = None
         self._translator_worker = None
         log.info("Video subtitle pipeline stopped")

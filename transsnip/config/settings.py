@@ -10,21 +10,26 @@ from pydantic import BaseModel, Field
 log = logging.getLogger(__name__)
 
 
-def _settings_path() -> Path:
-    """%APPDATA%\\transsnip\\settings.json on Windows, ~/.transsnip/settings.json elsewhere."""
+def config_dir() -> Path:
+    """%APPDATA%\\transsnip on Windows, ~/.transsnip/transsnip elsewhere."""
     base = os.environ.get("APPDATA") or os.path.expanduser("~/.transsnip")
-    path = Path(base) / "transsnip" / "settings.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
+    path = Path(base) / "transsnip"
+    path.mkdir(parents=True, exist_ok=True)
     return path
+
+
+def _settings_path() -> Path:
+    return config_dir() / "settings.json"
 
 
 class HotkeySettings(BaseModel):
     """Global hotkey bindings.
 
-    Format follows the `keyboard` Python library: lowercase, `+`-separated,
-    modifiers first (e.g. `ctrl+shift+t`, `alt+f`). The Settings UI uses
-    `QKeySequenceEdit` for input and normalizes its output to this format.
-    Empty string disables the binding for that action.
+    Format: lowercase, `+`-separated, modifiers first (e.g. `ctrl+shift+t`,
+    `alt+f`) — parsed by `hotkeys.manager.parse_hotkey` into Win32
+    RegisterHotKey arguments. The Settings UI uses `QKeySequenceEdit` for
+    input and normalizes its output to this format. Empty string disables
+    the binding for that action.
     """
 
     region_translate: str = "alt+t"
@@ -224,11 +229,20 @@ def load_settings() -> Settings:
 
 def save_settings(settings: Settings) -> None:
     path = _settings_path()
+    # Write-then-rename so a crash / power loss mid-write can never leave a
+    # truncated settings.json behind (load_settings would silently fall back
+    # to defaults, losing every preset and key the user configured).
+    tmp = path.with_suffix(".json.tmp")
     try:
-        path.write_text(
+        tmp.write_text(
             json.dumps(settings.model_dump(), indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        os.replace(tmp, path)
         log.info("Saved settings to %s", path)
     except OSError as exc:
         log.error("Failed to write %s: %s", path, exc)
+        try:
+            tmp.unlink(missing_ok=True)
+        except OSError:
+            pass

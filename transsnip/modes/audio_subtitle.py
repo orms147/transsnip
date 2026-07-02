@@ -30,7 +30,10 @@ import threading
 
 from PySide6.QtCore import QObject, QThread, Signal
 
-from transsnip.modes.video_subtitle import _TranslateWorker  # reuse coalescing translator
+from transsnip.modes.video_subtitle import (  # reuse coalescing translator + stop-safety base
+    _PipelineControllerBase,
+    _TranslateWorker,
+)
 from transsnip.translate.base import TranslationContext
 from transsnip.translate.registry import TranslationPipeline
 from transsnip.utils.image import text_similarity
@@ -216,7 +219,7 @@ class _AsrLoop(QThread):
             self.new_source.emit(src)
 
 
-class AudioSubtitleController(QObject):
+class AudioSubtitleController(_PipelineControllerBase):
     """Owns capture + ASR + the coalescing translate worker; re-emits on the main
     thread. No region/dpr/ocr — audio has no screen source, so it starts at once.
     """
@@ -249,6 +252,9 @@ class AudioSubtitleController(QObject):
         worker.text_ready.connect(self.text_ready)
         capture_thread = _CaptureThread(LoopbackCapture(), buffer)
         capture_thread.error.connect(self.error)
+        # Queued: the error comes from the capture thread; stop() must run on
+        # the controller's (main) thread after the toast connection above.
+        capture_thread.error.connect(self._on_capture_error)
         asr = _AsrLoop(transcriber, buffer)
         asr.new_source.connect(worker.submit)   # main-thread handoff (lock-guarded)
         asr.status.connect(self.status)
@@ -267,11 +273,16 @@ class AudioSubtitleController(QObject):
         if not any(threads):
             return
         for t in threads:
-            if t is not None:
-                t.stop()
-                t.wait(2000)
+            self._retire(t)
         self._asr = None
         self._capture_thread = None
         self._worker = None
         log.info("Audio subtitle pipeline stopped")
         self.stopped.emit()
+
+    def _on_capture_error(self, _msg: str) -> None:
+        """Loopback capture died (no device, driver error) — tear the whole
+        pipeline down. Otherwise ASR+translate idle forever, the bar shows
+        'Đang nghe âm thanh…' indefinitely, and the next Alt+A reads as a
+        *stop* instead of a fresh start."""
+        self.stop()

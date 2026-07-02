@@ -101,6 +101,9 @@ class OpenRouterTranslator(Translator):
             self._client = OpenAI(
                 api_key=self._api_key,
                 base_url=_API_BASE,
+                # Bounded timeout so a dead connection errors out instead of
+                # pinning a QThreadPool slot forever ("Đang dịch…" hang).
+                timeout=30.0,
                 default_headers={
                     "HTTP-Referer": "https://github.com/transsnip",
                     "X-Title": "TransSnip",
