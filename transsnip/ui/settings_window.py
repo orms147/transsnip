@@ -17,6 +17,7 @@ from typing import Optional
 
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QKeySequence, QWheelEvent
+from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import (
     QComboBox,
     QCompleter,
@@ -751,8 +752,17 @@ class SettingsWindow(QWidget):
         for group_name, voices in _VOICE_GROUPS:
             for name, voice_id in voices:
                 self._voice_combo.addItem(f"{group_name} · {name}", voice_id)
+
+        # Output device: "" = follow the current Windows default (so plugging in
+        # headphones routes there automatically); or pin a specific device.
+        self._output_device_combo = _ComboBox()
+        self._output_device_combo.addItem("Mặc định hệ thống", "")
+        for dev in QMediaDevices.audioOutputs():
+            self._output_device_combo.addItem(dev.description(), dev.description())
+
         voice_form = QFormLayout()
         voice_form.addRow("Voice:", self._voice_combo)
+        voice_form.addRow("Thiết bị phát:", self._output_device_combo)
         layout.addLayout(voice_form)
 
         self._rate_slider = Slider(
@@ -883,6 +893,7 @@ class SettingsWindow(QWidget):
 
         # Voice
         _select_by_data(self._voice_combo, s.voice.voice)
+        _select_by_data(self._output_device_combo, s.voice.output_device)
         self._rate_slider.setValue(s.voice.rate)
         self._volume_slider.setValue(s.voice.volume)
         self._autoplay_toggle.setChecked(s.voice.autoplay_en)
@@ -952,6 +963,7 @@ class SettingsWindow(QWidget):
             volume=self._volume_slider.value(),
             autoplay_en=self._autoplay_toggle.isChecked(),
             cache_audio=self._cache_audio_toggle.isChecked(),
+            output_device=self._output_device_combo.currentData() or "",
         )
 
         # Audio
