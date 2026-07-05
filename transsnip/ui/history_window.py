@@ -81,6 +81,10 @@ class HistoryWindow(QWidget):
 
     # ── Public ───────────────────────────────────────────────────────────────
 
+    def set_output_device(self, description: str) -> None:
+        """Route replay audio to the user's chosen output device ("" = default)."""
+        self._tts.set_output_device(description)
+
     def open(self) -> None:
         self.refresh()
         self._center()

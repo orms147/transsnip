@@ -555,6 +555,7 @@ class AppController(QObject):
         if self._history_window is None:
             from transsnip.ui.history_window import HistoryWindow
             self._history_window = HistoryWindow(self._history)
+        self._history_window.set_output_device(self._settings.voice.output_device)
         self._history_window.open()
 
     @Slot()

@@ -28,13 +28,12 @@ from pathlib import Path
 from PySide6.QtCore import (
     QObject,
     QRunnable,
-    Qt,
     QThreadPool,
     QTimer,
     QUrl,
     Signal,
 )
-from PySide6.QtMultimedia import QAudioOutput, QMediaPlayer
+from PySide6.QtMultimedia import QAudioOutput, QMediaDevices, QMediaPlayer
 
 log = logging.getLogger(__name__)
 
@@ -94,6 +93,11 @@ class EdgeTTSPlayer(QObject):
         self._player = QMediaPlayer(self)
         self._audio_out = QAudioOutput(self)
         self._player.setAudioOutput(self._audio_out)
+        # Preferred output device by description; "" = current system default.
+        # QAudioOutput binds to the default AT CONSTRUCTION and does NOT follow
+        # later default changes, so we re-resolve on every speak() (see
+        # _apply_output_device) — that's what makes "plug in headphones" work.
+        self._output_device_desc: str = ""
         self._current_path: str | None = None
         # True from speak() until playback finishes/stops — lets the UI toggle
         # the speaker button (click again to stop). Covers the generating window
@@ -111,6 +115,35 @@ class EdgeTTSPlayer(QObject):
         self._player.mediaStatusChanged.connect(self._on_media_status)
         self._player.errorOccurred.connect(self._on_player_error)
 
+    def set_output_device(self, description: str) -> None:
+        """Pin playback to the device with this description ("" = system default).
+
+        Resolved fresh on each speak(), so changing this takes effect on the
+        next clip without rebuilding the player.
+        """
+        self._output_device_desc = (description or "").strip()
+
+    def _apply_output_device(self) -> None:
+        """Point the audio output at the preferred device, resolved NOW.
+
+        Empty preference → the current default (re-read each call so it tracks
+        the live Windows default). A pinned device that's no longer present
+        falls back to the default rather than going silent.
+        """
+        target = None
+        if self._output_device_desc:
+            for dev in QMediaDevices.audioOutputs():
+                if dev.description() == self._output_device_desc:
+                    target = dev
+                    break
+            if target is None:
+                log.info("TTS output device %r not found — using default",
+                         self._output_device_desc)
+        if target is None:
+            target = QMediaDevices.defaultAudioOutput()
+        if not target.isNull() and target != self._audio_out.device():
+            self._audio_out.setDevice(target)
+
     def speak(
         self,
         text: str,
@@ -124,6 +157,7 @@ class EdgeTTSPlayer(QObject):
             return
         # Stop whatever's playing and discard its temp file before starting.
         self._stop_and_cleanup()
+        self._apply_output_device()
         self._active = True
         self._last_text = text
         self._last_voice = voice

@@ -171,6 +171,11 @@ class VoiceSettings(BaseModel):
     autoplay_en: bool = False
     cache_audio: bool = True
     cache_max_mb: int = 100
+    # Output device by description (as QMediaDevices reports it). Empty = follow
+    # the current Windows default — so plugging in headphones (which become the
+    # new default) routes playback there. A non-empty value pins that device;
+    # if it's gone (unplugged) playback falls back to the default.
+    output_device: str = ""
 
 
 class AudioSettings(BaseModel):
