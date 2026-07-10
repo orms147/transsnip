@@ -637,6 +637,21 @@ class SettingsWindow(QWidget):
             row_layout.addWidget(reset_btn)
             layout.addWidget(row)
 
+        layout.addSpacing(8)
+        layout.addWidget(SectionHead(
+            "Chế độ game (ưu tiên cao)",
+            "Dành cho game toàn màn hình (Minecraft, ...) nuốt mất hotkey thường.",
+        ))
+        self._high_priority_toggle = ToggleRow(
+            "Hotkey ưu tiên cao + đóng băng màn hình khi chọn vùng",
+            "Bắt phím tắt bằng low-level hook — chặn phím trước khi game kịp nhận, "
+            "hoạt động cả khi app khác giữ tổ hợp. Khi chọn vùng dịch, màn hình được "
+            "chụp lại từ trước nên game fullscreen bị thu nhỏ vẫn dịch đúng khung hình. "
+            "Lưu ý: game chạy quyền Admin thì TransSnip cũng cần chạy quyền Admin.",
+        )
+        self._high_priority_toggle.setContentsMargins(12, 0, 12, 0)
+        layout.addWidget(self._high_priority_toggle)
+
         # Popup-behaviour toggles ("Click outside để đóng", "Esc đóng overlay")
         # live in the Display tab so all popup/overlay settings are in one place.
         layout.addStretch(1)
@@ -879,6 +894,7 @@ class SettingsWindow(QWidget):
         self._hotkey_editors["open_settings"].setKeySequence(
             QKeySequence(_hotkey_to_qt(s.hotkeys.open_settings))
         )
+        self._high_priority_toggle.setChecked(s.hotkeys.high_priority)
 
         # Display
         self._on_theme_picked(s.display.theme_mode)
@@ -938,6 +954,7 @@ class SettingsWindow(QWidget):
             video_subtitle_translate=_qt_to_hotkey(self._hotkey_editors["video_subtitle_translate"].keySequence()),
             audio_subtitle_translate=_qt_to_hotkey(self._hotkey_editors["audio_subtitle_translate"].keySequence()),
             open_settings=_qt_to_hotkey(self._hotkey_editors["open_settings"].keySequence()),
+            high_priority=self._high_priority_toggle.isChecked(),
         )
 
         # Display

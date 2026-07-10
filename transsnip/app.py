@@ -119,7 +119,14 @@ class AppController(QObject):
         self._about_dialog: "AboutDialog | None" = None  # type: ignore[name-defined]
         # Last region cached so the popup's error-state Retry button can
         # re-run the same capture flow without forcing the user to re-snipe.
+        # The companion image is the freeze-frame crop (gaming mode) — retry
+        # must reuse it, since the game may be minimized by the time the user
+        # clicks Retry and a fresh capture would grab the desktop.
         self._last_region_for_retry: QRect | None = None
+        self._last_region_image: Image.Image | None = None
+        # True while a deferred freeze-frame selector open is scheduled —
+        # guards hotkey double-taps from racing the compositor delay.
+        self._selector_start_pending = False
         # Per-fullscreen-session state: kept on `self` because OCR/translation
         # workers report back via signals, and we need to remember which blocks
         # and which monitor to paint when the translation eventually lands.
@@ -170,8 +177,24 @@ class AppController(QObject):
         if action_id == "region_translate":
             # Dismiss any popup from the previous translation so it doesn't sit
             # on top of the new selection overlay.
+            was_visible = self._popup.isVisible()
             self._popup.hide_popup()
-            self._region_selector.start()
+            if self._settings.hotkeys.high_priority:
+                # Gaming mode: freeze the screen BEFORE the selector steals
+                # focus — an exclusive-fullscreen game minimizes on focus loss,
+                # so a live view (and a post-selection capture) would show the
+                # desktop instead of the game. If the popup was up, give the
+                # compositor one beat to actually remove its pixels first.
+                # The pending guard stops a quick double-tap from re-entering
+                # with delay=0 (popup already hidden by press one) and baking
+                # still-composited popup pixels into the frozen frame.
+                if self._selector_start_pending or self._region_selector.isVisible():
+                    return
+                self._selector_start_pending = True
+                delay = _CAPTURE_DELAY_MS if was_visible else 0
+                QTimer.singleShot(delay, self._start_frozen_selector)
+            else:
+                self._region_selector.start()
         elif action_id == "fullscreen_translate":
             # Alt+F toggles the inline overlay: if one is visible, dismiss it;
             # otherwise start a fresh capture-OCR-translate cycle.
@@ -187,6 +210,11 @@ class AppController(QObject):
             # start by letting the user draw the subtitle region.
             if self._video.is_running():
                 self._stop_video()
+                return
+            if self._region_selector.isVisible():
+                # A region selection (possibly a frozen-frame Alt+T session)
+                # is in progress — don't silently re-route its result into
+                # the video loop.
                 return
             self._audio.stop()  # share one SubtitleBar — stop the other mode first
             self._popup.hide_popup()
@@ -207,6 +235,30 @@ class AppController(QObject):
 
     # ── Region translate flow ───────────────────────────────────────────────
 
+    def _start_frozen_selector(self) -> None:
+        """Deferred freeze-frame open of the region selector (gaming mode)."""
+        self._selector_start_pending = False
+        if self._region_selector.isVisible():
+            return  # start() would discard the frame anyway — skip the capture
+        frozen, monitor_rect = self._freeze_frame_or_none()
+        self._region_selector.start(frozen_image=frozen, frozen_rect=monitor_rect)
+
+    def _freeze_frame_or_none(self) -> tuple[Image.Image | None, QRect | None]:
+        """Pre-capture the cursor's monitor for freeze-frame region select.
+
+        Returns (frame, monitor_rect) — the rect pins WHICH monitor the frame
+        belongs to, so the selector opens on that monitor even if the cursor
+        hops to another (identically-sized) one while mss is grabbing.
+        Best-effort: a capture failure just degrades to the live selector
+        (same behavior as with the setting off) instead of blocking the flow.
+        """
+        monitor_rect = active_monitor_logical_rect()
+        try:
+            return capture_rect(monitor_rect), monitor_rect
+        except Exception:  # noqa: BLE001
+            log.exception("Freeze-frame capture failed — using live selector")
+            return None, None
+
     @Slot(QRect)
     def _on_region_selected(self, rect: QRect) -> None:
         # The region selector is shared between region-translate and video
@@ -215,9 +267,17 @@ class AppController(QObject):
             self._region_target = "translate"
             self._start_video_for_region(rect)
             return
-        # Cache the rect so the popup's error-state Retry button can re-run
-        # the same flow without forcing the user to re-snipe.
+        # Cache the rect (and the frozen crop, if any) so the popup's
+        # error-state Retry button can re-run the same flow without forcing
+        # the user to re-snipe — or re-capturing a game that's minimized now.
+        frozen = self._region_selector.frozen_crop(rect)
         self._last_region_for_retry = rect
+        self._last_region_image = frozen
+        if frozen is not None:
+            # Pixels were captured before the selector even appeared — there
+            # are no overlay pixels to wait out, start OCR immediately.
+            self._capture_and_ocr(rect, image=frozen)
+            return
         # Defer BOTH popup show and capture by _CAPTURE_DELAY_MS — see the
         # mentor doc 90 postmortem for why showing the popup before capture
         # leaks "Đang nhận diện…" pixels into the OCR input.
@@ -286,15 +346,18 @@ class AppController(QObject):
         self._subtitle_bar.stop()
         self._notify("Audio subtitle: đã dừng.")
 
-    def _capture_and_ocr(self, rect: QRect) -> None:
-        try:
-            image = capture_rect(rect)
-        except Exception as exc:  # noqa: BLE001
-            log.exception("Capture failed")
-            # Show popup now just to surface the error to the user.
-            self._popup.show_for_region(rect)
-            self._popup.show_error(f"capture — {exc}")
-            return
+    def _capture_and_ocr(self, rect: QRect, image: Image.Image | None = None) -> None:
+        # `image` is the freeze-frame crop in gaming mode — the screen content
+        # at hotkey time, already safe from our own UI. Live mode captures now.
+        if image is None:
+            try:
+                image = capture_rect(rect)
+            except Exception as exc:  # noqa: BLE001
+                log.exception("Capture failed")
+                # Show popup now just to surface the error to the user.
+                self._popup.show_for_region(rect)
+                self._popup.show_error(f"capture — {exc}")
+                return
 
         log.debug("Captured image: %dx%d", image.width, image.height)
 
@@ -566,7 +629,7 @@ class AppController(QObject):
         with no OCR context to retry from).
         """
         if self._last_region_for_retry is not None:
-            self._capture_and_ocr(self._last_region_for_retry)
+            self._capture_and_ocr(self._last_region_for_retry, image=self._last_region_image)
 
     @Slot(object, str)
     def _on_popup_lang_changed(self, source_lang, target_lang: str) -> None:
@@ -608,6 +671,11 @@ class AppController(QObject):
         # Drop the cached transcriber so a changed Whisper tier / source-lang
         # takes effect on the next Alt+A (rebuilt lazily in _start_audio).
         self._transcriber = None
+        # Frozen-crop reuse on Retry only makes sense while gaming mode is on
+        # (the game may be minimized); once it's off, Retry should re-capture
+        # live pixels like it always did.
+        if not self._settings.hotkeys.high_priority:
+            self._last_region_image = None
         self._popup.set_voice_settings(self._settings.voice)
         self._popup.set_display_mode(self._settings.translate.display_mode)
         self._popup.set_click_outside_close(self._settings.display.click_outside_close)
@@ -620,6 +688,16 @@ class AppController(QObject):
                 self._notify(
                     f"Không đăng ký được hotkey: {labels} — có thể app khác đang giữ tổ hợp này. "
                     "Hãy chọn tổ hợp khác trong Settings."
+                )
+            if (
+                self._settings.hotkeys.high_priority
+                and not self._hotkey_manager.high_priority_active()
+            ):
+                # Toggle is on but the hook didn't come up — without this the
+                # user believes gaming mode is protecting their hotkeys while
+                # only the normal RegisterHotKey path is actually running.
+                self._notify(
+                    "Không bật được hotkey ưu tiên cao — hotkey vẫn chạy ở chế độ thường."
                 )
         log.info(
             "Settings reloaded — provider=%s target=%s",

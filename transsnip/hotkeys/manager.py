@@ -14,6 +14,13 @@ failing silently.
 Behavioral difference from the old backend: a registered combo is consumed by
 the OS (the focused app no longer sees it) — the desired behavior for
 launcher-style hotkeys like Alt+T.
+
+High-priority mode (settings → hotkeys.high_priority) additionally runs a
+WH_KEYBOARD_LL hook (see ll_hook.py) IN PARALLEL with RegisterHotKey: the
+hook sees keystrokes before the system's hotkey matching and before
+fullscreen games, and swallowing a matched keydown means WM_HOTKEY is never
+generated — so both backends stay armed with no double-fire, and either one
+dying leaves the other delivering.
 """
 from __future__ import annotations
 
@@ -31,7 +38,14 @@ from PySide6.QtCore import (
     Signal,
 )
 
+from transsnip.hotkeys.ll_hook import LowLevelHotkeyHook
+
 log = logging.getLogger(__name__)
+
+# Watchdog period for the high-priority hook. Windows silently removes an LL
+# hook whose callback overruns; re-installing on this cadence resurrects it.
+# RegisterHotKey covers any gap, so this doesn't need to be aggressive.
+_HOOK_REFRESH_MS = 30_000
 
 
 DEFAULT_BINDINGS: Final[dict[str, str]] = {
@@ -159,6 +173,18 @@ class HotkeyManager(QObject):
         self._bindings: dict[str, tuple[str, int]] = {}  # action_id -> (hotkey, hk_id)
         self._by_id: dict[int, str] = {}
         self._next_id = 1
+        # Every action whose hotkey PARSED, keyed to (MOD_* flags sans
+        # NOREPEAT, vk) — superset of _bindings, because the high-priority
+        # hook can serve a combo RegisterHotKey was refused (already owned by
+        # another app: the hook runs first and swallows, so we win anyway).
+        self._wanted: dict[str, tuple[int, int]] = {}
+        self._hook: LowLevelHotkeyHook | None = None
+        self._hook_timer: QTimer | None = None
+        # apply_from_settings rebinds ~10 actions; without batching, each
+        # unbind/bind would push a partial table to the live hook — leaving a
+        # window where NEITHER backend covers a combo (RegisterHotKey already
+        # unregistered, hook table emptied) and re-arming held keys.
+        self._suppress_hook_push = False
         self._filter = _WmHotkeyFilter(self)
         app = QCoreApplication.instance()
         if app is not None:
@@ -181,6 +207,10 @@ class HotkeyManager(QObject):
         except ValueError:
             log.exception("Unparseable hotkey %r for %r", hotkey, action_id)
             return False
+        # Parsed OK — the high-priority hook can serve it even when
+        # RegisterHotKey below is refused.
+        self._wanted[action_id] = (mods & ~_MOD_NOREPEAT, vk)
+        self._push_combos_to_hook()
         hk_id = self._next_id
         if not _user32.RegisterHotKey(None, hk_id, mods, vk):
             log.error(
@@ -197,6 +227,8 @@ class HotkeyManager(QObject):
         return True
 
     def unbind(self, action_id: str) -> None:
+        if self._wanted.pop(action_id, None) is not None:
+            self._push_combos_to_hook()
         entry = self._bindings.pop(action_id, None)
         if entry is None:
             return
@@ -206,7 +238,7 @@ class HotkeyManager(QObject):
             _user32.UnregisterHotKey(None, hk_id)
 
     def unbind_all(self) -> None:
-        for action_id in list(self._bindings):
+        for action_id in list(self._wanted.keys() | self._bindings.keys()):
             self.unbind(action_id)
 
     def bindings(self) -> dict[str, str]:
@@ -224,22 +256,145 @@ class HotkeyManager(QObject):
         skipped so a user can deliberately disable a hotkey.
 
         Returns the action_ids that failed to bind, so callers can retry or
-        surface the failure to the user.
+        surface the failure to the user. An action RegisterHotKey refused but
+        the running high-priority hook covers is NOT reported as failed — the
+        hook fires it regardless of who owns the OS registration.
 
         `hotkeys` is typed loosely (no `HotkeySettings` import here) to avoid
         a circular import between the hotkeys and config layers.
         """
-        self.unbind_all()
-        failed: list[str] = []
-        for action_id in DEFAULT_BINDINGS:
-            value = getattr(hotkeys, action_id, "") or ""
-            value = value.strip().lower()
-            if not value:
-                log.info("Hotkey %s left unbound (user-disabled)", action_id)
-                continue
-            if not self.bind(action_id, value):
-                failed.append(action_id)
+        # Batch the hook update: keep the live hook serving the OLD table for
+        # the whole rebind, then push the new table once — no window where a
+        # combo is covered by neither backend.
+        self._suppress_hook_push = True
+        try:
+            self.unbind_all()
+            failed = []
+            for action_id in DEFAULT_BINDINGS:
+                value = getattr(hotkeys, action_id, "") or ""
+                value = value.strip().lower()
+                if not value:
+                    log.info("Hotkey %s left unbound (user-disabled)", action_id)
+                    continue
+                if not self.bind(action_id, value):
+                    failed.append(action_id)
+        finally:
+            self._suppress_hook_push = False
+        self._push_combos_to_hook()
+        self.set_high_priority(bool(getattr(hotkeys, "high_priority", False)))
+        if self.high_priority_active():
+            # Suppress only actions the hook actually serves — with duplicate
+            # combos, first-wins means the losing action is NOT covered and
+            # its failure must still reach the user.
+            combos = self._hook_combos()
+            covered = [
+                aid for aid in failed
+                if aid in self._wanted and combos.get(self._wanted[aid]) == aid
+            ]
+            if covered:
+                log.info(
+                    "RegisterHotKey refused %s but the high-priority hook covers them",
+                    covered,
+                )
+            failed = [aid for aid in failed if aid not in covered]
         return failed
+
+    def unregistered_actions(self) -> list[str]:
+        """Parsed actions with no live RegisterHotKey registration.
+
+        The high-priority hook may serve them right now, but they have no
+        WM_HOTKEY fallback if it dies — __main__'s startup backoff keeps
+        re-applying while this is non-empty so transient login-time refusals
+        get registered eventually.
+        """
+        return [aid for aid in self._wanted if aid not in self._bindings]
+
+    # ── High-priority (low-level hook) backend ──────────────────────────────
+
+    def set_high_priority(self, enabled: bool) -> bool:
+        """Start/stop the WH_KEYBOARD_LL backend next to RegisterHotKey.
+
+        Returns whether the requested state is in effect (False = the hook
+        failed to install; RegisterHotKey keeps working alone).
+        """
+        if not enabled:
+            if self._hook_timer is not None:
+                self._hook_timer.stop()
+            if self._hook is not None:
+                self._hook.stop()
+                self._hook = None
+                log.info("High-priority hotkey hook stopped")
+            return True
+        if self._hook is not None:
+            if self._hook.is_running():
+                self._push_combos_to_hook()
+                return True
+            # Alive-but-broken (thread died / install lost): stop it fully
+            # before building a replacement, or its message-loop thread and
+            # queue leak for the life of the process.
+            self._hook.stop()
+            self._hook = None
+        # `triggered` may be emitted from the hook thread: the receiver lives
+        # on the main thread, so Qt auto-queues the delivery — same path the
+        # WM_HOTKEY dispatch takes, just from another thread.
+        self._hook = LowLevelHotkeyHook(self.triggered.emit)
+        if not self._hook.start():
+            log.error("High-priority hook failed to install — RegisterHotKey only")
+            self._hook = None
+            return False
+        self._push_combos_to_hook()
+        if self._hook_timer is None:
+            self._hook_timer = QTimer(self)
+            self._hook_timer.setInterval(_HOOK_REFRESH_MS)
+            self._hook_timer.timeout.connect(self._refresh_hook)
+        self._hook_timer.start()
+        log.info("High-priority hotkey hook installed (%d combos)", len(self._wanted))
+        return True
+
+    def high_priority_active(self) -> bool:
+        return self._hook is not None and self._hook.is_running()
+
+    def shutdown(self) -> None:
+        """Full teardown on app quit: OS registrations + hook thread."""
+        self.unbind_all()
+        self.set_high_priority(False)
+
+    def _hook_combos(self) -> dict[tuple[int, int], str]:
+        """(mods, vk) → action_id with FIRST-wins on duplicate combos.
+
+        RegisterHotKey gives a duplicated combo to whichever action bound
+        first; the hook must agree, or the same keystroke would fire one
+        action while the hook is alive and a different one when WM_HOTKEY
+        takes over. (dict comprehension inversion would be last-wins.)
+        """
+        combos: dict[tuple[int, int], str] = {}
+        for aid, combo in self._wanted.items():
+            combos.setdefault(combo, aid)
+        return combos
+
+    def _push_combos_to_hook(self) -> None:
+        if self._hook is not None and not self._suppress_hook_push:
+            self._hook.set_combos(self._hook_combos())
+
+    def _refresh_hook(self) -> None:
+        """Watchdog tick: health-check, not just a blind refresh.
+
+        A hook whose THREAD died (or never recovered an install) reports
+        is_running() False and refresh() alone could never bring it back —
+        rebuild it here, otherwise high-priority mode stays silently dead
+        until the user happens to re-save settings.
+        """
+        if self._hook is None:
+            return
+        if self._hook.is_running():
+            self._hook.refresh()
+            return
+        log.warning("High-priority hook found dead by watchdog — restarting")
+        self._hook.stop()
+        if self._hook.start():
+            self._push_combos_to_hook()
+        else:
+            log.error("High-priority hook restart failed — will retry next tick")
 
     def _dispatch(self, hk_id: int) -> None:
         action_id = self._by_id.get(hk_id)

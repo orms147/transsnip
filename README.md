@@ -31,6 +31,8 @@ TransSnip lives in the system tray and stays out of your way until you call it.
 
 > Hotkeys are global — they work even while another app has focus, and can be changed in **Settings → Hotkeys**.
 >
+> **Playing fullscreen games?** Turn on **Settings → Hotkeys → Chế độ game (ưu tiên cao)**. It catches the hotkey with a low-level keyboard hook (before the game — or any other app that grabbed the combo — sees it) and freezes the screen the moment you press `Alt+T`, so a game that minimizes on focus loss still gets snipped from the correct frame. If the game runs as Administrator, run TransSnip as Administrator too. For exclusive-fullscreen titles, borderless/windowed fullscreen still gives the smoothest overlay experience.
+>
 > **Audio subtitle** is optional + heavier: install the extra (`pip install -e ".[audio]"`), then just press **Alt+A** (no enable flag — pressing it is the opt-in). On first use it downloads a Whisper model (~460 MB for `small`) to `%APPDATA%\transsnip\whisper-models`. Runs on-device: CPU by default (~3–8 s latency), or an NVIDIA GPU automatically if CUDA libs are present (`pip install nvidia-cublas-cu12 nvidia-cudnn-cu12`). Pick the model size in **Settings → Audio**. Not bundled in the default installer.
 
 ## Features

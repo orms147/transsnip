@@ -37,6 +37,16 @@ class HotkeySettings(BaseModel):
     video_subtitle_translate: str = "alt+v"
     audio_subtitle_translate: str = "alt+a"
     open_settings: str = "ctrl+alt+s"
+    # "Gaming" mode for fullscreen games (Minecraft, ...) where the normal
+    # RegisterHotKey path effectively dies. Enables two things:
+    #   1. A WH_KEYBOARD_LL hook running next to RegisterHotKey — catches the
+    #      combo before the game / other hotkey owners see it (hotkeys/ll_hook.py).
+    #   2. Freeze-frame region select — the monitor is captured BEFORE the
+    #      selector steals focus, so an exclusive-fullscreen game minimizing
+    #      on focus loss doesn't leave the user snipping their desktop.
+    # Off by default: the hook is a per-keystroke system-wide callback, only
+    # worth running when the user actually plays fullscreen games.
+    high_priority: bool = False
 
 
 class TranslateSettings(BaseModel):
@@ -200,9 +210,9 @@ class Settings(BaseModel):
     display: DisplaySettings = Field(default_factory=DisplaySettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     audio: AudioSettings = Field(default_factory=AudioSettings)
-    # v5: added AudioSettings (Whisper audio-subtitle). No migration needed —
-    # Pydantic fills the all-default sub-model, so v4 settings.json loads fine.
-    schema_version: int = 5
+    # v6: added hotkeys.high_priority (gaming mode). No migration needed —
+    # Pydantic fills the missing bool with its default, so v5 loads fine.
+    schema_version: int = 6
 
 
 def get_preset(settings: Settings, name: str) -> PresetSettings:

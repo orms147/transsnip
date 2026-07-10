@@ -19,6 +19,23 @@ def test_json_round_trip():
     assert restored.translate.target_lang == "ja"
 
 
+def test_high_priority_default_off_and_round_trip():
+    s = Settings()
+    assert s.hotkeys.high_priority is False  # gaming mode is opt-in
+    s.hotkeys.high_priority = True
+    restored = Settings.model_validate_json(s.model_dump_json())
+    assert restored.hotkeys.high_priority is True
+
+
+def test_v5_settings_load_without_high_priority():
+    # A pre-v6 settings.json has no hotkeys.high_priority — must load with
+    # the default instead of failing validation.
+    raw = '{"schema_version": 5, "hotkeys": {"region_translate": "alt+r"}}'
+    s = Settings.model_validate_json(raw)
+    assert s.hotkeys.region_translate == "alt+r"
+    assert s.hotkeys.high_priority is False
+
+
 def test_extra_keys_ignored():
     # Old settings.json with removed fields must still load (forward/back compat).
     raw = '{"translate": {"provider": "gemini", "overlay_style": "gone"}}'

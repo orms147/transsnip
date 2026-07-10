@@ -148,14 +148,24 @@ def main() -> int:
 
     def _apply_hotkeys(attempt: int = 0) -> None:
         failed = hotkeys.apply_from_settings(controller.settings.hotkeys)
-        if failed and attempt < len(_retry_delays_ms):
+        # Retry not only on user-visible failures: also while combos lack an
+        # OS registration (the gaming-mode hook may be masking a transient
+        # login-time refusal, but they'd have no WM_HOTKEY fallback if the
+        # hook dies) and while the hook itself failed to install.
+        gaps = sorted(set(failed) | set(hotkeys.unregistered_actions()))
+        if controller.settings.hotkeys.high_priority and not hotkeys.high_priority_active():
+            gaps.append("high-priority-hook")
+        if gaps and attempt < len(_retry_delays_ms):
             logging.getLogger("transsnip").warning(
-                "Hotkeys failed to bind: %s — retrying in %dms", failed, _retry_delays_ms[attempt]
+                "Hotkeys not fully established: %s — retrying in %dms",
+                gaps, _retry_delays_ms[attempt],
             )
             QTimer.singleShot(_retry_delays_ms[attempt], lambda: _apply_hotkeys(attempt + 1))
 
     _apply_hotkeys()
-    app.aboutToQuit.connect(hotkeys.unbind_all)
+    # shutdown (not just unbind_all): also stops the high-priority hook thread
+    # so a WH_KEYBOARD_LL hook never outlives the Qt event loop.
+    app.aboutToQuit.connect(hotkeys.shutdown)
 
     return app.exec()
 

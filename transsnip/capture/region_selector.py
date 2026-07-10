@@ -9,11 +9,19 @@ Snipping-tool style overlay with the design's polish:
 Emits the same `selected(QRect)` / `cancelled()` signals as before so
 `AppController` doesn't need to change. Coordinates are global Qt logical
 pixels (via `mapToGlobal`) — DPI conversion lives in `capture/screen.py`.
+
+Freeze-frame mode (high-priority/gaming setting): `start(frozen_image=...)`
+paints a screenshot taken BEFORE the overlay appeared as the backdrop, and
+`frozen_crop()` later cuts the selection out of that frame instead of
+re-capturing. Needed for exclusive-fullscreen games: stealing focus for the
+overlay minimizes them (GLFW auto-iconify et al.), so a live capture after
+selection would grab the desktop, not the game.
 """
 from __future__ import annotations
 
 import logging
 
+from PIL import Image
 from PySide6.QtCore import QPoint, QRect, QRectF, Qt, Signal
 from PySide6.QtGui import (
     QColor,
@@ -21,11 +29,13 @@ from PySide6.QtGui import (
     QFont,
     QFontMetrics,
     QGuiApplication,
+    QImage,
     QKeyEvent,
     QMouseEvent,
     QPainter,
     QPaintEvent,
     QPen,
+    QPixmap,
 )
 from PySide6.QtWidgets import QWidget
 
@@ -42,6 +52,30 @@ _GUIDE_DASH = (4, 4)
 _GUIDE_WIDTH = 1
 _READOUT_OFFSET = 10        # gap between selection corner and readout pill
 _HINT_TOP_INSET = 24
+
+
+def frozen_crop_box(
+    monitor_rect: QRect, sel_rect: QRect, dpr: float, img_w: int, img_h: int
+) -> tuple[int, int, int, int] | None:
+    """Selection rect (logical, global) → PIL crop box inside the frozen frame.
+
+    Mirrors `capture_rect`'s logical→physical conversion exactly — each global
+    coordinate is scaled THEN truncated, so the crop matches what a live
+    capture of the same rect would have grabbed, pixel for pixel. Clamped to
+    the image; returns None if nothing usable remains (selection entirely
+    off-monitor).
+    """
+    left = int(sel_rect.x() * dpr) - int(monitor_rect.x() * dpr)
+    top = int(sel_rect.y() * dpr) - int(monitor_rect.y() * dpr)
+    right = left + int(sel_rect.width() * dpr)
+    bottom = top + int(sel_rect.height() * dpr)
+    left = max(0, min(left, img_w))
+    top = max(0, min(top, img_h))
+    right = max(left, min(right, img_w))
+    bottom = max(top, min(bottom, img_h))
+    if right - left < 1 or bottom - top < 1:
+        return None
+    return left, top, right, bottom
 
 
 class RegionSelector(QWidget):
@@ -75,15 +109,36 @@ class RegionSelector(QWidget):
         self._end: QPoint | None = None
         self._hover: QPoint | None = None
         self._dpr_label: str = ""
+        # Freeze-frame state — set per start(), None in live mode.
+        self._frozen_image: Image.Image | None = None
+        self._frozen_pixmap: QPixmap | None = None
+        self._frozen_monitor: QRect | None = None
+        self._frozen_dpr: float = 1.0
 
-    def start(self) -> None:
+    def start(
+        self,
+        frozen_image: Image.Image | None = None,
+        frozen_rect: QRect | None = None,
+    ) -> None:
+        """Show the selector. `frozen_image` (a `capture_rect` of a monitor,
+        physical pixels) switches to freeze-frame mode: it becomes the painted
+        backdrop and the source `frozen_crop()` cuts from. `frozen_rect` is
+        the logical rect of the monitor that frame was captured FROM — it
+        pins the selector to that monitor, since re-resolving the cursor here
+        could pick a different (identically-sized, so the size guard can't
+        tell) monitor if the cursor hopped mid-capture.
+        """
         if self.isVisible():
             log.debug("Region selector already visible — ignoring re-trigger")
             return
         # Cover the monitor the CURSOR is on, not always the primary — the
         # user aims at the screen they're about to snip (Alt+F already picks
         # its monitor the same way via active_monitor_logical_rect).
-        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        screen = None
+        if frozen_image is not None and frozen_rect is not None:
+            screen = QGuiApplication.screenAt(frozen_rect.center())
+        if screen is None:
+            screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
         if screen is None:
             log.error("No screen available")
             self.cancelled.emit()
@@ -92,6 +147,7 @@ class RegionSelector(QWidget):
         self._end = None
         self._hover = None
         self._dpr_label = f"{screen.devicePixelRatio():.1f}×"
+        self._set_frozen(frozen_image, screen)
         self.setGeometry(screen.geometry())
         self.showFullScreen()
         self.raise_()
@@ -102,6 +158,56 @@ class RegionSelector(QWidget):
         # (mouse still works, which made the bug look like "Esc is broken").
         force_foreground(self)
         self.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _set_frozen(self, image: Image.Image | None, screen) -> None:
+        """Adopt (or clear) the freeze-frame backdrop for this session.
+
+        The frame was captured against the cursor's monitor a moment before
+        start() — if the cursor hopped monitors in between, its size won't
+        match this screen and painting/cropping it would be garbage, so a
+        mismatched frame degrades to live mode instead.
+        """
+        self._frozen_image = None
+        self._frozen_pixmap = None
+        self._frozen_monitor = None
+        if image is None:
+            return
+        geo = screen.geometry()
+        dpr = float(screen.devicePixelRatio())
+        expected = (int(geo.width() * dpr), int(geo.height() * dpr))
+        if (image.width, image.height) != expected:
+            log.warning(
+                "Frozen frame %s doesn't match screen %s — falling back to live view",
+                (image.width, image.height), expected,
+            )
+            return
+        rgb = image.convert("RGB")
+        qimg = QImage(
+            rgb.tobytes(), rgb.width, rgb.height, rgb.width * 3,
+            QImage.Format.Format_RGB888,
+        )
+        pixmap = QPixmap.fromImage(qimg)  # deep-copies, buffer can die after
+        pixmap.setDevicePixelRatio(dpr)   # physical→logical mapping when drawn
+        self._frozen_image = image
+        self._frozen_pixmap = pixmap
+        self._frozen_monitor = QRect(geo)
+        self._frozen_dpr = dpr
+
+    def frozen_crop(self, global_rect: QRect) -> Image.Image | None:
+        """Cut `global_rect` (logical, global) out of the frozen frame.
+
+        None in live mode — the caller then captures the screen as before.
+        """
+        if self._frozen_image is None or self._frozen_monitor is None:
+            return None
+        box = frozen_crop_box(
+            self._frozen_monitor, global_rect, self._frozen_dpr,
+            self._frozen_image.width, self._frozen_image.height,
+        )
+        if box is None:
+            log.warning("Selection %s fell outside the frozen frame", global_rect)
+            return None
+        return self._frozen_image.crop(box)
 
     def _current_rect(self) -> QRect | None:
         if self._origin is None or self._end is None:
@@ -116,6 +222,12 @@ class RegionSelector(QWidget):
         try:
             painter.setRenderHint(QPainter.RenderHint.Antialiasing)
             painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+
+            # Freeze-frame backdrop: the pre-captured screen replaces the live
+            # view (which may already show a minimized game's desktop). The
+            # pixmap carries its devicePixelRatio, so (0,0) fills the widget.
+            if self._frozen_pixmap is not None:
+                painter.drawPixmap(0, 0, self._frozen_pixmap)
 
             tint = QColor(0, 0, 0, _TINT_ALPHA)
             full = self.rect()
@@ -318,3 +430,9 @@ class RegionSelector(QWidget):
         else:
             log.info("Region selected: %s", result)
             self.selected.emit(result)
+        # Same-thread signal delivery is synchronous, so any frozen_crop()
+        # the slot needed has already happened — drop the frame (a 4K monitor
+        # is ~33MB) instead of holding it until the next session.
+        self._frozen_image = None
+        self._frozen_pixmap = None
+        self._frozen_monitor = None
