@@ -198,7 +198,7 @@ class OCREngine(ABC):
     """Common interface for every OCR backend.
 
     Implementations must be thread-safe for `recognize()` — they are invoked from
-    a worker thread (see `transsnip/ocr/worker.py`).
+    a worker thread (see `transsnip/utils/workers.py`).
     """
 
     name: str = "unknown"
@@ -218,3 +218,6 @@ class OCREngine(ABC):
     def is_available(self) -> bool:
         """Whether the engine can run right now (DLLs present, models loaded, ...)."""
         return True
+
+    def warm_up(self, lang: str | None = None) -> None:  # noqa: B027 — optional hook
+        """Pay one-time init costs ahead of the first real call (default: none)."""

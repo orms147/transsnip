@@ -25,6 +25,8 @@ def sapi_available() -> bool:
     if sys.platform != "win32":
         return False
     try:
+        from transsnip.utils.win_dll import preload_msvcp140
+        preload_msvcp140()  # before any winrt import — see utils/win_dll.py
         import winrt.windows.media.speechsynthesis
         import winrt.windows.storage.streams  # noqa: F401
         return True

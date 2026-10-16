@@ -7,6 +7,7 @@ import sys
 from PIL import Image, ImageEnhance, ImageFilter
 
 from transsnip.ocr.base import OCRBlock, OCREngine, OCRError, OCRResult, _join_blocks_smart
+from transsnip.utils.win_dll import preload_msvcp140
 
 log = logging.getLogger(__name__)
 
@@ -90,6 +91,9 @@ class WindowsOCR(OCREngine):
     def _try_import() -> bool:
         if sys.platform != "win32":
             return False
+        # Must precede the first winrt import — see utils/win_dll.py (winrt's
+        # bundled msvcp140 otherwise breaks onnxruntime / RapidOCR later).
+        preload_msvcp140()
         try:
             import winrt.windows.media.ocr  # noqa: F401
             return True

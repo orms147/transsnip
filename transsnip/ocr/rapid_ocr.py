@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import importlib.util
 import logging
+import threading
 from typing import Any
 
 from PIL import Image
@@ -34,8 +36,12 @@ class RapidOCREngine(OCREngine):
       selected per source language by `rec_for_lang()`.
 
     A separate `rapidocr.RapidOCR` instance is built per script family (each
-    bundles its own det + rec) and cached for the process lifetime. Cold start
-    is ~1-2s per family on first use; subsequent calls are ~300-800ms on CPU.
+    bundles its own det + rec) and cached for the process lifetime. Measured
+    cold start: ~550 ms to import rapidocr + onnxruntime (~115 MB RSS), then
+    ~220 ms to build a family's sessions; warm calls are ~20-100 ms per region.
+    Neither is paid at app start: the SDK is only probed (not imported) here,
+    and `warm_up()` pre-builds the family in the background when this engine
+    is the one that will serve the configured source language.
     """
 
     name = "rapid"
@@ -44,18 +50,25 @@ class RapidOCREngine(OCREngine):
         # One engine per recognition family ("ch" / "korean" / "latin"),
         # built lazily on first use of that family.
         self._engines: dict[str, Any] = {}
+        # Guards lazy construction: a background warm-up and a user's first
+        # snip can race to build the same family (doubling the ~220 ms build
+        # and the memory). Recognition itself runs outside the lock —
+        # onnxruntime sessions are safe to run concurrently.
+        self._build_lock = threading.Lock()
         self._import_ok = self._try_import()
 
     @staticmethod
     def _try_import() -> bool:
-        try:
-            import rapidocr  # noqa: F401
-            return True
-        except ImportError:
+        # find_spec, not import: importing rapidocr + onnxruntime costs ~0.5 s
+        # and ~115 MB at app start, even on machines where Windows OCR serves
+        # every capture and this fallback never runs.
+        ok = all(importlib.util.find_spec(m) is not None for m in ("rapidocr", "onnxruntime"))
+        if not ok:
             log.warning(
-                "rapidocr not installed — RapidOCR disabled. Run: pip install rapidocr"
+                "rapidocr/onnxruntime not installed — RapidOCR disabled. "
+                "Run: pip install rapidocr onnxruntime"
             )
-            return False
+        return ok
 
     def is_available(self) -> bool:
         # Also require the bundled models to be present — a checkout that never
@@ -78,7 +91,13 @@ class RapidOCREngine(OCREngine):
         cached = self._engines.get(rec.lang_type)
         if cached is not None:
             return cached
+        with self._build_lock:
+            cached = self._engines.get(rec.lang_type)
+            if cached is None:
+                cached = self._engines[rec.lang_type] = self._build_engine(rec)
+        return cached
 
+    def _build_engine(self, rec: RecModel) -> Any:
         from rapidocr import LangRec, ModelType, OCRVersion, RapidOCR
 
         mdir = models_dir()
@@ -115,8 +134,21 @@ class RapidOCREngine(OCREngine):
             "Rec.lang_type": LangRec(rec.lang_type),
         })
         log.info("RapidOCR engine ready for family '%s' (%s)", rec.lang_type, rec.model)
-        self._engines[rec.lang_type] = engine
         return engine
+
+    def warm_up(self, lang: str | None = None) -> None:
+        """Build the family for `lang` and run one tiny inference.
+
+        One real call matters: sessions/kernels initialise lazily, so building
+        alone leaves part of the cold cost on the user's first snip.
+        """
+        if not self.is_available():
+            return
+        from PIL import ImageDraw
+
+        img = Image.new("RGB", (160, 40), "white")
+        ImageDraw.Draw(img).text((8, 12), "Warm up 123", fill="black")
+        self.recognize(img, lang)
 
     def recognize(self, image: Image.Image, lang: str | None = None) -> OCRResult:
         if not self._import_ok:

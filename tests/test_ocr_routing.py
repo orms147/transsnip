@@ -29,3 +29,41 @@ def test_lang_matches_primary_subtag():
 
 def test_lang_matches_negative():
     assert _lang_matches("ko", {"en-US", "ja"}) is False
+
+
+class _Engine:
+    def __init__(self, name, langs, available=True):
+        from transsnip.ocr.base import OCRResult
+        self.name, self._langs, self._available = name, langs, available
+        self.warmed: list[str | None] = []
+        self._result = OCRResult(engine=name)
+
+    def is_available(self):
+        return self._available
+
+    def supported_languages(self):
+        return self._langs
+
+    def warm_up(self, lang=None):
+        self.warmed.append(lang)
+
+
+def _pipeline(*engines):
+    from transsnip.ocr.registry import OCRPipeline
+    return OCRPipeline(list(engines))
+
+
+def test_warm_up_targets_first_engine_that_serves_the_language():
+    win = _Engine("windows", {"en-US", "ja"})
+    rapid = _Engine("rapid", {"zh", "ko", "en", "ja"})
+    p = _pipeline(win, rapid)
+    p.warm_up("ko")          # no Windows pack → fallback is what runs
+    p.warm_up("en")          # Windows serves it → only Windows "warms" (a no-op there)
+    assert rapid.warmed == ["ko"]
+    assert win.warmed == ["en"]
+
+
+def test_warm_up_skips_unavailable_and_swallows_errors():
+    broken = _Engine("rapid", {"ko"})
+    broken.warm_up = lambda lang=None: (_ for _ in ()).throw(RuntimeError("boom"))
+    _pipeline(_Engine("windows", {"ko"}, available=False), broken).warm_up("ko")

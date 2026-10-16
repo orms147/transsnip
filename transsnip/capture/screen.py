@@ -9,6 +9,9 @@ from PySide6.QtGui import QCursor, QGuiApplication
 
 log = logging.getLogger(__name__)
 
+# mss 10 renamed the factory (`mss.mss` now warns it'll be removed).
+_MSS = getattr(mss, "MSS", None) or mss.mss
+
 
 def _device_pixel_ratio(rect: QRect | None = None) -> float:
     """DPR of the screen containing `rect` (its center), not always the primary.
@@ -56,6 +59,6 @@ def capture_rect(rect: QRect, *, dpr: float | None = None) -> Image.Image:
         "height": int(rect.height() * dpr),
     }
     log.debug("Capturing %s (dpr=%.2f) -> monitor=%s", rect, dpr, monitor)
-    with mss.mss() as sct:
+    with _MSS() as sct:
         raw = sct.grab(monitor)
         return Image.frombytes("RGB", (raw.width, raw.height), raw.rgb)

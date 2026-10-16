@@ -43,6 +43,9 @@ log = logging.getLogger(__name__)
 # Tiny delay between hiding the region overlay and grabbing pixels. Without it,
 # the OS may still be compositing the (now-hidden) overlay into the next frame.
 _CAPTURE_DELAY_MS = 80
+# Background OCR warm-up runs this long after start, so it doesn't compete
+# with building the tray/UI.
+_WARM_UP_DELAY_MS = 1500
 
 
 class AppController(QObject):
@@ -156,6 +159,7 @@ class AppController(QObject):
         self._tray.fullscreen_translate_triggered.connect(
             lambda: self.handle_hotkey("fullscreen_translate")
         )
+        QTimer.singleShot(_WARM_UP_DELAY_MS, self._warm_up_ocr)
 
     @property
     def settings(self) -> Settings:
@@ -632,6 +636,7 @@ class AppController(QObject):
         t.target_lang = target_lang
         save_settings(self._settings)
         self._translation_ctx = _build_translation_ctx(self._settings)
+        self._warm_up_ocr()
         log.info("Popup lang pair changed: %s -> %s", source_lang or "auto", target_lang)
         text = self._popup.last_source_text().strip()
         if text:
@@ -652,6 +657,7 @@ class AppController(QObject):
         self._settings = load_settings()
         self._translation_pipeline = pipeline_from_settings(self._settings)
         self._translation_ctx = _build_translation_ctx(self._settings)
+        self._warm_up_ocr()
         # Drop the cached transcriber so a changed Whisper tier / source-lang
         # takes effect on the next Alt+A (rebuilt lazily in _start_audio).
         self._transcriber = None
@@ -721,6 +727,14 @@ class AppController(QObject):
         except Exception as exc:  # noqa: BLE001
             log.debug("Toast failed, falling back to tray: %s", exc)
             self._notify("Settings đã lưu.")
+
+    def _warm_up_ocr(self) -> None:
+        """Pre-build whichever OCR engine will serve the source language, off
+        the GUI thread — RapidOCR's first call is otherwise ~0.8 s slower
+        than the rest. No-op when Windows OCR serves it (already fast cold)."""
+        pipeline, lang = self._ocr_pipeline, self._settings.translate.source_lang
+        run_in_pool(lambda: pipeline.warm_up(lang), lambda _r: None, lambda _e: None,
+                    label="OCR warm-up")
 
     def _apply_popup_settings(self) -> None:
         self._popup.set_voice_settings(self._settings.voice)

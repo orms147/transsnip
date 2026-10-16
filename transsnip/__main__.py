@@ -81,6 +81,9 @@ def _setup_logging(dev: bool) -> None:
 
 def main() -> int:
     _make_streams_safe()
+    # Before any import can pull in pywinrt — see utils/win_dll.py.
+    from transsnip.utils.win_dll import preload_msvcp140
+    preload_msvcp140()
 
     parser = argparse.ArgumentParser(prog="transsnip")
     parser.add_argument(
