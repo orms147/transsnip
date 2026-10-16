@@ -10,6 +10,8 @@ from PIL import Image
 from transsnip.ocr.base import OCRBlock, OCREngine, OCRError, OCRResult
 from transsnip.ocr.models import (
     DET_MODEL,
+    DET_TYPE,
+    DET_VERSION,
     SUPPORTED_LANGS,
     RecModel,
     models_dir,
@@ -20,20 +22,14 @@ log = logging.getLogger(__name__)
 
 
 class RapidOCREngine(OCREngine):
-    """OCR via RapidOCR (PaddleOCR PP-OCRv5 models served by ONNX Runtime).
+    """OCR via RapidOCR (PaddleOCR PP-OCRv6/v5 models served by ONNX Runtime).
 
     This is the bundled, OS-independent fallback behind Windows OCR. Unlike
     Windows OCR — which can only read languages whose pack is installed on the
     host — RapidOCR ships its models *inside the app* (`resources/models/`),
     so it works on a bare machine with zero configuration.
 
-    PP-OCRv5 over v4 (the previous bundle):
-    - A single `ch` recognition model now spans Simplified/Traditional Chinese,
-      Pinyin, English AND Japanese. The old v4 `ch` model dropped Japanese kana
-      entirely (it read only the shared Han characters), which is exactly why
-      Japanese captures failed before. See `ocr/models.py`.
-    - Korean and the 45+ Latin-script languages get their own small models,
-      selected per source language by `rec_for_lang()`.
+    Which model serves which language (and why v6 small) is in `ocr/models.py`.
 
     A separate `rapidocr.RapidOCR` instance is built per script family (each
     bundles its own det + rec) and cached for the process lifetime. Measured
@@ -47,7 +43,7 @@ class RapidOCREngine(OCREngine):
     name = "rapid"
 
     def __init__(self) -> None:
-        # One engine per recognition family ("ch" / "korean" / "latin"),
+        # One engine per recognition family ("multi" / "korean"),
         # built lazily on first use of that family.
         self._engines: dict[str, Any] = {}
         # Guards lazy construction: a background warm-up and a user's first
@@ -88,13 +84,13 @@ class RapidOCREngine(OCREngine):
         angle classifier is disabled: screen text is upright, and skipping it
         avoids the rare 180° misflip on dense CJK lines while shaving latency.
         """
-        cached = self._engines.get(rec.lang_type)
+        cached = self._engines.get(rec.family)
         if cached is not None:
             return cached
         with self._build_lock:
-            cached = self._engines.get(rec.lang_type)
+            cached = self._engines.get(rec.family)
             if cached is None:
-                cached = self._engines[rec.lang_type] = self._build_engine(rec)
+                cached = self._engines[rec.family] = self._build_engine(rec)
         return cached
 
     def _build_engine(self, rec: RecModel) -> Any:
@@ -103,8 +99,10 @@ class RapidOCREngine(OCREngine):
         mdir = models_dir()
         det_path = mdir / DET_MODEL
         rec_path = mdir / rec.model
-        dict_path = mdir / rec.dict_file
+        dict_path = mdir / rec.dict_file if rec.dict_file else None
         for p in (det_path, rec_path, dict_path):
+            if p is None:
+                continue
             if not p.exists():
                 raise OCRError(
                     f"Thiếu model OCR bundled: {p.name}. Chạy "
@@ -113,11 +111,11 @@ class RapidOCREngine(OCREngine):
 
         # engine_type defaults to onnxruntime (see rapidocr config.yaml) — leave
         # it unset so we don't have to import yet another enum.
-        engine = RapidOCR(params={
+        params: dict[str, Any] = {
             "Global.use_cls": False,
             "Det.model_path": str(det_path),
-            "Det.ocr_version": OCRVersion.PPOCRV5,
-            "Det.model_type": ModelType.MOBILE,
+            "Det.ocr_version": OCRVersion(DET_VERSION),
+            "Det.model_type": ModelType(DET_TYPE),
             # CRITICAL for region captures: the default `limit_type: min` /
             # `limit_side_len: 736` upscales the *short* side to 736, which on a
             # wide single-line snippet balloons the image and makes the mobile
@@ -128,12 +126,14 @@ class RapidOCREngine(OCREngine):
             "Det.limit_type": "max",
             "Det.limit_side_len": 960,
             "Rec.model_path": str(rec_path),
-            "Rec.rec_keys_path": str(dict_path),
-            "Rec.ocr_version": OCRVersion.PPOCRV5,
-            "Rec.model_type": ModelType.MOBILE,
+            "Rec.ocr_version": OCRVersion(rec.ocr_version),
+            "Rec.model_type": ModelType(rec.model_type),
             "Rec.lang_type": LangRec(rec.lang_type),
-        })
-        log.info("RapidOCR engine ready for family '%s' (%s)", rec.lang_type, rec.model)
+        }
+        if dict_path is not None:
+            params["Rec.rec_keys_path"] = str(dict_path)
+        engine = RapidOCR(params=params)
+        log.info("RapidOCR engine ready for family '%s' (%s)", rec.family, rec.model)
         return engine
 
     def warm_up(self, lang: str | None = None) -> None:
@@ -177,7 +177,7 @@ class RapidOCREngine(OCREngine):
         if boxes is None or txts is None or len(txts) == 0:
             log.debug(
                 "RapidOCR (%s) no detections on %dx%d image",
-                rec.lang_type, image.width, image.height,
+                rec.family, image.width, image.height,
             )
             return OCRResult(engine=self.name, blocks=[])
 
@@ -199,5 +199,5 @@ class RapidOCREngine(OCREngine):
                     confidence=confidence,
                 )
             )
-        log.debug("RapidOCR (%s): %d blocks", rec.lang_type, len(blocks))
+        log.debug("RapidOCR (%s): %d blocks", rec.family, len(blocks))
         return OCRResult(engine=self.name, blocks=blocks)

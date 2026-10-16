@@ -35,13 +35,12 @@ ocr = [
     "winrt-Windows.Globalization>=3.2.1,<4; sys_platform == 'win32'",
     "winrt-Windows.Foundation>=3.2.1,<4; sys_platform == 'win32'",
     "winrt-Windows.Foundation.Collections>=3.2.1,<4; sys_platform == 'win32'",
-    # RapidOCR 3.x: PaddleOCR PP-OCRv5 models served via ONNX Runtime. One `ch`
-    # model spans Chinese + Japanese + English (the old v4 bundle dropped
-    # Japanese kana); Korean / Latin get their own small models. Models ship in
-    # `resources/models/` — run `python scripts/fetch_models.py` once after a
-    # fresh clone (they're gitignored to keep the repo lean). ~12x smaller than
-    # full PaddleOCR, no PaddlePaddle framework. See `transsnip/ocr/models.py`.
-    "rapidocr>=3.0",
+    # RapidOCR fallback: PaddleOCR PP-OCRv6 small (one multilingual model for
+    # zh/ja/en + ~45 Latin languages) + PP-OCRv5 Korean, served via ONNX
+    # Runtime. 3.10+ for PP-OCRv6. Models ship in `resources/models/` — run
+    # `python scripts/fetch_models.py` once after a fresh clone (gitignored).
+    # See `transsnip/ocr/models.py` for the measured model choice.
+    "rapidocr>=3.10,<4",
     "onnxruntime>=1.17.0",
     # Splits run-on English titles back into words (OCR post-process).
     # See transsnip/ocr/segment.py.

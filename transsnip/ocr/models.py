@@ -1,4 +1,4 @@
-"""PP-OCRv5 model files + per-language routing for the RapidOCR fallback.
+"""Bundled RapidOCR model files + per-language routing.
 
 Why this module exists
 ----------------------
@@ -8,12 +8,18 @@ bare machine with no OS configuration — so the ONNX models ship *inside the
 app* (repo `resources/models/` in dev, `sys._MEIPASS/resources/models` when
 frozen by PyInstaller).
 
-PP-OCRv5 splits recognition by script family: ONE `ch` model already covers
-Simplified/Traditional Chinese + Pinyin + English + Japanese, and separate
-small models cover Korean and the 45+ Latin-script languages. The detection
-and angle-classifier models are language-agnostic and shared across families.
-`rec_for_lang()` maps a BCP-47 source tag to the right (model, dict, enum)
-triple; `RapidOCREngine` caches one engine per family.
+Model choice (measured with scripts/ocr_bench.py, rapidocr 3.10):
+- **PP-OCRv6 small** for everything it covers — ONE multilingual recognizer
+  spans Chinese (simp/trad) + Japanese + English + ~45 Latin-script languages,
+  replacing v5's separate ch + latin models. ~25% faster than v5 mobile on
+  larger captures and fixes v5's fullscreen misses (CER 33% → 1% at the same
+  detector size on rapidocr 3.10). Its dict also gained ư/ơ, so Vietnamese
+  improves (CER 19% → 11%) — still not good: the precomposed tone letters
+  (ế, ệ, ạ…) are missing from every PP-OCR dict, so Vietnamese source text
+  really wants the Windows "vi" OCR pack.
+- **PP-OCRv5 Korean** recognizer: v6 has no Korean at all (CER 100%).
+`rec_for_lang()` maps a BCP-47 source tag to one of these families;
+`RapidOCREngine` caches one engine per family.
 """
 from __future__ import annotations
 
@@ -36,65 +42,74 @@ def models_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "resources" / "models"
 
 
-# Shared, language-agnostic models (one detection + one angle classifier for
-# every script family). Mobile variants — small + fast, accuracy is plenty for
-# screen text.
-DET_MODEL = "ch_PP-OCRv5_det_mobile.onnx"
-CLS_MODEL = "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx"
+# Shared, language-agnostic text detector (also drives the Korean family).
+DET_MODEL = "PP-OCRv6_det_small.onnx"
+DET_VERSION = "PP-OCRv6"
+DET_TYPE = "small"
 
 
 @dataclass(frozen=True)
 class RecModel:
-    """A PP-OCRv5 recognition model + its character dictionary + lang enum.
+    """One recognition family: model file (+ dict for v5) + rapidocr enum values.
 
-    `lang_type` is the string value of rapidocr's `LangRec` enum (kept as a
-    plain str so this module has no hard dependency on the rapidocr package —
-    the engine converts it to the enum at construction time).
+    Enum values are plain strings so this module has no hard dependency on
+    the rapidocr package — the engine converts them at construction time.
     """
 
+    family: str            # engine cache key
     model: str
-    dict_file: str
-    lang_type: str  # rapidocr LangRec value: "ch" / "korean" / "latin"
+    dict_file: str | None  # v6 embeds its dict in the ONNX metadata
+    lang_type: str         # rapidocr LangRec value
+    ocr_version: str       # rapidocr OCRVersion value
+    model_type: str        # rapidocr ModelType value
 
 
-# The three families we bundle. `ch` is the workhorse (zh + ja + en + pinyin).
-_REC_CH = RecModel("ch_PP-OCRv5_rec_mobile.onnx", "ppocrv5_dict.txt", "ch")
-_REC_KOREAN = RecModel("korean_PP-OCRv5_rec_mobile.onnx", "ppocrv5_korean_dict.txt", "korean")
-_REC_LATIN = RecModel("latin_PP-OCRv5_rec_mobile.onnx", "ppocrv5_latin_dict.txt", "latin")
+_REC_MULTI = RecModel("multi", "PP-OCRv6_rec_small.onnx", None, "ch", "PP-OCRv6", "small")
+_REC_KOREAN = RecModel(
+    "korean", "korean_PP-OCRv5_rec_mobile.onnx", "ppocrv5_korean_dict.txt",
+    "korean", "PP-OCRv5", "mobile",
+)
 
 # BCP-47 primary subtag → recognition family. Anything not listed (incl. the
-# `None`/auto case) falls back to `_REC_CH`, whose model spans the three
-# scripts most common in this app's captures (Chinese, Japanese, English).
+# `None`/auto case) uses the multilingual v6 model.
 _LANG_TO_REC: dict[str, RecModel] = {
-    "zh": _REC_CH,
-    "ja": _REC_CH,
-    "en": _REC_CH,
+    "zh": _REC_MULTI,
+    "ja": _REC_MULTI,
+    "en": _REC_MULTI,
     "ko": _REC_KOREAN,
-    # Latin-script languages share one model. Vietnamese (with diacritics),
-    # French, German, Spanish, Italian, Portuguese, Indonesian, etc.
-    "vi": _REC_LATIN,
-    "fr": _REC_LATIN,
-    "de": _REC_LATIN,
-    "es": _REC_LATIN,
-    "it": _REC_LATIN,
-    "pt": _REC_LATIN,
-    "id": _REC_LATIN,
-    "nl": _REC_LATIN,
+    # Latin-script languages (v6 covers ~45; these are the ones Settings offers).
+    "vi": _REC_MULTI,
+    "fr": _REC_MULTI,
+    "de": _REC_MULTI,
+    "es": _REC_MULTI,
+    "it": _REC_MULTI,
+    "pt": _REC_MULTI,
+    "id": _REC_MULTI,
+    "nl": _REC_MULTI,
 }
 
 # Every BCP-47 primary subtag the fallback can handle — surfaced via
 # `RapidOCREngine.supported_languages()` so the pipeline's language filter
-# never skips it. (The `ch` model also reads Traditional Chinese / pinyin.)
+# never skips it.
 SUPPORTED_LANGS: frozenset[str] = frozenset(_LANG_TO_REC) | {"zh-Hans", "zh-Hant"}
+
+# Every file the app needs at runtime — TransSnip.spec bundles exactly these
+# (not a glob, so stale models from older releases never ship).
+BUNDLED_FILES: tuple[str, ...] = (
+    DET_MODEL,
+    _REC_MULTI.model,
+    _REC_KOREAN.model,
+    _REC_KOREAN.dict_file or "",
+)
 
 
 def rec_for_lang(lang: str | None) -> RecModel:
     """Pick the recognition family for a source-language tag.
 
     Matches by primary subtag (`zh-Hant` → `zh`). Unknown tags and auto-detect
-    (`None`) route to the `ch` model — the broadest single model we bundle.
+    (`None`) route to the multilingual model — the broadest we bundle.
     """
     if not lang:
-        return _REC_CH
+        return _REC_MULTI
     primary = lang.lower().split("-")[0]
-    return _LANG_TO_REC.get(primary, _REC_CH)
+    return _LANG_TO_REC.get(primary, _REC_MULTI)

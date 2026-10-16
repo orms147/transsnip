@@ -3,22 +3,22 @@ from transsnip.ocr.models import rec_for_lang
 from transsnip.ocr.registry import _lang_matches
 
 
-def test_rec_for_lang_ch_family():
-    # ch model spans Chinese + Japanese + English.
-    assert rec_for_lang("ja").lang_type == "ch"
-    assert rec_for_lang("zh-Hant").lang_type == "ch"
-    assert rec_for_lang("en").lang_type == "ch"
+def test_rec_for_lang_multi_family():
+    # PP-OCRv6 multilingual model spans Chinese + Japanese + English + Latin.
+    for lang in ("ja", "zh-Hant", "en", "vi", "fr"):
+        assert rec_for_lang(lang).family == "multi", lang
 
 
-def test_rec_for_lang_korean_latin():
-    assert rec_for_lang("ko").lang_type == "korean"
-    assert rec_for_lang("vi").lang_type == "latin"
-    assert rec_for_lang("fr").lang_type == "latin"
+def test_rec_for_lang_korean_stays_on_v5():
+    # v6 has no Korean — the v5 Korean recognizer must keep serving it.
+    rec = rec_for_lang("ko")
+    assert (rec.family, rec.ocr_version) == ("korean", "PP-OCRv5")
+    assert rec.dict_file
 
 
-def test_rec_for_lang_auto_defaults_ch():
-    assert rec_for_lang(None).lang_type == "ch"
-    assert rec_for_lang("unknown-xx").lang_type == "ch"
+def test_rec_for_lang_auto_defaults_multi():
+    assert rec_for_lang(None).family == "multi"
+    assert rec_for_lang("unknown-xx").family == "multi"
 
 
 def test_lang_matches_primary_subtag():
