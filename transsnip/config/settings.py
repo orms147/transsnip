@@ -60,7 +60,7 @@ class TranslateSettings(BaseModel):
     target_lang: str = "vi"
     source_lang: str | None = None  # None → provider auto-detects
     preset_name: str = "default"
-    openrouter_model: str = "google/gemini-2.0-flash-001"
+    openrouter_model: str = "google/gemini-3.6-flash"
     # Cache of the OpenRouter model list fetched via Settings → "Fetch" so the
     # dropdown repopulates with the full catalog on the next launch (instead of
     # only the small hardcoded starter list). Each item is [display, model_id].

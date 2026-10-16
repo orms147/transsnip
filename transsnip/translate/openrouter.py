@@ -8,29 +8,31 @@ from transsnip.translate.llm import MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT_S, LLMTra
 log = logging.getLogger(__name__)
 
 _API_BASE = "https://openrouter.ai/api/v1"
-DEFAULT_MODEL = "google/gemini-2.0-flash-001"
+DEFAULT_MODEL = "google/gemini-3.6-flash"
 
-# Curated list shown in the Settings model dropdown.
+# Curated list shown in the Settings model dropdown ("Fetch" pulls the full
+# live catalog). IDs checked against openrouter.ai/api/v1/models, 2026-10.
 # Format: (display_name, model_id)
 OPENROUTER_MODELS: list[tuple[str, str]] = [
     # --- Free models (không tốn credit) ---
-    ("DeepSeek V4 Flash (free)", "deepseek/deepseek-v4-flash:free"),
-    ("Gemini 2.0 Flash (free)", "google/gemini-2.0-flash-001:free"),
-    ("DeepSeek R1 (free)", "deepseek/deepseek-r1:free"),
-    ("DeepSeek V3 (free)", "deepseek/deepseek-chat-v3-5:free"),
-    ("Llama 4 Maverick (free)", "meta-llama/llama-4-maverick:free"),
-    ("Llama 4 Scout (free)", "meta-llama/llama-4-scout:free"),
-    ("Mistral Small 3.2 (free)", "mistralai/mistral-small-3.2-24b-instruct:free"),
-    ("Qwen3 30B A3B (free)", "qwen/qwen3-30b-a3b:free"),
-    ("Qwen3 8B (free)", "qwen/qwen3-8b:free"),
+    ("Gemma 4 31B (free)", "google/gemma-4-31b-it:free"),
+    ("Gemma 4 26B A4B (free)", "google/gemma-4-26b-a4b-it:free"),
     # --- Paid models ---
-    ("Gemini 2.5 Flash", "google/gemini-2.5-flash-preview"),
-    ("Gemini 2.5 Pro", "google/gemini-2.5-pro-preview"),
-    ("Claude Haiku 4.5", "anthropic/claude-haiku-4-5"),
-    ("Claude Sonnet 4.5", "anthropic/claude-sonnet-4-5"),
+    ("Gemini 3.6 Flash", "google/gemini-3.6-flash"),
+    ("Gemini 3.5 Flash-Lite", "google/gemini-3.5-flash-lite"),
+    ("Claude Haiku 5.5", "anthropic/claude-haiku-5.5"),
+    ("Claude Sonnet 5.5", "anthropic/claude-sonnet-5.5"),
     ("GPT-4o Mini", "openai/gpt-4o-mini"),
-    ("GPT-4o", "openai/gpt-4o"),
 ]
+
+# Shut-down model IDs still sitting in users' settings.json → live successor,
+# so an upgrade doesn't leave OpenRouter failing on every request.
+_RETIRED_MODELS: dict[str, str] = {
+    "google/gemini-2.0-flash-001": DEFAULT_MODEL,
+    "google/gemini-2.0-flash-001:free": DEFAULT_MODEL,
+    "google/gemini-2.5-flash-preview": DEFAULT_MODEL,
+    "google/gemini-2.5-pro-preview": DEFAULT_MODEL,
+}
 
 
 class OpenRouterTranslator(LLMTranslator):
@@ -47,6 +49,12 @@ class OpenRouterTranslator(LLMTranslator):
     sdk_module = "openai"
     sdk_package = "openai"
     missing_key_message = "OpenRouter API key chưa set. Lấy key miễn phí tại openrouter.ai → Keys"
+
+    def __init__(self, *, model: str | None = None, api_key: str | None = None) -> None:
+        if model in _RETIRED_MODELS:
+            log.info("OpenRouter model %s is retired — using %s", model, _RETIRED_MODELS[model])
+            model = _RETIRED_MODELS[model]
+        super().__init__(model=model, api_key=api_key)
 
     def _ensure_client(self) -> Any:
         if self._client is None:

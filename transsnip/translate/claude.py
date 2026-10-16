@@ -3,15 +3,19 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from transsnip.translate.llm import MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT_S, LLMTranslator
+from transsnip.translate.base import TranslationError
+from transsnip.translate.llm import REQUEST_TIMEOUT_S, LLMTranslator
 
 log = logging.getLogger(__name__)
 
 
-# Haiku 4.5: cheapest + fastest of the Claude 4 family. Sufficient for short
-# screen-translation snippets. Power users can override via the constructor or
-# (later) the settings UI.
-_DEFAULT_MODEL = "claude-haiku-4-5-20251001"
+# Haiku: cheapest + fastest tier — plenty for short screen-translation snippets.
+# Haiku 5.5 thinks by default; "low" effort keeps a one-line translation fast
+# (it can skip thinking entirely) instead of paying latency for reasoning.
+_DEFAULT_MODEL = "claude-haiku-5-5"
+_EFFORT = "low"
+# Thinking tokens count toward max_tokens — leave room beyond the answer.
+_MAX_TOKENS = 4096
 
 
 class ClaudeTranslator(LLMTranslator):
@@ -37,10 +41,13 @@ class ClaudeTranslator(LLMTranslator):
     def _complete(self, system: str, user: str) -> str:
         response = self._ensure_client().messages.create(
             model=self._model,
-            max_tokens=MAX_OUTPUT_TOKENS,
+            max_tokens=_MAX_TOKENS,
             system=system,
+            output_config={"effort": _EFFORT},
             messages=[{"role": "user", "content": user}],
         )
+        if response.stop_reason == "refusal":
+            raise TranslationError("Claude từ chối dịch đoạn này (safety filter).")
         log.debug(
             "Claude translation: in=%d tokens, out=%d tokens",
             response.usage.input_tokens, response.usage.output_tokens,

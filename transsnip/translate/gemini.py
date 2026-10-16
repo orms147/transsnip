@@ -11,9 +11,10 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
-# Flash is the cheap + fast tier, has a generous free quota (1500 req/day at the
-# time of writing). User upgrades to `gemini-2.5-pro` via settings if they want.
-_DEFAULT_MODEL = "gemini-2.0-flash"
+# Flash is the cheap + fast tier with a free quota. gemini-2.0-flash (the old
+# default) shut down 2026-06-01; 3.6 Flash is Google's listed replacement
+# (ai.google.dev/gemini-api/docs/deprecations).
+_DEFAULT_MODEL = "gemini-3.6-flash"
 
 
 class GeminiTranslator(LLMTranslator):
