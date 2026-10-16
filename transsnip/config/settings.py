@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -7,15 +8,14 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from transsnip.utils.paths import app_data_dir
+
 log = logging.getLogger(__name__)
 
 
 def config_dir() -> Path:
     """%APPDATA%\\transsnip on Windows, ~/.transsnip/transsnip elsewhere."""
-    base = os.environ.get("APPDATA") or os.path.expanduser("~/.transsnip")
-    path = Path(base) / "transsnip"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return app_data_dir()
 
 
 def _settings_path() -> Path:
@@ -257,7 +257,5 @@ def save_settings(settings: Settings) -> None:
         log.info("Saved settings to %s", path)
     except OSError as exc:
         log.error("Failed to write %s: %s", path, exc)
-        try:
+        with contextlib.suppress(OSError):
             tmp.unlink(missing_ok=True)
-        except OSError:
-            pass

@@ -9,7 +9,7 @@ Pipeline (THREE decoupled threads so no audio is ever dropped):
         pull a complete UTTERANCE from the buffer (speech bounded by a silence
         gap — energy VAD, not a fixed time slice) → WhisperTranscriber.transcribe()
         → dedupe (text_similarity) → emit new_source(text)
-    _TranslateWorker (QThread)                   [REUSED from video_subtitle]
+    TranslateWorker (QThread)                   [shared, modes/pipeline.py]
         coalesce latest → pipeline.translate() → emit text_ready(translated)
                               ▼
                        SubtitleBar.set_text()    [main thread]
@@ -20,7 +20,7 @@ each transcribe takes, and PortAudio would silently drop that audio (the "thiế
 nhiều câu" bug). A dedicated capture thread filling a shared buffer fixes it.
 
 Threading: worker threads only emit signals — never touch the GUI. All PortAudio
-/ Whisper work happens off the Qt main thread. `_TranslateWorker` (shared with
+/ Whisper work happens off the Qt main thread. `TranslateWorker` (shared with
 video mode) coalesces so only the most-recent transcript is translated.
 """
 from __future__ import annotations
@@ -30,10 +30,7 @@ import threading
 
 from PySide6.QtCore import QObject, QThread, Signal
 
-from transsnip.modes.video_subtitle import (  # reuse coalescing translator + stop-safety base
-    _PipelineControllerBase,
-    _TranslateWorker,
-)
+from transsnip.modes.pipeline import PipelineControllerBase, TranslateWorker
 from transsnip.translate.base import TranslationContext
 from transsnip.translate.registry import TranslationPipeline
 from transsnip.utils.image import text_similarity
@@ -219,7 +216,7 @@ class _AsrLoop(QThread):
             self.new_source.emit(src)
 
 
-class AudioSubtitleController(_PipelineControllerBase):
+class AudioSubtitleController(PipelineControllerBase):
     """Owns capture + ASR + the coalescing translate worker; re-emits on the main
     thread. No region/dpr/ocr — audio has no screen source, so it starts at once.
     """
@@ -233,7 +230,7 @@ class AudioSubtitleController(_PipelineControllerBase):
         super().__init__(parent)
         self._capture_thread: _CaptureThread | None = None
         self._asr: _AsrLoop | None = None
-        self._worker: _TranslateWorker | None = None
+        self._worker: TranslateWorker | None = None
 
     def is_running(self) -> bool:
         return self._asr is not None and self._asr.isRunning()
@@ -248,7 +245,7 @@ class AudioSubtitleController(_PipelineControllerBase):
             return
 
         buffer = _AudioBuffer()
-        worker = _TranslateWorker(translator, ctx)
+        worker = TranslateWorker(translator, ctx)
         worker.text_ready.connect(self.text_ready)
         capture_thread = _CaptureThread(LoopbackCapture(), buffer)
         capture_thread.error.connect(self.error)

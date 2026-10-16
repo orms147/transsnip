@@ -15,26 +15,17 @@ by calling these two helpers around its own SDK call.
 """
 from __future__ import annotations
 
-import json
 import logging
-import re
 
 from transsnip.linguistic.ipa import get_ipa
 from transsnip.translate.base import TranslationContext, WordInfo
+from transsnip.translate.prompts import lang_name, parse_json_object
 
 log = logging.getLogger(__name__)
 
-# Minimal target-language naming for the prompt; falls back to the raw code.
-_LANG_NAMES: dict[str, str] = {
-    "vi": "Vietnamese", "en": "English", "ja": "Japanese", "ko": "Korean",
-    "zh-Hans": "Simplified Chinese", "zh-Hant": "Traditional Chinese",
-    "fr": "French", "de": "German", "es": "Spanish", "th": "Thai", "ru": "Russian",
-}
-
-
 def build_breakdown_prompt(text: str, ctx: TranslationContext) -> str:
     """LLM instruction asking for translation + per-word gloss as strict JSON."""
-    target = _LANG_NAMES.get(ctx.target_lang, ctx.target_lang)
+    target = lang_name(ctx.target_lang)
     parts: list[str] = [
         f"You are a translator AND a language tutor. Translate the text below into {target}, "
         f"then break the SOURCE text into meaningful words/tokens and gloss each one.",
@@ -42,7 +33,8 @@ def build_breakdown_prompt(text: str, ctx: TranslationContext) -> str:
         "Output ONLY a JSON object (no markdown fences, no commentary) of this exact shape:",
         '{"translation": "<full translation into ' + target + '>",',
         ' "words": [{"token": "<source word>", "ipa": "<IPA or empty>",',
-        '            "meaning": "<short meaning in ' + target + '>", "pos": "<noun/verb/adj/...>"}]}',
+        '            "meaning": "<short meaning in ' + target + '>",'
+        ' "pos": "<noun/verb/adj/...>"}]}',
         "",
         "Rules:",
         "- One entry per meaningful word; skip pure punctuation.",
@@ -51,7 +43,7 @@ def build_breakdown_prompt(text: str, ctx: TranslationContext) -> str:
         "- Keep the source token exactly as written (preserve case).",
     ]
     if ctx.source_lang:
-        parts.append(f"- Source language: {_LANG_NAMES.get(ctx.source_lang, ctx.source_lang)}.")
+        parts.append(f"- Source language: {lang_name(ctx.source_lang)}.")
     if ctx.system_prompt.strip():
         parts.append(f"- Extra instructions: {ctx.system_prompt.strip()}")
     if ctx.glossary:
@@ -67,13 +59,8 @@ def parse_breakdown(raw: str) -> tuple[str, list[WordInfo]]:
     Tolerant of ```json fences. Returns ("", []) if it can't parse JSON, so the
     caller can fall back to treating the raw reply as a plain translation.
     """
-    cleaned = re.sub(r"^```(?:json)?\s*", "", raw.strip())
-    cleaned = re.sub(r"\s*```$", "", cleaned).strip()
-    try:
-        data = json.loads(cleaned)
-    except (json.JSONDecodeError, ValueError):
-        return "", []
-    if not isinstance(data, dict):
+    data = parse_json_object(raw)
+    if data is None:
         return "", []
     translation = str(data.get("translation", "")).strip()
     words: list[WordInfo] = []

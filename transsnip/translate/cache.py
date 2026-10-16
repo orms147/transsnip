@@ -3,22 +3,19 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import os
 from collections import OrderedDict
 from dataclasses import asdict, replace
 from pathlib import Path
 
 from transsnip.translate.base import TranslationContext, TranslationResult, WordInfo
+from transsnip.utils.paths import app_data_dir
 
 log = logging.getLogger(__name__)
 
 
 def _cache_dir() -> Path:
     """Per-user cache root. On Windows: `%APPDATA%\\transsnip\\translate-cache\\`."""
-    base = os.environ.get("APPDATA") or os.path.expanduser("~/.transsnip")
-    path = Path(base) / "transsnip" / "translate-cache"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return app_data_dir("translate-cache")
 
 
 def _make_key(text: str, ctx: TranslationContext, provider: str) -> str:

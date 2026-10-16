@@ -65,6 +65,12 @@ class Translator(ABC):
 
     name: str = "unknown"
 
+    @property
+    def cache_id(self) -> str:
+        """Identity used in translation-cache keys. Providers whose output
+        depends on a configurable model must include it (see LLMTranslator)."""
+        return self.name
+
     @abstractmethod
     def translate(self, text: str, ctx: TranslationContext) -> TranslationResult:
         """Return a translation result, or raise `TranslationError` to signal failure."""

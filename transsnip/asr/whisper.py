@@ -15,6 +15,7 @@ v1 is chunk-based and stateless. A later upgrade is LocalAgreement-2 streaming
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 from pathlib import Path
@@ -93,10 +94,8 @@ def _add_cuda_dll_dirs() -> None:
                 if bd in seen:
                     continue
                 seen.add(bd)
-                try:
+                with contextlib.suppress(OSError):
                     os.add_dll_directory(bd)
-                except OSError:
-                    pass
                 # The part that actually works: CTranslate2 loads cublas/cudnn
                 # with plain LoadLibrary, which searches PATH — NOT the
                 # add_dll_directory list. So prepend the bin dir to PATH too.
@@ -121,10 +120,8 @@ def whisper_cache_dir() -> Path:
     bundle in a frozen install, but Whisper models are fetched at runtime and
     must live somewhere writable (mirrors `config.settings._settings_path`).
     """
-    base = os.environ.get("APPDATA") or os.path.expanduser("~/.transsnip")
-    path = Path(base) / "transsnip" / "whisper-models"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    from transsnip.utils.paths import app_data_dir
+    return app_data_dir("whisper-models")
 
 
 def is_silent(pcm: np.ndarray, rms_threshold: float = 0.005) -> bool:
