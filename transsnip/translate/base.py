@@ -77,7 +77,7 @@ class Translator(ABC):
         """True if `translate_image` is implemented. Override in vision-capable providers."""
         return False
 
-    def translate_image(self, image: "Image.Image", ctx: TranslationContext) -> TranslationResult:
+    def translate_image(self, image: Image.Image, ctx: TranslationContext) -> TranslationResult:
         """Single-pass OCR + translate. Skips the OCR layer entirely.
 
         Vision-capable providers (Gemini Flash, Claude, GPT-4V) override this to

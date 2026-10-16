@@ -20,7 +20,6 @@ from __future__ import annotations
 import html
 import logging
 import re
-from typing import Optional
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, Qt, QTimer, Signal
 from PySide6.QtGui import (
@@ -44,8 +43,6 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QScrollBar,
-    QSpacerItem,
-    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -142,8 +139,8 @@ class _DragBar(QWidget):
         super().__init__(parent)
         self.setCursor(Qt.CursorShape.SizeAllCursor)
         self.setMinimumHeight(28)
-        self._press_global: Optional[QPoint] = None
-        self._press_frame_topleft: Optional[QPoint] = None
+        self._press_global: QPoint | None = None
+        self._press_frame_topleft: QPoint | None = None
 
     def mousePressEvent(self, event: QMouseEvent) -> None:
         if event.button() == Qt.MouseButton.LeftButton:
@@ -176,7 +173,7 @@ class _AppGlyph(QWidget):
     recolor without re-importing assets.
     """
 
-    def __init__(self, size: int = 14, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, size: int = 14, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._size = size
         self.setFixedSize(size, size)
@@ -253,7 +250,7 @@ class _PopupHeader(QWidget):
     font_dec_requested = Signal()
     font_inc_requested = Signal()
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._status: str = "ocr"
         self._show_voice = False
@@ -425,7 +422,7 @@ class _PhoneticSource(QWidget):
 
     _COL_GAP = 12  # px between word columns
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -453,7 +450,7 @@ class _PhoneticSource(QWidget):
             self._avail_px = avail_px
         self._render()
 
-    def resizeEvent(self, event) -> None:  # noqa: N802
+    def resizeEvent(self, event) -> None:
         # Re-pack rows to the widget's REAL width whenever it changes. This is
         # the reliable source of width — a snapshot avail_px passed at set_text
         # time can be stale (computed before the popup reached its final size),
@@ -497,7 +494,7 @@ class _PhoneticSource(QWidget):
         out: list[str] = []
         for raw_line in (self._text or "").splitlines() or [self._text or ""]:
             # Build columns: (word, ipa, column_width_px).
-            cols: list[tuple[str, Optional[str], int]] = []
+            cols: list[tuple[str, str | None, int]] = []
             for token in _IPA_TOKEN_RE.findall(raw_line):
                 if not token.strip():
                     continue
@@ -508,8 +505,8 @@ class _PhoneticSource(QWidget):
             if not cols:
                 continue
             # Greedy-pack columns into rows that fit `avail`.
-            rows: list[list[tuple[str, Optional[str], int]]] = []
-            cur: list[tuple[str, Optional[str], int]] = []
+            rows: list[list[tuple[str, str | None, int]]] = []
+            cur: list[tuple[str, str | None, int]] = []
             cur_w = 0
             for col in cols:
                 if cur and cur_w + col[2] > avail:
@@ -567,7 +564,7 @@ class _WordBreakdown(QWidget):
 
     speak_requested = Signal(str)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 2, 0, 0)
@@ -632,7 +629,7 @@ class _Skeleton(QWidget):
     Uses paintEvent with a shimmer effect — repaints every 50ms while visible.
     """
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 18, 8, 18)
@@ -673,7 +670,7 @@ class _ErrorPanel(QWidget):
     retry_requested = Signal()
     switch_provider_requested = Signal()
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(14, 14, 14, 14)
@@ -759,14 +756,14 @@ class FloatingPopup(QWidget):
         self.setMouseTracking(True)
 
         # Session state
-        self._last_region: Optional[QRect] = None
+        self._last_region: QRect | None = None
         self._last_translation: str = ""
         self._last_source_text: str = ""
-        self._last_source_lang: Optional[str] = None
+        self._last_source_lang: str | None = None
         self._last_target_lang: str = "vi"
         # Source lang the user *asked* for (None = auto-detect) — distinct from
         # `_last_source_lang`, which reflects what OCR / the provider detected.
-        self._requested_source_lang: Optional[str] = None
+        self._requested_source_lang: str | None = None
         self._show_phonetic_active: bool = False
         self._filter_installed = False
         # Whether clicking outside the popup dismisses it (Settings → Display).
@@ -783,8 +780,8 @@ class FloatingPopup(QWidget):
 
         # Resize state
         self._resize_edges = 0
-        self._resize_start_geom: Optional[QRect] = None
-        self._resize_start_global: Optional[QPoint] = None
+        self._resize_start_geom: QRect | None = None
+        self._resize_start_global: QPoint | None = None
         self._edge_cursor_active = False  # True while the ↔/↕ resize cursor is shown
 
         self._tts_player = EdgeTTSPlayer(self)
@@ -1008,7 +1005,7 @@ class FloatingPopup(QWidget):
         self,
         source_text: str,
         *,
-        source_lang: Optional[str] = None,
+        source_lang: str | None = None,
         show_phonetic: bool = False,
     ) -> None:
         """OCR done — display source text with optional IPA furigana."""
@@ -1152,7 +1149,7 @@ class FloatingPopup(QWidget):
             vw = self.width() - 36
         return max(120, vw - 28)
 
-    def _render_source_block(self, text: str, source_lang: Optional[str]) -> None:
+    def _render_source_block(self, text: str, source_lang: str | None) -> None:
         # Update chip in place (LangChip.set_lang) — avoids re-parenting which
         # fights with the layout we already placed the chip into.
         code = (source_lang or "auto").upper()
@@ -1182,7 +1179,7 @@ class FloatingPopup(QWidget):
 
     # ── In-popup language switching ───────────────────────────────────────
 
-    def set_lang_pair(self, source_lang: Optional[str], target_lang: str) -> None:
+    def set_lang_pair(self, source_lang: str | None, target_lang: str) -> None:
         """Sync the requested pair from settings — AppController calls this on
         each show_for_region so the chip menus reflect the current config."""
         self._requested_source_lang = source_lang
@@ -1214,7 +1211,7 @@ class FloatingPopup(QWidget):
         other.triggered.connect(self.settings_requested.emit)
         menu.exec(anchor.mapToGlobal(QPoint(0, anchor.height() + 4)))
 
-    def _pick_lang(self, code: Optional[str], *, is_source: bool) -> None:
+    def _pick_lang(self, code: str | None, *, is_source: bool) -> None:
         if is_source:
             if code == self._requested_source_lang:
                 return
@@ -1737,7 +1734,7 @@ def _truncate(text: str, limit: int = 800) -> str:
     return text[: limit - 1] + "…"
 
 
-def _lang_display_name(code: Optional[str]) -> str:
+def _lang_display_name(code: str | None) -> str:
     """Map a BCP-47 primary subtag to a human-readable label.
 
     Tiny table — covers the languages TransSnip actually shows headers for.

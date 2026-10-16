@@ -13,7 +13,6 @@ data between widgets and the Pydantic Settings model.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QKeySequence, QWheelEvent
@@ -151,13 +150,13 @@ class _ComboBox(QComboBox):
 
     _ARROW_W = 26  # must match QComboBox::drop-down width in theme.py
 
-    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
+    def wheelEvent(self, event: QWheelEvent) -> None:
         if self.view().isVisible():
             super().wheelEvent(event)  # popup open → normal scroll inside it
         else:
             event.ignore()  # bubble up so the scroll area scrolls instead
 
-    def paintEvent(self, event) -> None:  # noqa: N802
+    def paintEvent(self, event) -> None:
         super().paintEvent(event)
         from PySide6.QtGui import QColor, QPainter, QPen
 
@@ -219,7 +218,7 @@ class SettingsWindow(QWidget):
     _models_fetched = Signal(list)
     _fetch_error = Signal(str)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -399,7 +398,7 @@ class SettingsWindow(QWidget):
 
     def paintEvent(self, event) -> None:
         # Paint frameless background — translucent root needs explicit fill.
-        from PySide6.QtGui import QPainter, QBrush, QColor, QPen
+        from PySide6.QtGui import QBrush, QColor, QPainter, QPen
         p = get_theme().palette
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
@@ -1245,7 +1244,7 @@ class SettingsWindow(QWidget):
 
 # Helper widget — hotkey row icon
 class _HotkeyIcon(QLabel):
-    def __init__(self, icon_name: str, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, icon_name: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._icon_name = icon_name
         self.setFixedSize(32, 32)

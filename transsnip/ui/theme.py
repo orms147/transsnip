@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QPalette
@@ -86,7 +85,7 @@ class Theme(QObject):
         super().__init__()
         self._mode: ThemeMode = ThemeMode.DARK
         self._palette: Palette = DARK
-        self._app: Optional[QApplication] = None
+        self._app: QApplication | None = None
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -142,7 +141,7 @@ class Theme(QObject):
         return palette_for(mode)
 
 
-_instance: Optional[Theme] = None
+_instance: Theme | None = None
 
 
 def get_theme() -> Theme:
@@ -154,7 +153,7 @@ def get_theme() -> Theme:
 
 
 # ── Windows auto-detect ────────────────────────────────────────────────────
-def _detect_windows_palette() -> Optional[Palette]:
+def _detect_windows_palette() -> Palette | None:
     """Read Windows's `AppsUseLightTheme` to choose dark/light.
 
     Registry path: HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\

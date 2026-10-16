@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import numpy as np
@@ -127,7 +127,7 @@ def whisper_cache_dir() -> Path:
     return path
 
 
-def is_silent(pcm: "np.ndarray", rms_threshold: float = 0.005) -> bool:
+def is_silent(pcm: np.ndarray, rms_threshold: float = 0.005) -> bool:
     """Pure-numpy VAD gate: True when the chunk's RMS is below `rms_threshold`.
 
     Cheap pre-filter so we don't spend an ASR pass on silence/near-silence.
@@ -146,7 +146,7 @@ class WhisperTranscriber:
         self,
         tier: str = "small",
         compute_type: str = "auto",
-        source_lang: Optional[str] = None,
+        source_lang: str | None = None,
     ) -> None:
         self._tier = tier
         # "auto" → pick per device at load (CUDA→float16, CPU→int8). An explicit
@@ -159,11 +159,11 @@ class WhisperTranscriber:
         # the chunk silently yields nothing. Normalize: strip the region subtag,
         # and treat ""/"auto" as auto-detect.
         self._lang = self._normalize_lang(source_lang)
-        self._locked_lang: Optional[str] = None  # auto-detected lock (per session)
+        self._locked_lang: str | None = None  # auto-detected lock (per session)
         self._model = None
 
     @staticmethod
-    def _normalize_lang(tag: Optional[str]) -> Optional[str]:
+    def _normalize_lang(tag: str | None) -> str | None:
         if not tag or tag.lower() == "auto":
             return None
         return tag.split("-")[0].lower()
@@ -220,7 +220,7 @@ class WhisperTranscriber:
             )
             if device != "cpu":
                 self._warmup(model)            # forces cuBLAS/cuDNN load — may raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             if device == "cpu":
                 raise
             log.warning(
@@ -251,7 +251,7 @@ class WhisperTranscriber:
         segments, _info = model.transcribe(tone, vad_filter=False, beam_size=1)
         list(segments)  # consume the lazy generator → triggers the GPU kernels
 
-    def transcribe(self, pcm: "np.ndarray") -> str:
+    def transcribe(self, pcm: np.ndarray) -> str:
         """float32 mono @16 kHz → recognized text ('' if silent/empty).
 
         Drops Whisper's silence/music hallucinations (e.g. "Thank you.", "Bye.")

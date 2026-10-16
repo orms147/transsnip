@@ -136,7 +136,7 @@ class RapidOCREngine(OCREngine):
 
             arr = np.array(image.convert("RGB"))
             result = engine(arr)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise OCRError(f"RapidOCR failed: {exc}") from exc
 
         boxes = getattr(result, "boxes", None)

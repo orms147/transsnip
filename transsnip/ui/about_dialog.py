@@ -10,8 +10,6 @@ Mirrors `surface-about.jsx` closely; only the chrome titlebar differs
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from PySide6.QtCore import QRectF, Qt, QUrl, Signal
 from PySide6.QtGui import (
     QBrush,
@@ -33,7 +31,6 @@ from PySide6.QtWidgets import (
 from transsnip.ui import icons
 from transsnip.ui.atoms import CustomTitlebar, IconButton
 from transsnip.ui.theme import get_theme
-
 
 _VERSION = "v0.3.0"
 _BUILD = "cobalt-dark · 2026"
@@ -61,7 +58,7 @@ class _AppIconLarge(QWidget):
     horizontal bar + a small `>` to its right.
     """
 
-    def __init__(self, size: int = 84, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, size: int = 84, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._size = size
         self.setFixedSize(size, size)
@@ -137,7 +134,7 @@ class AboutDialog(QWidget):
 
     onboarding_requested = Signal()
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)

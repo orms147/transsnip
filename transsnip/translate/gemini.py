@@ -6,10 +6,10 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from transsnip.translate.base import (
-    Translator,
     TranslationContext,
     TranslationError,
     TranslationResult,
+    Translator,
 )
 
 if TYPE_CHECKING:
@@ -159,7 +159,7 @@ class GeminiTranslator(Translator):
     def supports_vision(self) -> bool:
         return self._import_ok and bool(self._api_key)
 
-    def translate_image(self, image: "Image.Image", ctx: TranslationContext) -> TranslationResult:
+    def translate_image(self, image: Image.Image, ctx: TranslationContext) -> TranslationResult:
         if not self._import_ok:
             raise TranslationError("google-generativeai not installed")
         if not self._api_key:

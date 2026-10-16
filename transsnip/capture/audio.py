@@ -36,7 +36,7 @@ def audio_capture_available() -> bool:
         return False
 
 
-def to_whisper_pcm(raw_int16: "np.ndarray", native_sr: int, native_channels: int) -> "np.ndarray":
+def to_whisper_pcm(raw_int16: np.ndarray, native_sr: int, native_channels: int) -> np.ndarray:
     """Convert one interleaved int16 block to float32 mono @16 kHz.
 
     PURE function (no I/O) so it's unit-testable: reshape→mono mean→/32768→resample.
@@ -53,10 +53,11 @@ def to_whisper_pcm(raw_int16: "np.ndarray", native_sr: int, native_channels: int
     return _resample(samples, native_sr, TARGET_SR)
 
 
-def _resample(x: "np.ndarray", src_sr: int, dst_sr: int) -> "np.ndarray":
+def _resample(x: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
     import numpy as np
     try:
         from math import gcd
+
         from scipy.signal import resample_poly
         g = gcd(int(src_sr), int(dst_sr))
         return resample_poly(x, dst_sr // g, src_sr // g).astype(np.float32)
@@ -89,7 +90,7 @@ class LoopbackCapture:
         self._pa = pyaudio.PyAudio()
         try:
             dev = self._pa.get_default_wasapi_loopback()
-        except Exception as exc:  # noqa: BLE001 — surface as our typed error
+        except Exception as exc:
             self._pa.terminate()
             self._pa = None
             raise AudioCaptureError(f"Không tìm thấy thiết bị loopback: {exc}") from exc
@@ -106,7 +107,7 @@ class LoopbackCapture:
         )
         log.info("Loopback capture: %s  sr=%d ch=%d", dev.get("name"), self._sr, self._channels)
 
-    def read(self) -> "np.ndarray":
+    def read(self) -> np.ndarray:
         """Read one block → float32 mono @16 kHz. Returns empty array on under-run."""
         import numpy as np
 

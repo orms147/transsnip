@@ -18,7 +18,7 @@ import logging
 import os
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
 

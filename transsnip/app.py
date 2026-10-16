@@ -115,8 +115,8 @@ class AppController(QObject):
         # avoid pulling the UI module just for an annotation.
         from typing import TYPE_CHECKING
         if TYPE_CHECKING:
-            from transsnip.ui.about_dialog import AboutDialog  # noqa: F401
-        self._about_dialog: "AboutDialog | None" = None  # type: ignore[name-defined]
+            from transsnip.ui.about_dialog import AboutDialog
+        self._about_dialog: AboutDialog | None = None  # type: ignore[name-defined]
         # Last region cached so the popup's error-state Retry button can
         # re-run the same capture flow without forcing the user to re-snipe.
         # The companion image is the freeze-frame crop (gaming mode) — retry
@@ -145,8 +145,8 @@ class AppController(QObject):
         self._history = HistoryStore()
         from typing import TYPE_CHECKING as _TC
         if _TC:
-            from transsnip.ui.history_window import HistoryWindow  # noqa: F401
-        self._history_window: "HistoryWindow | None" = None  # type: ignore[name-defined]
+            from transsnip.ui.history_window import HistoryWindow
+        self._history_window: HistoryWindow | None = None  # type: ignore[name-defined]
 
         self._tray.settings_requested.connect(self._open_settings)
         # Tray menu actions from the redesigned context menu.
@@ -255,7 +255,7 @@ class AppController(QObject):
         monitor_rect = active_monitor_logical_rect()
         try:
             return capture_rect(monitor_rect), monitor_rect
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("Freeze-frame capture failed — using live selector")
             return None, None
 
@@ -352,7 +352,7 @@ class AppController(QObject):
         if image is None:
             try:
                 image = capture_rect(rect)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.exception("Capture failed")
                 # Show popup now just to surface the error to the user.
                 self._popup.show_for_region(rect)
@@ -489,7 +489,7 @@ class AppController(QObject):
         )
         try:
             image = capture_rect(monitor_rect)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("Fullscreen capture failed")
             self._notify(f"Capture lỗi: {exc}")
             return

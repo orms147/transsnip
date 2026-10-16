@@ -48,7 +48,7 @@ class TranslationWorker(QRunnable):
             log.warning("Translation failed: %s", exc)
             self.signals.failed.emit(str(exc))
             return
-        except Exception as exc:  # noqa: BLE001 — worker must never raise
+        except Exception as exc:
             log.exception("Unexpected translation error")
             self.signals.failed.emit(f"Unexpected: {exc}")
             return
@@ -65,7 +65,7 @@ class VisionWorker(QRunnable):
 
     def __init__(
         self,
-        image: "Image.Image",
+        image: Image.Image,
         ctx: TranslationContext,
         pipeline: TranslationPipeline,
     ) -> None:
@@ -87,7 +87,7 @@ class VisionWorker(QRunnable):
             log.warning("Provider doesn't support vision: %s", exc)
             self.signals.failed.emit(str(exc))
             return
-        except Exception as exc:  # noqa: BLE001 — worker must never raise
+        except Exception as exc:
             log.exception("Unexpected vision error")
             self.signals.failed.emit(f"Unexpected: {exc}")
             return

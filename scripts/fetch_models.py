@@ -16,7 +16,6 @@ entries) — if you add a language there, add its model + dict URL here too.
 """
 from __future__ import annotations
 
-import sys
 import urllib.request
 from pathlib import Path
 

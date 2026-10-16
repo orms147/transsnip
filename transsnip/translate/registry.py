@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from transsnip.translate.base import (
-    Translator,
     TranslationContext,
     TranslationResult,
+    Translator,
 )
 
 if TYPE_CHECKING:
@@ -110,7 +111,7 @@ class TranslationPipeline:
     def supports_vision(self) -> bool:
         return self._translator.supports_vision()
 
-    def translate_image(self, image: "Image.Image", ctx: TranslationContext) -> TranslationResult:
+    def translate_image(self, image: Image.Image, ctx: TranslationContext) -> TranslationResult:
         """Vision path — skips OCR + cache, sends image directly to a vision-capable provider.
 
         We don't cache image translations: hashing arbitrary screenshots produces near-zero

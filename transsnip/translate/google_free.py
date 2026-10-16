@@ -4,10 +4,10 @@ import logging
 import re
 
 from transsnip.translate.base import (
-    Translator,
     TranslationContext,
     TranslationError,
     TranslationResult,
+    Translator,
 )
 
 log = logging.getLogger(__name__)

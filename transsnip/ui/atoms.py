@@ -15,8 +15,6 @@ duplicate "draw a 4px-radius chip" code in every file.
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from PySide6.QtCore import QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPaintEvent
 from PySide6.QtWidgets import (
@@ -51,7 +49,7 @@ class IconButton(QPushButton):
         size: int = 28,
         icon_size: int = 14,
         tooltip: str = "",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._icon_name = icon_name
@@ -132,8 +130,8 @@ class LangChip(QWidget):
     def __init__(
         self,
         code: str,
-        name: Optional[str] = None,
-        parent: Optional[QWidget] = None,
+        name: str | None = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._code = code
@@ -149,12 +147,12 @@ class LangChip(QWidget):
         self._code_label.setProperty("mono", True)
         self._layout.addWidget(self._code_label)
 
-        self._name_label: Optional[QLabel] = None
+        self._name_label: QLabel | None = None
         if name:
             self._name_label = QLabel(name)
             self._layout.addWidget(self._name_label)
 
-        self._chevron_label: Optional[QLabel] = None
+        self._chevron_label: QLabel | None = None
 
         self._apply_style()
         get_theme().mode_changed.connect(lambda _p: self._apply_style())
@@ -187,7 +185,7 @@ class LangChip(QWidget):
             return
         super().mousePressEvent(event)
 
-    def set_lang(self, code: str, name: Optional[str] = None) -> None:
+    def set_lang(self, code: str, name: str | None = None) -> None:
         """Update the chip's code/name in place — used when popup source
         language changes mid-session (vision provider returns a different
         source). Avoids reparenting QWidget which fights with parent layouts.
@@ -261,7 +259,7 @@ class Toggle(QWidget):
 
     toggled = Signal(bool)
 
-    def __init__(self, checked: bool = False, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, checked: bool = False, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._checked = checked
         self.setFixedSize(36, 20)
@@ -314,7 +312,7 @@ class ToggleRow(QWidget):
         description: str = "",
         *,
         checked: bool = False,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         layout = QHBoxLayout(self)
@@ -327,7 +325,7 @@ class ToggleRow(QWidget):
         self._title_label = QLabel(title)
         self._title_label.setStyleSheet("font-size: 12.5px; font-weight: 500;")
         text_col.addWidget(self._title_label)
-        self._desc_label: Optional[QLabel] = None
+        self._desc_label: QLabel | None = None
         if description:
             self._desc_label = QLabel(description)
             self._desc_label.setWordWrap(True)
@@ -367,7 +365,7 @@ class KbdSeq(QWidget):
     uses a real QKeySequenceEdit.
     """
 
-    def __init__(self, keys: list[str], parent: Optional[QWidget] = None) -> None:
+    def __init__(self, keys: list[str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._keys = keys
         layout = QHBoxLayout(self)
@@ -421,7 +419,7 @@ class PillBadge(QWidget):
         *,
         icon_name: str = "",
         tone: str = "default",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._tone = tone
@@ -429,7 +427,7 @@ class PillBadge(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(7, 2, 8, 2)
         layout.setSpacing(4)
-        self._icon_label: Optional[QLabel] = None
+        self._icon_label: QLabel | None = None
         if icon_name:
             self._icon_label = QLabel()
             self._icon_label.setPixmap(icons.get_pixmap(icon_name, size=10))
@@ -474,7 +472,7 @@ class SectionHead(QWidget):
         self,
         title: str,
         description: str = "",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
@@ -482,7 +480,7 @@ class SectionHead(QWidget):
         layout.setSpacing(4)
         self._title = QLabel(title)
         layout.addWidget(self._title)
-        self._desc: Optional[QLabel] = None
+        self._desc: QLabel | None = None
         if description:
             self._desc = QLabel(description)
             self._desc.setWordWrap(True)
@@ -515,7 +513,7 @@ class Spinner(QLabel):
     pixmap rotation. Use this in popup loading state and toolbar busy hints.
     """
 
-    def __init__(self, size: int = 12, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, size: int = 12, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedSize(QSize(size, size))
         self._size = size
@@ -569,16 +567,16 @@ class CustomTitlebar(QWidget):
         self,
         title: str,
         *,
-        icon_widget: Optional[QWidget] = None,
+        icon_widget: QWidget | None = None,
         show_minimize: bool = True,
         show_maximize: bool = True,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setFixedHeight(36)
         self.setCursor(Qt.CursorShape.SizeAllCursor)
-        self._press_global: Optional[QPoint] = None
-        self._press_frame_topleft: Optional[QPoint] = None
+        self._press_global: QPoint | None = None
+        self._press_frame_topleft: QPoint | None = None
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 0, 4, 0)
@@ -669,7 +667,7 @@ class Slider(QWidget):
         min_label: str = "",
         max_label: str = "",
         format_readout=lambda v: f"{v:.2f}",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setFixedHeight(48)
@@ -782,8 +780,8 @@ class Segmented(QWidget):
         self,
         options: list[tuple[str, str, str, str]],
         *,
-        value: Optional[str] = None,
-        parent: Optional[QWidget] = None,
+        value: str | None = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._options = options
@@ -860,7 +858,7 @@ class ThemeCard(QWidget):
 
     selected = Signal(str)
 
-    def __init__(self, mode: str, name: str, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, mode: str, name: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._mode = mode
         self._active = False
@@ -959,7 +957,7 @@ class ProviderRadioCard(QWidget):
         tag: str = "",
         free: bool = False,
         active: bool = False,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._id = provider_id

@@ -5,10 +5,10 @@ import os
 from typing import Any
 
 from transsnip.translate.base import (
-    Translator,
     TranslationContext,
     TranslationError,
     TranslationResult,
+    Translator,
 )
 
 log = logging.getLogger(__name__)

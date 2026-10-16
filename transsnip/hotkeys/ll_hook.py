@@ -37,8 +37,9 @@ import logging
 import sys
 import threading
 import time
+from collections.abc import Callable
 from ctypes import wintypes
-from typing import Callable, Final
+from typing import Final
 
 log = logging.getLogger(__name__)
 
@@ -438,7 +439,7 @@ class LowLevelHotkeyHook:
         try:
             if n_code == _HC_ACTION and self._handle_event(w_param, l_param):
                 return 1  # swallow: the game and other hotkey owners never see it
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("LL hook callback failed")
         return _user32.CallNextHookEx(None, n_code, w_param, l_param)
 

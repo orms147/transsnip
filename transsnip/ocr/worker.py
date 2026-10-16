@@ -5,7 +5,7 @@ import logging
 from PIL import Image
 from PySide6.QtCore import QObject, QRunnable, Signal
 
-from transsnip.ocr.base import OCRError, OCRResult
+from transsnip.ocr.base import OCRError
 from transsnip.ocr.registry import OCRPipeline
 
 log = logging.getLogger(__name__)
@@ -45,7 +45,7 @@ class OCRWorker(QRunnable):
             log.warning("OCR pipeline failed: %s", exc)
             self.signals.failed.emit(str(exc))
             return
-        except Exception as exc:  # noqa: BLE001 — worker must never raise
+        except Exception as exc:
             log.exception("Unexpected OCR error")
             self.signals.failed.emit(f"Unexpected: {exc}")
             return
