@@ -40,7 +40,7 @@ _EMAIL = "orms147@gmail.com"
 
 _DEPS = [
     ("RapidOCR", "ONNX OCR fallback"),
-    ("winsdk", "Windows OCR binding"),
+    ("pywinrt (winrt)", "Windows OCR / speech binding"),
     ("eng-to-ipa", "CMU phonetic dictionary"),
     ("edge-tts", "Microsoft Edge TTS streaming"),
     ("PySide6", "Qt for Python"),

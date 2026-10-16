@@ -12,7 +12,8 @@ The tricky bits for this app:
 - The PP-OCRv5 .onnx models + dicts live in resources/models/ (gitignored,
   fetched via scripts/fetch_models.py) — bundle them so the frozen app is
   fully offline. transsnip/ocr/models.py resolves them via sys._MEIPASS.
-- winsdk provides the WinRT projection used by the Windows OCR engine.
+- winrt (pywinrt, namespace pkg) provides the WinRT projection for Windows OCR;
+  winrt also covers the SAPI TTS engine (tts/sapi.py).
 - keyring resolves its Windows Credential backend via plugin submodules.
 """
 from pathlib import Path
@@ -21,7 +22,7 @@ from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas, binaries, hiddenimports = [], [], []
 
-for _pkg in ("rapidocr", "onnxruntime", "winsdk"):
+for _pkg in ("rapidocr", "onnxruntime", "winrt"):
     _d, _b, _h = collect_all(_pkg)
     datas += _d
     binaries += _b

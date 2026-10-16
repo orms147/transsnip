@@ -137,7 +137,7 @@ installer.iss          # Inno Setup script
 
 ## Tech stack
 
-Python 3.11+ · PySide6 (Qt6) · mss · winsdk / RapidOCR (ONNX Runtime) · edge-tts · pydantic · keyring · PyInstaller + Inno Setup.
+Python 3.11+ · PySide6 (Qt6) · mss · Windows OCR (pywinrt) / RapidOCR (ONNX Runtime) · edge-tts · pydantic · keyring · PyInstaller + Inno Setup.
 
 ## License
 

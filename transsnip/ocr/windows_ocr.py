@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import io
 import logging
 import sys
 
@@ -16,6 +15,13 @@ log = logging.getLogger(__name__)
 # raw char height is only 12-15px, which causes the engine to silently drop
 # whole lines. Upscaling the image before recognition recovers them.
 _OCR_TARGET_WIDTH = 2000
+# ...but never by more than this. The uncapped width rule blew a 330px-wide
+# region up 6x (2000x3000 px, ~310 ms) and a 200px UI snippet ~10x, and the
+# over-upscaled glyphs actually OCR *worse* (doubled letters on subtitles:
+# "II never said…"). Measured with scripts/ocr_bench.py: capping at 2x cut
+# mean CER 2.4% → 1.2% and total latency 855 → 324 ms, with no loss on
+# 10-12 px text; 1.5x and 2.5x were both worse.
+_MAX_UPSCALE = 2.0
 
 
 def _resolve_installed_tag(requested: str) -> str | None:
@@ -31,7 +37,7 @@ def _resolve_installed_tag(requested: str) -> str | None:
     if not requested:
         return None
     try:
-        from winsdk.windows.media.ocr import OcrEngine
+        from winrt.windows.media.ocr import OcrEngine
     except ImportError:
         return None
     requested_lc = requested.lower()
@@ -56,7 +62,7 @@ def _preprocess(image: Image.Image) -> Image.Image:
     """
     w, h = image.size
     if w < _OCR_TARGET_WIDTH:
-        scale = _OCR_TARGET_WIDTH / w
+        scale = min(_OCR_TARGET_WIDTH / w, _MAX_UPSCALE)
         image = image.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
     image = image.filter(ImageFilter.SHARPEN)
     image = ImageEnhance.Contrast(image).enhance(1.3)
@@ -85,10 +91,13 @@ class WindowsOCR(OCREngine):
         if sys.platform != "win32":
             return False
         try:
-            import winsdk.windows.media.ocr  # noqa: F401
+            import winrt.windows.media.ocr  # noqa: F401
             return True
         except ImportError:
-            log.warning("winsdk not installed — Windows OCR disabled. Run: pip install winsdk")
+            log.warning(
+                "winrt packages not installed — Windows OCR disabled. "
+                "Run: pip install transsnip[ocr]"
+            )
             return False
 
     def is_available(self) -> bool:
@@ -97,27 +106,27 @@ class WindowsOCR(OCREngine):
     def supported_languages(self) -> set[str]:
         if not self._import_ok:
             return set()
-        from winsdk.windows.media.ocr import OcrEngine
+        from winrt.windows.media.ocr import OcrEngine
         return {lang.language_tag for lang in OcrEngine.available_recognizer_languages}
 
     def recognize(self, image: Image.Image, lang: str | None = None) -> OCRResult:
         if not self._import_ok:
-            raise OCRError("winsdk not installed")
+            raise OCRError("winrt (Windows OCR) not installed")
         try:
             return asyncio.run(self._recognize_async(image, lang))
         except OCRError:
             raise
-        except Exception as exc:  # winsdk raises various OSError / RuntimeError types
+        except Exception as exc:  # winrt raises various OSError / RuntimeError types
             raise OCRError(f"Windows OCR failed: {exc}") from exc
 
     @staticmethod
     def _list_installed_tags() -> list[str]:
-        from winsdk.windows.media.ocr import OcrEngine
+        from winrt.windows.media.ocr import OcrEngine
         return [lang.language_tag for lang in OcrEngine.available_recognizer_languages]
 
     async def _recognize_async(self, image: Image.Image, lang_tag: str | None) -> OCRResult:
-        from winsdk.windows.globalization import Language
-        from winsdk.windows.media.ocr import OcrEngine
+        from winrt.windows.globalization import Language
+        from winrt.windows.media.ocr import OcrEngine
 
         # Build the list of (tag, engine) candidates to try on this image.
         #
@@ -165,13 +174,13 @@ class WindowsOCR(OCREngine):
 
         preprocessed = _preprocess(image)
         # _preprocess upscales the image (≥2000px wide) to help recognition,
-        # so winsdk's bounding rects come back in PREPROCESSED-image coords.
+        # so winrt's bounding rects come back in PREPROCESSED-image coords.
         # The caller passed `image` and expects bboxes relative to THAT —
         # otherwise downstream features (fullscreen overlay placing boxes on
         # screen) would draw at the wrong location. Scale every coordinate
         # back by the same ratio we upscaled by.
         scale = preprocessed.width / image.width if image.width else 1.0
-        bitmap = await self._pil_to_software_bitmap(preprocessed)
+        bitmap = self._pil_to_software_bitmap(preprocessed)
 
         # Recognize with each candidate pack and keep the richest result.
         # Score = total recognized character count: on a Japanese capture the
@@ -204,7 +213,7 @@ class WindowsOCR(OCREngine):
 
     @staticmethod
     def _blocks_from_result(result, scale: float) -> list[OCRBlock]:
-        """Convert a winsdk OcrResult into our OCRBlock list.
+        """Convert a winrt OcrResult into our OCRBlock list.
 
         Emit ONE block per detected line, with the words within each line
         already joined via the CJK-aware joiner. This preserves Windows OCR's
@@ -246,26 +255,16 @@ class WindowsOCR(OCREngine):
         return blocks
 
     @staticmethod
-    async def _pil_to_software_bitmap(image: Image.Image):
-        from winsdk.windows.graphics.imaging import BitmapDecoder
-        from winsdk.windows.storage.streams import DataWriter, InMemoryRandomAccessStream
+    def _pil_to_software_bitmap(image: Image.Image):
+        from winrt.windows.graphics.imaging import BitmapPixelFormat, SoftwareBitmap
 
-        # Encode the PIL image to PNG bytes, then let the Windows runtime decoder
-        # turn those bytes into a SoftwareBitmap. This avoids manually wrangling
-        # pixel formats / strides.
-        buf = io.BytesIO()
-        image.save(buf, format="PNG")
-        png_bytes = buf.getvalue()
-
-        stream = InMemoryRandomAccessStream()
-        writer = DataWriter(stream.get_output_stream_at(0))
-        # `write_bytes` requires a bytes-like object (bytes / bytearray / memoryview),
-        # not a list. The PNG payload is already `bytes`, so pass it straight through.
-        writer.write_bytes(png_bytes)
-        await writer.store_async()
-        await writer.flush_async()
-        writer.detach_stream()
-        stream.seek(0)
-
-        decoder = await BitmapDecoder.create_async(stream)
-        return await decoder.get_software_bitmap_async()
+        # Hand the raw BGRA8 pixels straight to SoftwareBitmap instead of the old
+        # PNG encode -> BitmapDecoder round-trip: identical OCR output, ~2.5x
+        # cheaper per call (no compression/decompression). BGRA8 is the format
+        # OcrEngine accepts natively; tightly-packed rows (stride = 4*width) are
+        # what create_copy_from_buffer expects, and pywinrt 3.x accepts any
+        # bytes-like object where an IBuffer is required.
+        raw = image.convert("RGBA").tobytes("raw", "BGRA")
+        return SoftwareBitmap.create_copy_from_buffer(
+            raw, BitmapPixelFormat.BGRA8, image.width, image.height
+        )

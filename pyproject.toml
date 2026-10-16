@@ -13,24 +13,28 @@ dependencies = [
     # Screen capture
     "mss>=9.0.1",
     "Pillow>=10.2.0",
-    # System tray (PySide6 has QSystemTrayIcon, but pystray is a fallback)
-    "pystray>=0.19.5",
+    # Frame-diff gate of the video-subtitle loop (utils/image.py), imported at
+    # startup — not just by the OCR extra.
+    "numpy>=1.24",
+    # System tray: Qt's QSystemTrayIcon (no extra dependency).
     # Global hotkeys: Win32 RegisterHotKey via ctypes (no external dependency).
     # The old `keyboard` lib was dropped — its WH_KEYBOARD_LL hook got silently
     # removed by Windows under load and never re-attached (dead hotkeys at boot).
     # Config & API key storage
     "pydantic>=2.6.0",
-    "pydantic-settings>=2.2.0",
     "keyring>=24.3.0",
-    # HTTP
-    "httpx>=0.27.0",
-    # Logging
-    "structlog>=24.1.0",
 ]
 
 [project.optional-dependencies]
 ocr = [
-    "winsdk>=1.0.0b10; sys_platform == 'win32'",
+    # Windows.Media.Ocr via the modular pywinrt projection (the monolithic
+    # `winsdk` beta it replaces was ~70 MB and unmaintained).
+    "winrt-runtime>=3.2.1,<4; sys_platform == 'win32'",
+    "winrt-Windows.Media.Ocr>=3.2.1,<4; sys_platform == 'win32'",
+    "winrt-Windows.Graphics.Imaging>=3.2.1,<4; sys_platform == 'win32'",
+    "winrt-Windows.Globalization>=3.2.1,<4; sys_platform == 'win32'",
+    "winrt-Windows.Foundation>=3.2.1,<4; sys_platform == 'win32'",
+    "winrt-Windows.Foundation.Collections>=3.2.1,<4; sys_platform == 'win32'",
     # RapidOCR 3.x: PaddleOCR PP-OCRv5 models served via ONNX Runtime. One `ch`
     # model spans Chinese + Japanese + English (the old v4 bundle dropped
     # Japanese kana); Korean / Latin get their own small models. Models ship in
@@ -45,16 +49,19 @@ ocr = [
 ]
 translate = [
     # LLM-based providers (context-aware, paid)
-    "anthropic>=0.25.0",
+    "anthropic>=0.109.0",  # output_config (effort) on Haiku 5.5
     "google-generativeai>=0.8.0",
     "openai>=1.20.0",
     # Translation-only providers
-    "deepl>=1.17.0",
     "deep-translator>=1.11.0",  # wraps Google Translate / Linguee / Pons — no API key needed
 ]
 tts = [
     "edge-tts>=6.1.10",
-    "sounddevice>=0.4.6",
+    # Offline SAPI fallback (tts/sapi.py).
+    "winrt-Windows.Media.SpeechSynthesis>=3.2.1,<4; sys_platform == 'win32'",
+    "winrt-Windows.Media>=3.2.1,<4; sys_platform == 'win32'",
+    "winrt-Windows.Storage.Streams>=3.2.1,<4; sys_platform == 'win32'",
+    "winrt-Windows.Foundation>=3.2.1,<4; sys_platform == 'win32'",
 ]
 learning = [
     "eng-to-ipa>=0.0.2",
@@ -72,9 +79,6 @@ audio = [
 ]
 dev = [
     "pytest>=8.0.0",
-    "pytest-qt>=4.4.0",
-    "pytest-asyncio>=0.23.0",
-    "respx>=0.20.0",
     "ruff>=0.3.0",
     "mypy>=1.9.0",
 ]
@@ -110,4 +114,3 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"

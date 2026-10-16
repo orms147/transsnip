@@ -3,7 +3,7 @@
 Edge-TTS needs internet. When it fails (offline, CDN hiccup), we fall back to
 `Windows.Media.SpeechSynthesis.SpeechSynthesizer` — the same WinRT stack that
 powers Narrator. It's fully offline, uses voices already installed on the box,
-and reuses the `winsdk` dependency we already ship for Windows OCR (no new dep).
+and uses the same pywinrt (`winrt-*`) projection we ship for Windows OCR.
 
 Quality is below Edge's neural voices, but "works with no internet" beats "no
 audio at all" for a learner checking pronunciation on a flaky connection.
@@ -25,7 +25,8 @@ def sapi_available() -> bool:
     if sys.platform != "win32":
         return False
     try:
-        import winsdk.windows.media.speechsynthesis  # noqa: F401
+        import winrt.windows.media.speechsynthesis
+        import winrt.windows.storage.streams  # noqa: F401
         return True
     except ImportError:
         return False
@@ -56,8 +57,8 @@ class SapiGenRunnable(QRunnable):
         self.signals.ready.emit(self._out_path)
 
     async def _generate(self) -> None:
-        from winsdk.windows.media.speechsynthesis import SpeechSynthesizer
-        from winsdk.windows.storage.streams import DataReader
+        from winrt.windows.media.speechsynthesis import SpeechSynthesizer
+        from winrt.windows.storage.streams import DataReader
 
         synth = SpeechSynthesizer()
         # Returns a SpeechSynthesisStream of WAV (PCM) bytes.
@@ -65,5 +66,7 @@ class SapiGenRunnable(QRunnable):
         size = stream.size
         reader = DataReader(stream.get_input_stream_at(0))
         await reader.load_async(size)
-        data = bytes(reader.read_bytes(size))
+        # winrt 3.x: read_bytes fills a caller-supplied writable buffer.
+        data = bytearray(size)
+        reader.read_bytes(data)
         Path(self._out_path).write_bytes(data)
