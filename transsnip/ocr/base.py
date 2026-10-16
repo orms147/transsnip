@@ -74,7 +74,7 @@ def _join_blocks_smart(texts: list[str]) -> str:
     and inserts a space only where one belongs.
     """
     parts: list[str] = []
-    for i, cur in enumerate(texts):
+    for cur in texts:
         if not cur:
             continue
         if not parts:

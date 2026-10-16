@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import logging.handlers
 import os
@@ -32,13 +33,12 @@ def _make_streams_safe() -> None:
     for name in ("stdout", "stderr"):
         stream = getattr(sys, name)
         if stream is None:
-            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
+            # Deliberately left open for the process lifetime.
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))  # noqa: SIM115
             continue
-        try:
+        # Non-reconfigurable stream (e.g. already wrapped) — best effort.
+        with contextlib.suppress(AttributeError, ValueError, OSError):
             stream.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError, OSError):
-            # Non-reconfigurable stream (e.g. already wrapped) — best effort.
-            pass
 
 
 def _setup_logging(dev: bool) -> None:
@@ -83,7 +83,11 @@ def main() -> int:
     _make_streams_safe()
 
     parser = argparse.ArgumentParser(prog="transsnip")
-    parser.add_argument("--dev", action="store_true", help="Open settings window on launch and enable debug logging")
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Open settings window on launch and enable debug logging",
+    )
     args = parser.parse_args()
 
     _setup_logging(args.dev)

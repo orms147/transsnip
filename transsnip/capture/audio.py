@@ -63,7 +63,7 @@ def _resample(x: np.ndarray, src_sr: int, dst_sr: int) -> np.ndarray:
         return resample_poly(x, dst_sr // g, src_sr // g).astype(np.float32)
     except ImportError:
         # Linear-interp fallback if scipy is absent — adequate for speech ASR.
-        n = int(round(len(x) * dst_sr / src_sr))
+        n = round(len(x) * dst_sr / src_sr)
         if n <= 0:
             return np.zeros(0, dtype=np.float32)
         idx = np.linspace(0, len(x), n, endpoint=False)
@@ -90,7 +90,7 @@ class LoopbackCapture:
         self._pa = pyaudio.PyAudio()
         try:
             dev = self._pa.get_default_wasapi_loopback()
-        except Exception as exc:
+        except Exception as exc:  # surface as our typed error
             self._pa.terminate()
             self._pa = None
             raise AudioCaptureError(f"Không tìm thấy thiết bị loopback: {exc}") from exc

@@ -249,7 +249,9 @@ QPushButton[primary="true"] {{
     border-color: {p.accent};
     font-weight: 600;
 }}
-QPushButton[primary="true"]:hover {{ background: {p.accent_hover}; border-color: {p.accent_hover}; }}
+QPushButton[primary="true"]:hover {{
+    background: {p.accent_hover}; border-color: {p.accent_hover};
+}}
 
 QPushButton[ghost="true"] {{
     background: transparent;

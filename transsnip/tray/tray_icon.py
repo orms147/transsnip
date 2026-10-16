@@ -55,7 +55,8 @@ class TrayController(QSystemTrayIcon):
         print(
             "[transsnip] Tray icon đã start.\n"
             "  → Trên Windows 11: icon có thể bị giấu — click '^' gần đồng hồ để xem overflow.\n"
-            "  → Để pin icon ra ngoài: Settings → Personalization → Taskbar → Other system tray icons.\n"
+            "  → Để pin icon ra ngoài: Settings → Personalization → Taskbar"
+            " → Other system tray icons.\n"
             "  → Thoát app: right-click icon → Quit."
         )
 

@@ -32,7 +32,8 @@ FILES: list[tuple[str, str]] = [
      "ch_PP-LCNet_x0_25_textline_ori_cls_mobile.onnx"),
     # Recognition: ch (= zh + ja + en + pinyin), korean, latin.
     (f"{BASE}/onnx/PP-OCRv5/rec/ch_PP-OCRv5_rec_mobile.onnx", "ch_PP-OCRv5_rec_mobile.onnx"),
-    (f"{BASE}/onnx/PP-OCRv5/rec/korean_PP-OCRv5_rec_mobile.onnx", "korean_PP-OCRv5_rec_mobile.onnx"),
+    (f"{BASE}/onnx/PP-OCRv5/rec/korean_PP-OCRv5_rec_mobile.onnx",
+     "korean_PP-OCRv5_rec_mobile.onnx"),
     (f"{BASE}/onnx/PP-OCRv5/rec/latin_PP-OCRv5_rec_mobile.onnx", "latin_PP-OCRv5_rec_mobile.onnx"),
     # Character dictionaries (one per rec model).
     (f"{BASE}/paddle/PP-OCRv5/rec/ch_PP-OCRv5_rec_mobile/ppocrv5_dict.txt", "ppocrv5_dict.txt"),

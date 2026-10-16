@@ -8,8 +8,8 @@ import pytest
 
 np = pytest.importorskip("numpy")
 
-from transsnip.asr.whisper import is_silent
-from transsnip.capture.audio import TARGET_SR, to_whisper_pcm
+from transsnip.asr.whisper import is_silent  # noqa: E402 — after importorskip
+from transsnip.capture.audio import TARGET_SR, to_whisper_pcm  # noqa: E402
 
 
 def test_to_whisper_pcm_stereo_48k_to_mono_16k():

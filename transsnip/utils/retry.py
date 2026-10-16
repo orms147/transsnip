@@ -39,7 +39,7 @@ def with_retry(
     for attempt in range(retries + 1):
         try:
             return fn()
-        except Exception as exc:
+        except Exception as exc:  # re-raised below
             last = exc
             is_last = attempt == retries
             if is_last or (transient is not None and not transient(exc)):

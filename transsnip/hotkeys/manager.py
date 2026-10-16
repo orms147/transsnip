@@ -121,7 +121,7 @@ def parse_hotkey(hotkey: str) -> tuple[int, int]:
     # and falls through to the ValueError below.
     parts = [p.strip() for p in hotkey.split("+")]
     if len(parts) >= 3 and parts[-1] == "" and parts[-2] == "":
-        parts = parts[:-2] + ["+"]
+        parts = [*parts[:-2], "+"]
     for part in parts:
         if part in _MODIFIERS:
             mods |= _MODIFIERS[part]
@@ -214,7 +214,8 @@ class HotkeyManager(QObject):
         hk_id = self._next_id
         if not _user32.RegisterHotKey(None, hk_id, mods, vk):
             log.error(
-                "RegisterHotKey failed for %r (%s), winerror=%d — combo likely owned by another app",
+                "RegisterHotKey failed for %r (%s), winerror=%d"
+                " — combo likely owned by another app",
                 hotkey,
                 action_id,
                 ctypes.get_last_error(),

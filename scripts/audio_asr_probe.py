@@ -45,7 +45,7 @@ def _rss_mb() -> float:
     try:
         import psutil
         return psutil.Process().memory_info().rss / (1024 * 1024)
-    except Exception:
+    except Exception:  # noqa: BLE001 — psutil optional / any probe failure → sentinel
         return -1.0
 
 
@@ -69,7 +69,10 @@ def bench(tier: str, compute: str) -> int:
     load_s = time.perf_counter() - t0
     after_size = _dir_size_mb(cache)
     print(f"  model load: {load_s:.1f}s")
-    print(f"  model on-disk: {after_size:.0f} MB (downloaded this run: {after_size - before_size:.0f} MB)")
+    print(
+        f"  model on-disk: {after_size:.0f} MB "
+        f"(downloaded this run: {after_size - before_size:.0f} MB)"
+    )
     print(f"  RAM after load: {_rss_mb():.0f} MB")
 
     # Synthetic audio: low-amplitude noise so the model actually runs the full
@@ -83,7 +86,8 @@ def bench(tier: str, compute: str) -> int:
         for label in ("warm-up", "timed-1", "timed-2"):
             t = time.perf_counter()
             segs, info = model.transcribe(pcm, language=None, vad_filter=False, beam_size=1)
-            text = " ".join(s.text for s in segs).strip()
+            # Segments are a lazy generator — consume them so decoding is timed.
+            _ = " ".join(s.text for s in segs).strip()
             dt = time.perf_counter() - t
             peak_rss = max(peak_rss, _rss_mb())
             if label != "warm-up":
@@ -135,7 +139,8 @@ def live(tier: str, compute: str, seconds: int, chunk_s: float) -> int:
     t_end = time.perf_counter() + seconds
     try:
         while time.perf_counter() < t_end:
-            raw = np.frombuffer(stream.read(int(sr * 0.1), exception_on_overflow=False), dtype="int16")
+            frames = stream.read(int(sr * 0.1), exception_on_overflow=False)
+            raw = np.frombuffer(frames, dtype="int16")
             if ch > 1:
                 raw = raw.reshape(-1, ch).mean(axis=1)
             mono = (raw.astype("float32") / 32768.0)
@@ -151,7 +156,9 @@ def live(tier: str, compute: str, seconds: int, chunk_s: float) -> int:
     except KeyboardInterrupt:
         pass
     finally:
-        stream.stop_stream(); stream.close(); pa.terminate()
+        stream.stop_stream()
+        stream.close()
+        pa.terminate()
     return 0
 
 
@@ -166,7 +173,10 @@ def main() -> int:
     try:
         import faster_whisper  # noqa: F401
     except ImportError:
-        print("faster-whisper chưa cài. pip install faster-whisper pyaudiowpatch numpy scipy psutil")
+        print(
+            "faster-whisper chưa cài. "
+            "pip install faster-whisper pyaudiowpatch numpy scipy psutil"
+        )
         return 1
     return live(args.tier, args.compute, args.seconds, args.chunk) if args.live \
         else bench(args.tier, args.compute)

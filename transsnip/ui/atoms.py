@@ -73,10 +73,7 @@ class IconButton(QPushButton):
 
     def _apply_style(self) -> None:
         p = get_theme().palette
-        if self._kind == "accent":
-            color = p.accent
-        else:
-            color = p.text_2
+        color = p.accent if self._kind == "accent" else p.text_2
         self.setIcon(icons.get_icon(self._icon_name, color=color, size=self._icon_size))
 
         if self._kind == "close":
@@ -542,7 +539,9 @@ class Spinner(QLabel):
         self._angle = (self._angle + 30) % 360
         from PySide6.QtGui import QTransform
         pixmap = icons.get_spinner_pixmap(self._color, self._size)
-        transformed = pixmap.transformed(QTransform().rotate(self._angle), Qt.TransformationMode.SmoothTransformation)
+        transformed = pixmap.transformed(
+            QTransform().rotate(self._angle), Qt.TransformationMode.SmoothTransformation
+        )
         self.setPixmap(transformed)
 
 
@@ -911,8 +910,9 @@ class ThemeCard(QWidget):
         painter.drawEllipse(swatch_rect.left() + 8, swatch_rect.top() + 8, 6, 6)
         # Faux text line
         painter.setBrush(sw_text)
-        painter.drawRoundedRect(swatch_rect.left() + 20, swatch_rect.top() + 10, swatch_rect.width() - 30, 2, 1, 1)
-        painter.drawRoundedRect(swatch_rect.left() + 8, swatch_rect.top() + 28, swatch_rect.width() - 16, 2, 1, 1)
+        left, top, width = swatch_rect.left(), swatch_rect.top(), swatch_rect.width()
+        painter.drawRoundedRect(left + 20, top + 10, width - 30, 2, 1, 1)
+        painter.drawRoundedRect(left + 8, top + 28, width - 16, 2, 1, 1)
 
         # Name row
         name_y = swatch_rect.bottom() + 6

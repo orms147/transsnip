@@ -18,10 +18,10 @@ When the design tokens change (designer updates Cobalt), only this file +
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class ThemeMode(str, Enum):
+class ThemeMode(StrEnum):
     DARK = "dark"
     LIGHT = "light"
     # AUTO follows Windows ColorPrevalence / WallpaperLightTheme via theme.py.

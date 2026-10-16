@@ -248,7 +248,7 @@ class SettingsWindow(QWidget):
         # Find the currently active tab and re-style — `_switch_tab` rebuilds
         # the icon at the right color for both active and idle states.
         for tid, btn in zip(
-            (m[0] for m in self._tabs_meta), self._tab_buttons
+            (m[0] for m in self._tabs_meta), self._tab_buttons, strict=True
         ):
             if btn.isChecked():
                 self._switch_tab(tid)
@@ -561,7 +561,8 @@ class SettingsWindow(QWidget):
         self._preset_prompt_input = QPlainTextEdit()
         self._preset_prompt_input.setMinimumHeight(120)
         self._preset_prompt_input.setPlaceholderText(
-            "System prompt cho LLM — vd: 'You are translating game dialogue. Keep skill names in English.'"
+            "System prompt cho LLM — vd: 'You are translating game dialogue."
+            " Keep skill names in English.'"
         )
         self._preset_prompt_input.textChanged.connect(self._on_preset_field_changed)
         form.addRow("System prompt:", self._preset_prompt_input)
@@ -609,9 +610,12 @@ class SettingsWindow(QWidget):
         self._hotkey_editors: dict[str, QKeySequenceEdit] = {}
         rows = [
             ("region_translate", "crop", "Region translate", "Snipping-tool style"),
-            ("fullscreen_translate", "fullscreen", "Fullscreen translate", "Dịch toàn màn hình hiện tại"),
-            ("video_subtitle_translate", "subtitles", "Video subtitle", "Auto-translate phụ đề real-time"),
-            ("audio_subtitle_translate", "volume", "Audio subtitle", "Dịch audio video không có phụ đề (cần gói audio)"),
+            ("fullscreen_translate", "fullscreen", "Fullscreen translate",
+             "Dịch toàn màn hình hiện tại"),
+            ("video_subtitle_translate", "subtitles", "Video subtitle",
+             "Auto-translate phụ đề real-time"),
+            ("audio_subtitle_translate", "volume", "Audio subtitle",
+             "Dịch audio video không có phụ đề (cần gói audio)"),
             ("open_settings", "settings", "Mở Settings", "Mở cửa sổ cài đặt từ bàn phím"),
         ]
         for action_id, icon_name, label, desc in rows:
@@ -632,7 +636,9 @@ class SettingsWindow(QWidget):
             self._hotkey_editors[action_id] = editor
             row_layout.addWidget(editor)
             reset_btn = IconButton("refresh", size=24, icon_size=11, tooltip="Reset")
-            reset_btn.clicked.connect(lambda _checked=False, aid=action_id: self._on_reset_hotkey(aid))
+            reset_btn.clicked.connect(
+                lambda _checked=False, aid=action_id: self._on_reset_hotkey(aid)
+            )
             row_layout.addWidget(reset_btn)
             layout.addWidget(row)
 
@@ -677,7 +683,8 @@ class SettingsWindow(QWidget):
         theme_row = QHBoxLayout()
         theme_row.setSpacing(10)
         self._theme_cards: dict[str, ThemeCard] = {}
-        for mode, label in [("dark", "Cobalt Dark"), ("light", "Cobalt Light"), ("auto", "Tự động")]:
+        theme_choices = [("dark", "Cobalt Dark"), ("light", "Cobalt Light"), ("auto", "Tự động")]
+        for mode, label in theme_choices:
             card = ThemeCard(mode, label)
             card.selected.connect(self._on_theme_picked)
             self._theme_cards[mode] = card
@@ -923,10 +930,9 @@ class SettingsWindow(QWidget):
         info = PROVIDER_REGISTRY.get(provider_key)
         if info is not None and info.needs_api_key:
             entered = self._api_key_input.text().strip()
-            if entered:
-                if not set_api_key(provider_key, entered):
-                    QMessageBox.warning(self, "TransSnip", "Không lưu được API key.")
-                    return
+            if entered and not set_api_key(provider_key, entered):
+                QMessageBox.warning(self, "TransSnip", "Không lưu được API key.")
+                return
         s.translate.provider = provider_key
         s.translate.target_lang = self._target_lang_combo.currentData() or "vi"
         src_data = self._source_lang_combo.currentData()
