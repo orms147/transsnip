@@ -155,6 +155,7 @@ def build_pipeline(
     cache: TranslationCache | None = None,
     *,
     model: str | None = None,
+    **options: object,
 ) -> TranslationPipeline:
     """Construct a pipeline using the named provider.
 
@@ -168,7 +169,9 @@ def build_pipeline(
     if info is None:
         log.warning("Unknown provider %r — falling back to google_free", provider_key)
         info = PROVIDER_REGISTRY["google_free"]
-    kwargs = {"model": model} if info.configurable_model and model else {}
+    kwargs: dict[str, object] = {"model": model} if info.configurable_model and model else {}
+    if info.key == "openrouter":
+        kwargs.update(options)  # e.g. thinking=… (OpenRouter-only knobs)
     return TranslationPipeline(info.factory(**kwargs), cache)
 
 
@@ -184,7 +187,10 @@ def pipeline_from_settings(
 ) -> TranslationPipeline:
     """Build the pipeline for whatever provider + model the user picked."""
     provider = settings.translate.provider
-    return build_pipeline(provider, cache, model=model_for_provider(settings, provider))
+    return build_pipeline(
+        provider, cache, model=model_for_provider(settings, provider),
+        thinking=settings.translate.openrouter_thinking,
+    )
 
 
 def default_pipeline() -> TranslationPipeline:

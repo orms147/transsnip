@@ -65,6 +65,10 @@ class TranslateSettings(BaseModel):
     # dropdown repopulates with the full catalog on the next launch (instead of
     # only the small hardcoded starter list). Each item is [display, model_id].
     openrouter_models: list[list[str]] = Field(default_factory=list)
+    # Let OpenRouter reasoning models "think" before answering. Off: a one-line
+    # translation on qwen3.7-flash took 16-25 s with thinking vs ~2 s without,
+    # and the hidden reasoning is billed as output tokens.
+    openrouter_thinking: bool = False
 
     # English-source enhancements: IPA shown inline under each word + a 🔊
     # button next to source text using Edge TTS. Off by default to avoid

@@ -460,6 +460,13 @@ class SettingsWindow(QWidget):
         model_row.addWidget(self._fetch_models_button)
         provider_form.addRow(self._model_row_label, model_row)
 
+        self._thinking_toggle = ToggleRow(
+            "Thinking (suy luận trước khi dịch)",
+            "Chỉ có tác dụng với model hỗ trợ reasoning. Tắt = nhanh hơn nhiều "
+            "(Qwen3.7 Flash: ~2s thay vì 16-25s) và rẻ hơn — dịch không cần suy luận.",
+        )
+        provider_form.addRow("", self._thinking_toggle)
+
         self._test_button = QPushButton("Test connection")
         self._test_button.setProperty("soft", True)
         self._test_button.clicked.connect(self._on_test_clicked)
@@ -869,6 +876,7 @@ class SettingsWindow(QWidget):
         if saved_model and self._model_combo.findData(saved_model) < 0:
             self._model_combo.addItem(saved_model, saved_model)
         _select_by_data(self._model_combo, saved_model)
+        self._thinking_toggle.setChecked(s.translate.openrouter_thinking)
         _select_by_data(self._source_lang_combo, s.translate.source_lang or "")
         _select_by_data(self._target_lang_combo, s.translate.target_lang)
         _select_by_data(self._display_mode_combo, s.translate.display_mode)
@@ -943,6 +951,7 @@ class SettingsWindow(QWidget):
         s.translate.display_mode = self._display_mode_combo.currentData() or "simple"
         if provider_key == "openrouter":
             s.translate.openrouter_model = self._model_combo.currentData()
+            s.translate.openrouter_thinking = self._thinking_toggle.isChecked()
         # Persist the fetched catalog so the dropdown repopulates next launch.
         if self._fetched_models:
             s.translate.openrouter_models = [[d, i] for d, i in self._fetched_models]
@@ -1013,6 +1022,7 @@ class SettingsWindow(QWidget):
         self._model_combo.setVisible(is_openrouter)
         self._model_row_label.setVisible(is_openrouter)
         self._fetch_models_button.setVisible(is_openrouter)
+        self._thinking_toggle.setVisible(is_openrouter)
         if info.needs_api_key:
             self._api_key_input.setEnabled(True)
             has_stored = bool(get_api_key(provider_key))
@@ -1040,6 +1050,7 @@ class SettingsWindow(QWidget):
                 kwargs["api_key"] = candidate_key
             if candidate_model:
                 kwargs["model"] = candidate_model
+                kwargs["thinking"] = self._thinking_toggle.isChecked()
             translator = info.factory(**kwargs)  # type: ignore[call-arg]
         except TypeError:
             translator = info.factory()

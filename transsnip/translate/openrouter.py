@@ -50,11 +50,20 @@ class OpenRouterTranslator(LLMTranslator):
     sdk_package = "openai"
     missing_key_message = "OpenRouter API key chưa set. Lấy key miễn phí tại openrouter.ai → Keys"
 
-    def __init__(self, *, model: str | None = None, api_key: str | None = None) -> None:
+    def __init__(
+        self, *, model: str | None = None, api_key: str | None = None, thinking: bool = False
+    ) -> None:
         if model in _RETIRED_MODELS:
             log.info("OpenRouter model %s is retired — using %s", model, _RETIRED_MODELS[model])
             model = _RETIRED_MODELS[model]
         super().__init__(model=model, api_key=api_key)
+        self._thinking = thinking
+        self._reasoning_off = not thinking  # see _complete
+
+    @property
+    def cache_id(self) -> str:
+        # Thinking can change the wording — don't serve one mode's cache to the other.
+        return super().cache_id + (":think" if self._thinking else "")
 
     def _ensure_client(self) -> Any:
         if self._client is None:
@@ -71,15 +80,32 @@ class OpenRouterTranslator(LLMTranslator):
         return self._client
 
     def _complete(self, system: str, user: str) -> str:
-        response = self._ensure_client().chat.completions.create(
-            model=self._model,
-            messages=[
+        kwargs: dict[str, Any] = {
+            "model": self._model,
+            "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            max_tokens=MAX_OUTPUT_TOKENS,
-            temperature=0.1,
-        )
+            "max_tokens": MAX_OUTPUT_TOKENS,
+            "temperature": 0.1,
+        }
+        # Many current cheap models think by default (qwen3.7-flash,
+        # deepseek-v4-flash…): a one-line translation then waited 16-25 s for
+        # hidden reasoning — billed as output — before the answer. Translation
+        # needs none of it. Models that REQUIRE reasoning reject "none"; on
+        # that error retry once without it and stop sending it.
+        if self._reasoning_off:
+            kwargs["extra_body"] = {"reasoning": {"effort": "none"}}
+        try:
+            response = self._ensure_client().chat.completions.create(**kwargs)
+        except Exception as exc:
+            if not self._reasoning_off or "reasoning" not in str(exc).lower():
+                raise
+            log.info("OpenRouter [%s] requires reasoning — sending requests without "
+                     "reasoning.effort=none from now on", self._model)
+            self._reasoning_off = False
+            kwargs.pop("extra_body")
+            response = self._ensure_client().chat.completions.create(**kwargs)
         if response.usage:
             log.debug(
                 "OpenRouter [%s]: in=%d out=%d tokens",
