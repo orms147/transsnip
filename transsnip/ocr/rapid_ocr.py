@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import logging
+import os
 import threading
 from typing import Any
 
@@ -112,6 +113,14 @@ class RapidOCREngine(OCREngine):
         # engine_type defaults to onnxruntime (see rapidocr config.yaml) — leave
         # it unset so we don't have to import yet another enum.
         params: dict[str, Any] = {
+            # Runtime: measured with scripts/ocr_bench.py cases (2 runs, same
+            # CER): arena on + ≤8 intra-op threads is ~25% faster overall than
+            # the defaults (arena off, all cores) — subtitles 50 → 35 ms,
+            # 1080p page 420 → 290 ms. All 32 threads of a big CPU spend more
+            # time coordinating than computing on these small inputs, and the
+            # cap leaves cores for the video player in subtitle mode.
+            "EngineConfig.onnxruntime.enable_cpu_mem_arena": True,
+            "EngineConfig.onnxruntime.intra_op_num_threads": min(8, os.cpu_count() or 4),
             "Global.use_cls": False,
             "Det.model_path": str(det_path),
             "Det.ocr_version": OCRVersion(DET_VERSION),
