@@ -343,4 +343,9 @@ class WhisperTranscriber:
                 continue
             kept.append(text)
         out = _join_segments(kept)
-        return self._to_script(out) if self._to_script and out else out
+        to_script = self._to_script
+        if to_script is None and (lang or info.language) == "zh":
+            # Auto mode: Whisper still flips scripts chunk to chunk — settle
+            # on Simplified (the common case) so subtitles stay consistent.
+            to_script = _zh_converter("zh-Hans")
+        return to_script(out) if to_script and out else out

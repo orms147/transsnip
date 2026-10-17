@@ -42,6 +42,25 @@ _IPA_TOKEN_RE = re.compile(r"\S+|\s+")
 _IPA_FONT_FAMILIES = ["Segoe UI", "Charis SIL", "Doulos SIL", "Arial"]
 _IPA_FONT_CSS = "'Segoe UI', 'Charis SIL', 'Doulos SIL', Arial, sans-serif"
 
+# One CJK font per language. Without it Windows falls back glyph by glyph:
+# Han characters that exist in the Japanese font render in it, Simplified-only
+# ones (饭 变 经 创…) in Microsoft YaHei — a visibly mixed, "patchy" line.
+# Shared Han characters also have regional glyph shapes, so Japanese text
+# should use a Japanese font and Chinese text a Chinese one.
+_CJK_FONTS: dict[str, str] = {
+    "zh-hans": "'Microsoft YaHei UI', 'Microsoft YaHei'",
+    "zh": "'Microsoft YaHei UI', 'Microsoft YaHei'",
+    "zh-hant": "'Microsoft JhengHei UI', 'Microsoft JhengHei'",
+    "ja": "'Yu Gothic UI', 'Meiryo UI', 'Meiryo'",
+    "ko": "'Malgun Gothic'",
+}
+
+
+def cjk_font_css(lang: str | None) -> str:
+    """` font-family: …;` for a CJK language (Latin still uses Segoe UI), else ''."""
+    fonts = _CJK_FONTS.get((lang or "").lower()) or _CJK_FONTS.get((lang or "").lower()[:2])
+    return f" font-family: 'Segoe UI', {fonts};" if fonts else ""
+
 # A default Edge-TTS voice per target language, used to read the TRANSLATION
 # aloud (Standard/Learning mode). The Settings → Voice `voice` is for the SOURCE
 # (English pronunciation); reading a Vietnamese translation with an English

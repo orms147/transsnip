@@ -50,6 +50,7 @@ from transsnip.display.popup.constants import (
     _lang_display_name,
     _truncate,
     _voice_for_lang,
+    cjk_font_css,
 )
 from transsnip.display.popup.dismiss import _OutsideDismissMixin
 from transsnip.display.popup.phonetic import (
@@ -354,10 +355,16 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         *,
         source_lang: str | None = None,
         show_phonetic: bool = False,
+        detected: bool = False,
     ) -> None:
-        """OCR done — display source text with optional IPA furigana."""
+        """OCR done — display source text with optional IPA furigana.
+
+        `detected`: `source_lang` came from auto-detection, not Settings — the
+        chip says so, so it doesn't read as a changed setting.
+        """
         self._last_source_text = source_text
         self._last_source_lang = source_lang
+        self._source_detected = detected
         self._show_phonetic_active = show_phonetic and source_lang == "en"
         self._header.set_status("translating")
         truncated = _truncate(source_text)
@@ -501,7 +508,10 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         # fights with the layout we already placed the chip into.
         code = (source_lang or "auto").upper()
         name = _lang_display_name(source_lang) or ("Auto" if not source_lang else "")
+        if source_lang and getattr(self, "_source_detected", False):
+            name = f"{name} · auto"
         self._source_chip.set_lang(code, name)
+        self._apply_style()  # source font follows the (detected) language
         if self._show_phonetic_active:
             self._phonetic.set_text(
                 text, scale=self._current_font_scale, avail_px=self._content_width()
@@ -738,9 +748,11 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         self._divider.setStyleSheet(f"background: {p.border_1};")
         self._source_label.setStyleSheet(
             f"color: {p.text_2}; line-height: 1.55; font-size: {src_pt}pt;"
+            + cjk_font_css(getattr(self, "_last_source_lang", None))
         )
         self._translation_label.setStyleSheet(
             f"color: {p.text_1}; line-height: 1.6; font-weight: 600; font-size: {tx_pt}pt;"
+            + cjk_font_css(getattr(self, "_last_target_lang", None))
         )
         self._learning_tag.setStyleSheet(
             f"color: {p.accent}; background: {p.accent_soft}; "

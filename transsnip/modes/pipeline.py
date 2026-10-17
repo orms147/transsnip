@@ -11,9 +11,11 @@ from __future__ import annotations
 import contextlib
 import logging
 import threading
+from dataclasses import replace
 
 from PySide6.QtCore import QObject, QThread, Signal
 
+from transsnip.linguistic.langdetect import effective_source
 from transsnip.translate.base import TranslationContext
 from transsnip.translate.registry import TranslationPipeline
 
@@ -53,8 +55,15 @@ class TranslateWorker(QThread):
             if src is None or src == last_done:
                 self.msleep(_IDLE_MS)
                 continue
+            ctx = self._ctx
+            if not ctx.source_lang:
+                # Auto mode: pin per line when the script is unambiguous
+                # (kana / plain Latin) — see linguistic.langdetect.
+                lang, confident = effective_source(None, src)
+                if confident:
+                    ctx = replace(ctx, source_lang=lang)
             try:
-                result = self._translator.translate(src, self._ctx)
+                result = self._translator.translate(src, ctx)
             except Exception as exc:  # noqa: BLE001 — TranslationError or worse
                 log.debug("subtitle translate skip: %s", exc)
                 continue  # transient — the next new line will try again

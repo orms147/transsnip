@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from functools import partial
 from typing import TYPE_CHECKING, Any
@@ -18,6 +19,7 @@ from transsnip.config.settings import Settings, get_preset, load_settings, save_
 from transsnip.display.floating_popup import FloatingPopup
 from transsnip.display.inline_overlay import InlineOverlay
 from transsnip.display.subtitle_bar import SubtitleBar
+from transsnip.linguistic.langdetect import effective_source
 from transsnip.modes.fullscreen import build_numbered_batch, overlay_boxes, parse_numbered_batch
 from transsnip.modes.video_subtitle import VideoSubtitleController
 from transsnip.ocr.base import OCRBlock, OCRError, OCRResult
@@ -410,8 +412,10 @@ class AppController(QObject):
         text: str,
         on_done: Callable[[Any], None] | None = None,
         on_failed: Callable[[str], None] | None = None,
+        *,
+        ctx: TranslationContext | None = None,
     ) -> None:
-        pipeline, ctx = self._translation_pipeline, self._translation_ctx
+        pipeline, ctx = self._translation_pipeline, ctx or self._translation_ctx
         run_in_pool(lambda: pipeline.translate(text, ctx),
                     on_done or self._on_translation_done,
                     on_failed or self._on_translation_failed,
@@ -431,20 +435,30 @@ class AppController(QObject):
         if not text:
             self._popup.show_error("Không tìm thấy text trong vùng đã chọn.")
             return
-        source_lang = self._settings.translate.source_lang
+        setting = self._settings.translate.source_lang
+        # Auto mode: settle the language from the text's script so the English
+        # features (run-on split, IPA), the popup chip and fonts still work.
+        source_lang, confident = effective_source(setting, text)
         # Stylized English titles (YouTube thumbnails, logos) often come back
-        # from Windows OCR as one giant run-on token. wordninja inserts spaces
-        # back; we only do this for explicit English source, since segmenting
-        # CJK or other scripts would be nonsense.
+        # from OCR as one giant run-on token. wordninja inserts spaces back;
+        # only for English, since segmenting CJK or other scripts is nonsense.
         if source_lang == "en":
             text = segment_english_runon(text)
-        log.info("OCR result (%s, %d blocks): %r", result.engine, len(result.blocks), text[:120])
+        log.info("OCR result (%s, %d blocks, lang=%s%s): %r", result.engine, len(result.blocks),
+                 source_lang, "" if setting else " detected", text[:120])
         self._popup.update_source(
             text,
             source_lang=source_lang,
             show_phonetic=self._settings.translate.phonetic_audio_en,
+            detected=setting is None,
         )
-        self._submit_translation(text)
+        # Pin the translator's source only when the script is unambiguous
+        # (kana → ja, plain Latin → en); Han-only text could be either zh or
+        # kanji-only ja, so the provider keeps its own auto-detect there.
+        ctx = self._translation_ctx
+        if setting is None and confident:
+            ctx = replace(ctx, source_lang=source_lang)
+        self._submit_translation(text, ctx=ctx)
 
     @Slot(str)
     def _on_ocr_failed(self, error: str) -> None:
