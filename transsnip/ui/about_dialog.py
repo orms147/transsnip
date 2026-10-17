@@ -32,7 +32,7 @@ from transsnip.ui import icons
 from transsnip.ui.atoms import CustomTitlebar, IconButton
 from transsnip.ui.theme import get_theme
 
-_VERSION = "v0.3.0"
+_VERSION = "v0.4.0"
 _BUILD = "cobalt-dark · 2026"
 _REPO_URL = "github.com/orms147/transsnip"
 _GITHUB_URL = "https://github.com/orms147"
