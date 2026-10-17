@@ -834,9 +834,11 @@ class SettingsWindow(QWidget):
         for tier, label in [
             ("tiny", "tiny (~75MB, nhanh nhất, kém chính xác)"),
             ("base", "base (~145MB, nhẹ)"),
-            ("small", "small (~460MB, cân bằng — khuyến nghị)"),
+            ("small", "small (~460MB, cân bằng — khuyến nghị cho CPU)"),
             ("medium", "medium (~1.5GB, chính xác hơn, chậm ~3x — máy mạnh)"),
-            ("large-v3", "large-v3 (~3GB, chính xác nhất — cần GPU NVIDIA)"),
+            ("large-v3-turbo",
+             "large-v3-turbo (~1.6GB, chính xác nhất cho zh/ja — cần GPU NVIDIA)"),
+            ("large-v3", "large-v3 (~3GB, chậm hơn turbo, không chính xác hơn — cần GPU)"),
         ]:
             self._whisper_tier_combo.addItem(label, tier)
         tier_form = QFormLayout()

@@ -75,6 +75,7 @@ audio = [
     "faster-whisper>=1.0",                              # multilingual REQUIRED (Vietnamese)
     "numpy>=1.24",
     "scipy>=1.11",                                      # 48k→16k resample
+    "zhconv>=1.4",                                      # zh ASR output → the pinned script
 ]
 dev = [
     "pytest>=8.0.0",

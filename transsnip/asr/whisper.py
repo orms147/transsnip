@@ -27,7 +27,14 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 # Per-tier rough on-disk size (float16 CT2 model.bin; int8 quantizes at load).
-TIER_SIZE_MB = {"tiny": 75, "base": 145, "small": 480, "medium": 1500, "large-v3": 3000}
+# Measured with scripts/asr_bench.py (zh/en/ja dialogue, CPU int8): small is
+# the CPU sweet spot (CER zh 2.3% / ja 1.9% / en 1.2%, RTF ~0.5); base matches
+# it on Chinese but is 2-4x worse on Japanese; large-v3-turbo is best (zh 1.1%,
+# ja 0.9%) but RTF ~2 on CPU — it falls behind live audio, so GPU only.
+TIER_SIZE_MB = {
+    "tiny": 75, "base": 145, "small": 480, "medium": 1500,
+    "large-v3-turbo": 1620, "large-v3": 3000,
+}
 
 # --- Decoding / quality knobs -------------------------------------------------
 # beam_size=5 (not greedy 1): RTF headroom is large (~0.3 measured), so we spend
@@ -55,10 +62,58 @@ _HALLUCINATION_PHRASES = frozenset({
 })
 
 
+# Distinctive fragments of the same phantom credits that Whisper also tacks
+# onto the END of real speech when a chunk is short or cut mid-word (measured
+# with scripts/asr_bench.py: "老板说,明天早日请不吝点赞,订阅、转发、打赏支持明镜与点点栏目…",
+# "ありがとう! 本当にご視聴ありがとうございました"). Long + specific enough
+# that genuine dialogue won't contain them; the segment is cut at the marker.
+_HALLUCINATION_MARKERS: tuple[str, ...] = (
+    "请不吝点赞", "請不吝點贊", "订阅、转发", "訂閱 轉發", "打赏支持", "打賞支持",
+    "明镜与点点", "明鏡與點點", "字幕由", "字幕志愿者", "感谢观看", "感謝觀看",
+    "ご視聴ありがとうございました", "チャンネル登録",
+    "thanks for watching", "please subscribe", "like and subscribe",
+)
+
+
 def _is_hallucination(text: str) -> bool:
     """True if `text` is (just) a known Whisper phantom phrase."""
     t = text.strip().lower().rstrip(".!?。！？、，, ").strip()
     return t == "" or t in _HALLUCINATION_PHRASES
+
+
+def _strip_phantom_tail(text: str) -> str:
+    """Cut `text` at the first embedded phantom-credit marker (keep the speech before it)."""
+    low = text.lower()
+    cut = min((i for m in _HALLUCINATION_MARKERS if (i := low.find(m)) >= 0), default=-1)
+    if cut < 0:
+        return text
+    return text[:cut].rstrip(" ,，、.。!！?？…")
+
+
+def _join_segments(texts: list[str]) -> str:
+    """Join segment texts — no space between CJK runs (zh/ja have no word gaps)."""
+    from transsnip.ocr.base import _join_blocks_smart
+    return _join_blocks_smart(texts).strip()
+
+
+def _zh_converter(tag: str | None):
+    """Script normaliser for a pinned Chinese source, or None.
+
+    Whisper's "zh" covers both scripts and flips between them per chunk —
+    9 of 24 Mandarin clips came back (partly) Traditional on `small`. A
+    Settings choice of zh-Hans / zh-Hant says which one the user reads, so
+    normalise to it. Deterministic dictionary conversion instead of an
+    initial_prompt: the prompt also fixed the script but made short / cut
+    chunks hallucinate whole phantom sentences (CER 25% → 39%).
+    """
+    if not tag or tag.lower().split("-")[0] != "zh":
+        return None
+    try:
+        import zhconv
+    except ImportError:
+        return None
+    variant = "zh-tw" if "hant" in tag.lower() or tag.lower() in ("zh-tw", "zh-hk") else "zh-cn"
+    return lambda s: zhconv.convert(s, variant)
 
 
 def _add_cuda_dll_dirs() -> None:
@@ -156,6 +211,7 @@ class WhisperTranscriber:
         # the chunk silently yields nothing. Normalize: strip the region subtag,
         # and treat ""/"auto" as auto-detect.
         self._lang = self._normalize_lang(source_lang)
+        self._to_script = _zh_converter(source_lang)
         self._locked_lang: str | None = None  # auto-detected lock (per session)
         self._model = None
 
@@ -282,8 +338,9 @@ class WhisperTranscriber:
                 continue                                   # likely silence
             if seg.compression_ratio > _COMPRESSION_MAX:
                 continue                                   # repetition loop
-            text = seg.text.strip()
+            text = _strip_phantom_tail(seg.text.strip())
             if not text or _is_hallucination(text):
                 continue
             kept.append(text)
-        return " ".join(kept).strip()
+        out = _join_segments(kept)
+        return self._to_script(out) if self._to_script and out else out

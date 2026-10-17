@@ -41,10 +41,11 @@ datas = [(src, dst) for src, dst in datas
 #   ctranslate2    → CT2 + MKL/OpenMP DLLs (the actual inference engine, CPU)
 #   av             → bundled FFmpeg DLLs (faster_whisper audio decode path)
 #   pyaudiowpatch  → portaudio DLL (WASAPI loopback capture)
+#   zhconv         → zhcdict.json (Traditional ↔ Simplified for Chinese ASR output)
 # The huge NVIDIA CUDA wheels (~1.9GB) are EXCLUDED below — GPU is opt-in via a
 # separate `pip install nvidia-cublas-cu12 nvidia-cudnn-cu12`; the app's
 # warmup-fallback (asr/whisper.py) drops to CPU when they're absent.
-for _pkg in ("faster_whisper", "ctranslate2", "av", "pyaudiowpatch"):
+for _pkg in ("faster_whisper", "ctranslate2", "av", "pyaudiowpatch", "zhconv"):
     _d, _b, _h = collect_all(_pkg)
     datas += _d
     binaries += _b
