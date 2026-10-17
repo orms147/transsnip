@@ -81,6 +81,11 @@ def _setup_logging(dev: bool) -> None:
 
 def main() -> int:
     _make_streams_safe()
+    # Qt's font database prints dozens of harmless "OpenType support missing
+    # for <font>, script N" lines whenever CJK text falls back across fonts.
+    os.environ.setdefault(
+        "QT_LOGGING_RULES", "qt.text.font.db=false;qt.qpa.fonts.warning=false"
+    )
     # Before any import can pull in pywinrt — see utils/win_dll.py.
     from transsnip.utils.win_dll import preload_msvcp140
     preload_msvcp140()

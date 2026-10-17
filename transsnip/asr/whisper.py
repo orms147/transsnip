@@ -41,6 +41,11 @@ TIER_SIZE_MB = {
 # it on accuracy. The three thresholds below are OpenAI Whisper's own silence/
 # gibberish heuristics, applied per-segment to drop hallucinations.
 _BEAM_SIZE = 5
+# CTranslate2 defaults to 4 CPU threads. 8 cut `small` from ~1.5 s to ~1.2 s per
+# ~3 s utterance (same CER); 16 gained nothing. Capped by the machine's cores.
+# (beam 1, vad_filter off, without_timestamps: all measured, none faster — the
+# encoder's fixed 30 s window dominates, not decoding.)
+_CPU_THREADS = min(8, os.cpu_count() or 4)
 _NO_SPEECH_MAX = 0.6      # seg.no_speech_prob above this → likely silence
 _LOGPROB_MIN = -1.0       # seg.avg_logprob below this → low-confidence garbage
 _COMPRESSION_MAX = 2.4    # seg.compression_ratio above this → repetition loop
@@ -269,7 +274,7 @@ class WhisperTranscriber:
         try:
             model = WhisperModel(
                 self._tier, device=device, compute_type=compute,
-                download_root=str(whisper_cache_dir()),
+                download_root=str(whisper_cache_dir()), cpu_threads=_CPU_THREADS,
             )
             if device != "cpu":
                 self._warmup(model)            # forces cuBLAS/cuDNN load — may raise
@@ -284,7 +289,7 @@ class WhisperTranscriber:
             device, compute = "cpu", "int8"
             model = WhisperModel(
                 self._tier, device=device, compute_type=compute,
-                download_root=str(whisper_cache_dir()),
+                download_root=str(whisper_cache_dir()), cpu_threads=_CPU_THREADS,
             )
         self._model = model
         self._device, self._compute_type = device, compute

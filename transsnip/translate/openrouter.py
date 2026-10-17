@@ -18,6 +18,10 @@ OPENROUTER_MODELS: list[tuple[str, str]] = [
     ("Gemma 4 31B (free)", "google/gemma-4-31b-it:free"),
     ("Gemma 4 26B A4B (free)", "google/gemma-4-26b-a4b-it:free"),
     # --- Paid models ---
+    # Fastest measured for live subtitles (zh→vi, reasoning off): ~0.8 s median,
+    # ~1.1 s worst; qwen3.7-flash 1.6 s median but up to ~4 s (single provider).
+    ("DeepSeek V4 Flash (nhanh nhất cho phụ đề)", "deepseek/deepseek-v4-flash"),
+    ("Qwen3.7 Flash", "qwen/qwen3.7-flash"),
     ("Gemini 3.6 Flash", "google/gemini-3.6-flash"),
     ("Gemini 3.5 Flash-Lite", "google/gemini-3.5-flash-lite"),
     ("Claude Haiku 5.5", "anthropic/claude-haiku-5.5"),
