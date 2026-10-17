@@ -41,6 +41,9 @@ TIER_SIZE_MB = {
 # it on accuracy. The three thresholds below are OpenAI Whisper's own silence/
 # gibberish heuristics, applied per-segment to drop hallucinations.
 _BEAM_SIZE = 5
+# ≤4.5 s utterance ≈ ≤40 words / ≤70 CJK chars; cap generation well above that
+# so a runaway (hallucination) decode can't burn seconds.
+_MAX_NEW_TOKENS = 128
 # CTranslate2 defaults to 4 CPU threads. 8 cut `small` from ~1.5 s to ~1.2 s per
 # ~3 s utterance (same CER); 16 gained nothing. Capped by the machine's cores.
 # (beam 1, vad_filter off, without_timestamps: all measured, none faster — the
@@ -328,6 +331,15 @@ class WhisperTranscriber:
             language=lang,
             vad_filter=True,
             beam_size=_BEAM_SIZE,
+            # One decoding pass. faster-whisper's default re-decodes up to 5
+            # more times at rising temperatures when a pass looks like a
+            # repetition loop / low confidence — on music-heavy chunks one
+            # 4.5 s utterance then took ~16 s and audio backed up behind it.
+            # Those passes rarely rescue anything we'd keep: the per-segment
+            # filters below drop loops and low-confidence text anyway.
+            temperature=0.0,
+            condition_on_previous_text=False,
+            max_new_tokens=_MAX_NEW_TOKENS,
         )
         # Lock the language once we're confident (only while still auto-detecting).
         if lang is None and getattr(info, "language_probability", 0.0) >= _LANG_LOCK_PROB:

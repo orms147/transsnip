@@ -3,7 +3,11 @@
 - `TranslateWorker`: a coalescing translator thread — always translates the
   MOST RECENT submitted line, dropping intermediate ones queued while a slow
   network call was in flight, so subtitle lag stays bounded to about one
-  translation instead of growing a backlog.
+  translation instead of growing a backlog. Right for VIDEO subtitles: only
+  the line currently on screen matters.
+- `OrderedTranslateWorker`: for AUDIO, where every utterance is content —
+  translates up to 3 lines concurrently, emits them in spoken order, and only
+  drops lines when a backlog builds up.
 - `PipelineControllerBase`: stop-safety for controllers that own QThreads.
 """
 from __future__ import annotations
@@ -11,6 +15,8 @@ from __future__ import annotations
 import contextlib
 import logging
 import threading
+from collections import deque
+from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import replace
 
 from PySide6.QtCore import QObject, QThread, Signal
@@ -22,6 +28,17 @@ from transsnip.translate.registry import TranslationPipeline
 log = logging.getLogger(__name__)
 
 _IDLE_MS = 40            # translate worker idle poll when nothing pending
+_PARALLEL = 3            # ordered worker: concurrent translation requests
+_MAX_BACKLOG = 4         # ordered worker: queued-not-started lines kept
+
+
+def ctx_for_line(ctx: TranslationContext, src: str) -> TranslationContext:
+    """Auto mode: pin the source language per line when the script is
+    unambiguous (kana / plain Latin) — see linguistic.langdetect."""
+    if ctx.source_lang:
+        return ctx
+    lang, confident = effective_source(None, src)
+    return replace(ctx, source_lang=lang) if confident else ctx
 
 
 class TranslateWorker(QThread):
@@ -55,21 +72,75 @@ class TranslateWorker(QThread):
             if src is None or src == last_done:
                 self.msleep(_IDLE_MS)
                 continue
-            ctx = self._ctx
-            if not ctx.source_lang:
-                # Auto mode: pin per line when the script is unambiguous
-                # (kana / plain Latin) — see linguistic.langdetect.
-                lang, confident = effective_source(None, src)
-                if confident:
-                    ctx = replace(ctx, source_lang=lang)
             try:
-                result = self._translator.translate(src, ctx)
+                result = self._translator.translate(src, ctx_for_line(self._ctx, src))
             except Exception as exc:  # noqa: BLE001 — TranslationError or worse
                 log.debug("subtitle translate skip: %s", exc)
                 continue  # transient — the next new line will try again
             last_done = src
             if self._running:
                 self.text_ready.emit(result.translated_text)
+
+
+class OrderedTranslateWorker(QThread):
+    """Translates every submitted line, several at once, emitting in order.
+
+    Audio subtitles used the coalescing worker: a 2-4 s network translation
+    meant utterances that arrived meanwhile were silently skipped, and each
+    line waited for the previous one. Here up to `_PARALLEL` requests run at
+    once and results are released strictly in submission order (a fast reply
+    to line 3 waits for line 2), so the two-line subtitle bar reads naturally.
+    If lines pile up faster than they translate, the oldest NOT-yet-started
+    ones are dropped (`_MAX_BACKLOG`) so the subtitles never fall far behind.
+    """
+
+    text_ready = Signal(str)
+
+    def __init__(self, translator: TranslationPipeline, ctx: TranslationContext) -> None:
+        super().__init__()
+        self._translator = translator
+        self._ctx = ctx
+        self._lock = threading.Lock()
+        self._queue: deque[str] = deque()
+        self._running = True
+        self._last_submitted: str | None = None
+
+    def submit(self, src: str) -> None:
+        with self._lock:
+            if src == self._last_submitted:
+                return
+            self._last_submitted = src
+            self._queue.append(src)
+            while len(self._queue) > _MAX_BACKLOG:
+                dropped = self._queue.popleft()
+                log.info("audio subtitle backlog — dropping %r", dropped[:40])
+
+    def stop(self) -> None:
+        self._running = False
+
+    def _translate(self, src: str) -> str | None:
+        try:
+            return self._translator.translate(src, ctx_for_line(self._ctx, src)).translated_text
+        except Exception as exc:  # noqa: BLE001 — TranslationError or worse
+            log.debug("subtitle translate skip: %s", exc)
+            return None
+
+    def run(self) -> None:
+        in_flight: deque[Future[str | None]] = deque()   # submission order
+        pool = ThreadPoolExecutor(max_workers=_PARALLEL, thread_name_prefix="sub-tr")
+        try:
+            while self._running:
+                with self._lock:
+                    while self._queue and len(in_flight) < _PARALLEL:
+                        in_flight.append(pool.submit(self._translate, self._queue.popleft()))
+                # Release finished results strictly from the head (keeps order).
+                while in_flight and in_flight[0].done():
+                    text = in_flight.popleft().result()
+                    if text and self._running:
+                        self.text_ready.emit(text)
+                self.msleep(_IDLE_MS)
+        finally:
+            pool.shutdown(wait=False, cancel_futures=True)
 
 
 class PipelineControllerBase(QObject):

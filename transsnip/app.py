@@ -304,6 +304,7 @@ class AppController(QObject):
         screen = QGuiApplication.screenAt(rect.center()) or QGuiApplication.primaryScreen()
         dpr = screen.devicePixelRatio() if screen is not None else 1.0
         self._style_subtitle_bar()
+        self._subtitle_bar.set_two_lines(False)  # video: one on-screen line ↔ one subtitle
         self._subtitle_bar.start_for_region(rect)
         self._video.start(
             rect, dpr, self._ocr_pipeline, self._translation_pipeline, self._translation_ctx,
@@ -342,6 +343,7 @@ class AppController(QObject):
                 source_lang=self._settings.translate.source_lang,
             )
         self._style_subtitle_bar()
+        self._subtitle_bar.set_two_lines(True)   # audio: previous + newest utterance
         self._subtitle_bar.start_anchored(active_monitor_logical_rect())
         self._audio.start(self._transcriber, self._translation_pipeline, self._translation_ctx)
         mb = self._transcriber.expected_download_mb()

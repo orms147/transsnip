@@ -9,7 +9,7 @@ Pipeline (THREE decoupled threads so no audio is ever dropped):
         pull a complete UTTERANCE from the buffer (speech bounded by a silence
         gap — energy VAD, not a fixed time slice) → WhisperTranscriber.transcribe()
         → dedupe (text_similarity) → emit new_source(text)
-    TranslateWorker (QThread)                   [shared, modes/pipeline.py]
+    OrderedTranslateWorker (QThread)            [modes/pipeline.py]
         coalesce latest → pipeline.translate() → emit text_ready(translated)
                               ▼
                        SubtitleBar.set_text()    [main thread]
@@ -20,17 +20,19 @@ each transcribe takes, and PortAudio would silently drop that audio (the "thiế
 nhiều câu" bug). A dedicated capture thread filling a shared buffer fixes it.
 
 Threading: worker threads only emit signals — never touch the GUI. All PortAudio
-/ Whisper work happens off the Qt main thread. `TranslateWorker` (shared with
-video mode) coalesces so only the most-recent transcript is translated.
+/ Whisper work happens off the Qt main thread. `OrderedTranslateWorker` — unlike
+video mode's coalescing worker — translates EVERY utterance (up to 3 at once)
+and emits them in spoken order for the two-line subtitle bar.
 """
 from __future__ import annotations
 
 import logging
 import threading
+import time
 
 from PySide6.QtCore import QObject, QThread, Signal
 
-from transsnip.modes.pipeline import PipelineControllerBase, TranslateWorker
+from transsnip.modes.pipeline import OrderedTranslateWorker, PipelineControllerBase
 from transsnip.translate.base import TranslationContext
 from transsnip.translate.registry import TranslationPipeline
 from transsnip.utils.image import text_similarity
@@ -54,6 +56,7 @@ _MAX_UTTERANCE_S = 4.5   # force-cut a non-stop monologue so a long sentence
                          # appears sooner instead of waiting up to 6s+ to finish
 _MAX_BUFFER_S = 30.0     # cap buffered audio (drop oldest) if ASR ever falls behind
 _TEXT_SIM_THRESH = 0.90  # skip translating a near-duplicate of the last line
+_SLOW_ASR_S = 3.0        # warn when one transcribe pass takes longer than this
 
 
 class _AudioBuffer:
@@ -200,11 +203,18 @@ class _AsrLoop(QThread):
                 continue
             if is_silent(chunk):   # belt-and-suspenders; take_utterance already gates
                 continue
+            t0 = time.monotonic()
             try:
                 src = self._transcriber.transcribe(chunk)
             except Exception as exc:  # noqa: BLE001 — one bad pass shouldn't kill the loop
                 log.warning("transcribe failed: %s", exc)  # visible (not debug)
                 continue
+            took = time.monotonic() - t0
+            if took > _SLOW_ASR_S:
+                # Audio keeps buffering meanwhile → subtitles fall behind.
+                # Logged so a stall (e.g. a runaway decode on music) is visible.
+                log.warning("slow ASR pass: %.1fs for %.1fs of audio → %r",
+                            took, chunk.size / _TARGET_SR, src[:40])
             if not src:
                 log.debug("ASR: (no speech in chunk)")
                 continue
@@ -230,7 +240,7 @@ class AudioSubtitleController(PipelineControllerBase):
         super().__init__(parent)
         self._capture_thread: _CaptureThread | None = None
         self._asr: _AsrLoop | None = None
-        self._worker: TranslateWorker | None = None
+        self._worker: OrderedTranslateWorker | None = None
 
     def is_running(self) -> bool:
         return self._asr is not None and self._asr.isRunning()
@@ -245,7 +255,7 @@ class AudioSubtitleController(PipelineControllerBase):
             return
 
         buffer = _AudioBuffer()
-        worker = TranslateWorker(translator, ctx)
+        worker = OrderedTranslateWorker(translator, ctx)
         worker.text_ready.connect(self.text_ready)
         capture_thread = _CaptureThread(LoopbackCapture(), buffer)
         capture_thread.error.connect(self.error)
