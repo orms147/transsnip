@@ -67,3 +67,9 @@ def test_warm_up_skips_unavailable_and_swallows_errors():
     broken = _Engine("rapid", {"ko"})
     broken.warm_up = lambda lang=None: (_ for _ in ()).throw(RuntimeError("boom"))
     _pipeline(_Engine("windows", {"ko"}, available=False), broken).warm_up("ko")
+
+
+def test_default_pipeline_puts_rapid_first_unless_windows_requested():
+    from transsnip.ocr.registry import default_pipeline
+    assert [e.name for e in default_pipeline().engines()] == ["rapid", "windows"]
+    assert [e.name for e in default_pipeline("windows").engines()] == ["windows", "rapid"]

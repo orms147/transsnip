@@ -97,15 +97,28 @@ class OCRPipeline:
         )
 
 
-def default_pipeline() -> OCRPipeline:
+PRIMARY_ENGINES = ("rapid", "windows")
+
+
+def default_pipeline(primary: str = "rapid") -> OCRPipeline:
     """Build the standard pipeline for TransSnip.
 
-    Order:
-      1. Windows OCR — built-in, fast (~200ms), but only handles languages whose
-         OCR pack is installed on the host machine.
-      2. RapidOCR — bundled multilingual ONNX models. Slower first call (~3s cold
-         start) but works for every supported language without OS configuration.
+    Default order: RapidOCR (bundled PP-OCRv6) first, Windows OCR as fallback.
+    Measured with scripts/ocr_bench.py on zh/en/ja captures:
+    - RapidOCR: ~0% CER on nearly every case — subtitles of every style, game
+      UI, dark mode, Traditional Chinese, CJK+Latin mixes — at 20-110 ms per
+      region. One multilingual model, so "auto" source language costs nothing
+      extra and reads Chinese correctly.
+    - Windows OCR: 3-5x faster on clean UI text, but 90%+ CER on yellow /
+      shadow-only subtitles, ~17% on game UI, and in auto mode its Japanese pack
+      "wins" Chinese captures with garbage (17-56% CER). Garbage is non-empty,
+      so the pipeline never fell through to RapidOCR while Windows went first.
+    Windows still serves anything RapidOCR can't (missing models, languages it
+    lacks). `primary="windows"` restores the old speed-first order.
 
     Each engine is tried in order; the first one to return non-empty text wins.
     """
-    return OCRPipeline([WindowsOCR(), RapidOCREngine()])
+    engines: list[OCREngine] = [RapidOCREngine(), WindowsOCR()]
+    if primary == "windows":
+        engines.reverse()
+    return OCRPipeline(engines)

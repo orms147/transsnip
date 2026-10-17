@@ -67,10 +67,13 @@ class AppController(QObject):
         super().__init__(parent=app)
         self._app = app
         self._tray = tray
-        self._ocr_pipeline = ocr_pipeline or default_ocr_pipeline()
         self._settings_window: SettingsWindow | None = None
 
         self._settings = load_settings()
+        self._ocr_pipeline_injected = ocr_pipeline is not None
+        self._ocr_pipeline = ocr_pipeline or default_ocr_pipeline(
+            self._settings.ocr.primary_engine
+        )
         self._translation_pipeline = translation_pipeline or pipeline_from_settings(
             self._settings
         )
@@ -657,6 +660,10 @@ class AppController(QObject):
         self._settings = load_settings()
         self._translation_pipeline = pipeline_from_settings(self._settings)
         self._translation_ctx = _build_translation_ctx(self._settings)
+        if not self._ocr_pipeline_injected:
+            # Cheap: engines build their models lazily (and warm-up below
+            # pre-builds the new primary off the GUI thread).
+            self._ocr_pipeline = default_ocr_pipeline(self._settings.ocr.primary_engine)
         self._warm_up_ocr()
         # Drop the cached transcriber so a changed Whisper tier / source-lang
         # takes effect on the next Alt+A (rebuilt lazily in _start_audio).

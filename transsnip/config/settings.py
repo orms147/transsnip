@@ -188,6 +188,18 @@ class VoiceSettings(BaseModel):
     output_device: str = ""
 
 
+class OCRSettings(BaseModel):
+    """Which OCR engine runs first (see ocr.registry.default_pipeline).
+
+    "rapid"   — bundled PP-OCRv6: far more accurate on subtitles / game UI /
+                Chinese; 20-110 ms per region. Default.
+    "windows" — Windows.Media.Ocr first: faster on clean UI text, but needs the
+                language pack and misreads stylised text.
+    """
+
+    primary_engine: str = "rapid"
+
+
 class AudioSettings(BaseModel):
     """Audio-subtitle mode (Settings → Audio tab) — translate the spoken audio of
     a video that has no on-screen text via Whisper ASR.
@@ -210,6 +222,7 @@ class Settings(BaseModel):
     display: DisplaySettings = Field(default_factory=DisplaySettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     audio: AudioSettings = Field(default_factory=AudioSettings)
+    ocr: OCRSettings = Field(default_factory=OCRSettings)
     # v6: added hotkeys.high_priority (gaming mode). No migration needed —
     # Pydantic fills the missing bool with its default, so v5 loads fine.
     schema_version: int = 6
