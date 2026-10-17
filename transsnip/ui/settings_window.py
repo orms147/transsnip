@@ -15,11 +15,10 @@ from __future__ import annotations
 import logging
 
 from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtGui import QKeySequence, QWheelEvent
+from PySide6.QtGui import QKeySequence
 from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import (
     QComboBox,
-    QCompleter,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
@@ -61,6 +60,8 @@ from transsnip.ui.atoms import (
     ThemeCard,
     ToggleRow,
 )
+from transsnip.ui.search_combo import ComboBox as _ComboBox
+from transsnip.ui.search_combo import SearchCombo
 from transsnip.ui.theme import get_theme
 from transsnip.ui.tokens import ThemeMode
 
@@ -134,60 +135,22 @@ _VOICE_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
 
 
 # ── Helpers (kept from previous impl) ─────────────────────────────────────
-class _ComboBox(QComboBox):
-    """QComboBox that (1) doesn't change value on scroll-wheel and (2) paints
-    its own down-chevron.
-
-    Scroll: default Qt combos cycle their value when you scroll the wheel over
-    them — easy to change a setting by accident while scrolling the page. We
-    pass the wheel event up to the parent (so the panel scrolls), consuming it
-    only when the dropdown popup is open.
-
-    Arrow: Qt's QSS `::down-arrow { image: url(...) }` renders blank for these
-    (esp. editable combos), so we draw the chevron ourselves in paintEvent —
-    reliable in both themes. Typeahead (editable + completer) still works.
-    """
-
-    _ARROW_W = 26  # must match QComboBox::drop-down width in theme.py
-
-    def wheelEvent(self, event: QWheelEvent) -> None:
-        if self.view().isVisible():
-            super().wheelEvent(event)  # popup open → normal scroll inside it
-        else:
-            event.ignore()  # bubble up so the scroll area scrolls instead
-
-    def paintEvent(self, event) -> None:
-        super().paintEvent(event)
-        from PySide6.QtGui import QColor, QPainter, QPen
-
-        from transsnip.ui.theme import get_theme
-        p = get_theme().palette
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(QColor(p.text_1), 2.0)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
-        cx = self.width() - self._ARROW_W / 2
-        cy = self.height() / 2
-        # Down chevron: ⌄
-        painter.drawLine(int(cx - 4), int(cy - 2), int(cx), int(cy + 2))
-        painter.drawLine(int(cx), int(cy + 2), int(cx + 4), int(cy - 2))
-        painter.end()
-
-
-def _make_searchable_lang_combo(options: list[tuple[str, str]]) -> QComboBox:
-    combo = _ComboBox()
-    combo.setEditable(True)
-    combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+def _lang_combo(options: list[tuple[str, str]]) -> SearchCombo:
+    combo = SearchCombo(placeholder="Gõ tên hoặc mã ngôn ngữ (vd: viet, ja)…")
     for label, data in options:
         combo.addItem(label, data)
-    completer = combo.completer()
-    if completer is not None:
-        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
     return combo
+
+
+def _price_tag(pricing: dict) -> str:
+    """" · $0.03/$0.13" per 1M tokens (in/out), or " (free)"."""
+    try:
+        pin, pout = float(pricing.get("prompt", 0)) * 1e6, float(pricing.get("completion", 0)) * 1e6
+    except (TypeError, ValueError):
+        return ""
+    if pin <= 0 and pout <= 0:
+        return " (free)"
+    return f" · ${pin:.3g}/${pout:.3g}"
 
 
 def _select_by_data(combo: QComboBox, data: str) -> None:
@@ -446,7 +409,7 @@ class SettingsWindow(QWidget):
         self._api_key_hint.setWordWrap(True)
         provider_form.addRow("", self._api_key_hint)
 
-        self._model_combo = _ComboBox()
+        self._model_combo = SearchCombo(placeholder="Gõ tên hoặc id model (vd: qwen flash, free)…")
         # Prefer the user's previously-fetched catalog; fall back to the small
         # hardcoded starter list on a fresh install.
         for display, model_id in (self._fetched_models or OPENROUTER_MODELS):
@@ -480,9 +443,9 @@ class SettingsWindow(QWidget):
         ))
         lang_form = QFormLayout()
         lang_form.setSpacing(12)
-        self._source_lang_combo = _make_searchable_lang_combo(_SOURCE_LANGUAGE_OPTIONS)
+        self._source_lang_combo = _lang_combo(_SOURCE_LANGUAGE_OPTIONS)
         lang_form.addRow("Nguồn (source):", self._source_lang_combo)
-        self._target_lang_combo = _make_searchable_lang_combo(_LANGUAGE_OPTIONS)
+        self._target_lang_combo = _lang_combo(_LANGUAGE_OPTIONS)
         lang_form.addRow("Đích (target):", self._target_lang_combo)
         layout.addLayout(lang_form)
 
@@ -776,7 +739,7 @@ class SettingsWindow(QWidget):
             "Giọng đọc Microsoft Edge — stream trực tiếp, không cần cài đặt thêm.",
         ))
 
-        self._voice_combo = _ComboBox()
+        self._voice_combo = SearchCombo(placeholder="Gõ để tìm giọng (vd: ja female, aria)…")
         for group_name, voices in _VOICE_GROUPS:
             for name, voice_id in voices:
                 self._voice_combo.addItem(f"{group_name} · {name}", voice_id)
@@ -1087,13 +1050,9 @@ class SettingsWindow(QWidget):
             for m in data.get("data", []):
                 mid = m.get("id", "")
                 name = m.get("name") or mid
-                pricing = m.get("pricing", {})
-                is_free = (
-                    str(pricing.get("prompt", "1")) == "0"
-                    and str(pricing.get("completion", "1")) == "0"
-                )
-                tag = " (free)" if is_free else ""
-                models.append((f"{name}{tag}", mid))
+                # Price in the label: search finds the model, the label says
+                # what it costs ($ per 1M input/output tokens).
+                models.append((f"{name}{_price_tag(m.get('pricing', {}))}", mid))
             models.sort(key=lambda x: (not x[0].endswith("(free)"), x[0].lower()))
             self._models_fetched.emit(models)
         except Exception as exc:  # noqa: BLE001

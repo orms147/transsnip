@@ -294,6 +294,7 @@ QComboBox {{
 }}
 QComboBox:hover {{ border-color: {p.border_strong}; }}
 QComboBox:focus {{ border-color: {p.accent}; }}
+QComboBox[nomatch="true"] {{ border-color: {p.danger}; }}
 QComboBox::drop-down {{
     /* Reserve the right gutter; the chevron is painted by _ComboBox.paintEvent
        (QSS ::down-arrow image rendering is unreliable, esp. for editable

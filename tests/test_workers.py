@@ -32,18 +32,16 @@ def test_unexpected_error_never_escapes() -> None:
     assert _run(boom) == ([], ["Unexpected: bad"])
 
 
-def test_run_in_pool_delivers_to_plain_callables() -> None:
+def test_run_in_pool_delivers_to_plain_callables(qapp) -> None:
     """Regression: lambda/partial callbacks were silently dropped because the
     signal carrier died with the auto-deleted runnable before delivery."""
     import functools
     import threading
     import time
 
-    from PySide6.QtCore import QCoreApplication
-
     from transsnip.utils.workers import run_in_pool
 
-    app = QCoreApplication.instance() or QCoreApplication([])
+    app = qapp
     main = threading.get_ident()
     got: list[tuple[str, object, bool]] = []
 
