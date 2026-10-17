@@ -36,7 +36,7 @@ def test_plain_translation_uses_shared_system_prompt() -> None:
     system, user = llm.calls[0]
     assert system == build_system_prompt(ctx)
     assert "Vietnamese" in system and "HP → máu" in system
-    assert user == "hello"
+    assert user == "Translate into Vietnamese:\n\nhello"
 
 
 def test_breakdown_mode_parses_words() -> None:
@@ -87,3 +87,17 @@ def test_cache_is_keyed_by_model(tmp_path, monkeypatch) -> None:
 def test_parse_json_object_rejects_non_objects() -> None:
     assert parse_json_object("[1, 2]") is None
     assert parse_json_object('{"a": 1}') == {"a": 1}
+
+
+def test_reply_in_source_script_is_retried_once():
+    llm = _FakeLLM()
+    replies = iter(["吃饭变强第1-20集大合集来啦", "Tuyển tập tập 1-20"])
+    llm._complete = lambda system, user: next(replies)
+    out = llm.translate("吃饭变强1-20集大合集来喽", TranslationContext(target_lang="vi"))
+    assert out.translated_text == "Tuyển tập tập 1-20"
+
+
+def test_cjk_target_is_not_treated_as_untranslated():
+    llm = _FakeLLM("今日は")
+    out = llm.translate("hello", TranslationContext(target_lang="ja"))
+    assert out.translated_text == "今日は" and len(llm.calls) == 1

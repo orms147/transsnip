@@ -51,7 +51,7 @@ class GeminiTranslator(LLMTranslator):
     def _complete(self, system: str, user: str) -> str:
         # The legacy SDK's GenerativeModel is built once per model, so the
         # (per-request) system prompt travels in the same turn as the text.
-        prompt = f"{system}\n\nText to translate:\n{user}"
+        prompt = f"{system}\n\n{user}"
         response = self._ensure_client().generate_content(
             prompt, request_options={"timeout": REQUEST_TIMEOUT_S}
         )

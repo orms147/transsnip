@@ -74,6 +74,29 @@ def build_system_prompt(ctx: TranslationContext) -> str:
     return "\n".join(parts)
 
 
+def build_user_turn(text: str, ctx: TranslationContext) -> str:
+    """The user turn for plain translation — restates the target language.
+
+    Small/fast models weigh the user turn far more than the system prompt: on
+    Chinese captures qwen3.7-flash "translated" into Chinese 1 time in 3 with
+    the instruction only in the system prompt, 0 in 3 with it repeated here.
+    """
+    return f"Translate into {lang_name(ctx.target_lang)}:\n\n{text}"
+
+
+def looks_untranslated(output: str, target_lang: str) -> bool:
+    """True if `output` is still written in a CJK script the target doesn't use.
+
+    Catches a model echoing / paraphrasing the source instead of translating
+    (seen: zh → vi request answered in Chinese). Only meaningful for Latin
+    targets; a zh/ja/ko target legitimately produces CJK.
+    """
+    if target_lang.lower().split("-")[0] in ("zh", "ja", "ko"):
+        return False
+    from transsnip.linguistic.langdetect import detect_lang
+    return (detect_lang(output).lang or "").split("-")[0] in ("zh", "ja", "ko")
+
+
 def build_vision_prompt(ctx: TranslationContext) -> str:
     """Instruction for single-pass image → {original, translation} JSON."""
     target = lang_name(ctx.target_lang)

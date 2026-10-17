@@ -52,7 +52,9 @@ def _make_key(text: str, ctx: TranslationContext, provider: str) -> str:
     produce identical output (same text, same target lang, same context, same provider).
     """
     payload = {
-        "v": 1,  # bump if cache schema changes
+        # bump if cache schema changes — or to drop bad entries: v2 discards
+        # pre-2026-10 LLM results that echoed the source language untranslated.
+        "v": 2,
         "text": text,
         "source_lang": ctx.source_lang,
         "target_lang": ctx.target_lang,

@@ -23,7 +23,9 @@ from transsnip.translate.base import (
 from transsnip.translate.prompts import (
     BREAKDOWN_SYSTEM_PROMPT,
     build_system_prompt,
+    build_user_turn,
     build_vision_prompt,
+    looks_untranslated,
     parse_vision_reply,
 )
 
@@ -121,13 +123,14 @@ class LLMTranslator(Translator):
         if ctx.want_word_breakdown:
             system, user = BREAKDOWN_SYSTEM_PROMPT, build_breakdown_prompt(text, ctx)
         else:
-            system, user = build_system_prompt(ctx), text
-        try:
-            raw = (self._complete(system, user) or "").strip()
-        except TranslationError:
-            raise
-        except Exception as exc:
-            raise TranslationError(f"{self.name} API call failed: {exc}") from exc
+            system, user = build_system_prompt(ctx), build_user_turn(text, ctx)
+        raw = self._call(system, user)
+        if not ctx.want_word_breakdown and raw and looks_untranslated(raw, ctx.target_lang):
+            # Model answered in the source script instead of translating — one
+            # retry usually fixes it (sampling), and costs nothing when it doesn't fire.
+            log.info("%s replied in the source language — retrying once", self.name)
+            retry = self._call(system, user)
+            raw = retry if retry and not looks_untranslated(retry, ctx.target_lang) else raw
 
         words = None
         translation = raw
@@ -147,6 +150,14 @@ class LLMTranslator(Translator):
             provider=self._provider_label(),
             words=words,
         )
+
+    def _call(self, system: str, user: str) -> str:
+        try:
+            return (self._complete(system, user) or "").strip()
+        except TranslationError:
+            raise
+        except Exception as exc:  # SDKs raise many unrelated types
+            raise TranslationError(f"{self.name} API call failed: {exc}") from exc
 
     def translate_image(self, image: Image.Image, ctx: TranslationContext) -> TranslationResult:
         self._check_ready()
