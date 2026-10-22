@@ -48,6 +48,14 @@ TransSnip lives in the system tray and stays out of your way until you call it.
   - **Standard** — adds 🔊 buttons to hear the source and the translation.
   - **Learning** — per-word **IPA** + meaning under the English source, click any word to hear it.
 - **Text-to-speech** — Microsoft Edge neural voices (free, online) with an offline Windows SAPI fallback; voice / speed / volume configurable.
+- **Học tiếng Trung (Chinese study mode)** — when the source is Chinese, every word shows
+  **pinyin** (tone-coloured) and its **Hán-Việt** reading, plus the whole sentence in Hán-Việt
+  (chosen per pronunciation in context: 董事**长** → trưởng, **长**城 → trường). Click a word for the
+  **word card**: Vietnamese meaning, HSK level, each character's Hán-Việt / radical / components,
+  **stroke-order animation** (optional ~30 MB download), and **AI usage notes** with example
+  sentences (on demand, cached). Save words to the **vocabulary notebook** and review them with
+  spaced repetition (Anki-style), or export to Anki. Offline dictionary — see
+  `resources/zh/NOTICE.md` for data sources and licences.
 - **Translation cache** — repeated text is returned instantly and for free.
 - **Translation history** — browse, copy and replay recent translations from the tray.
 - **Light / dark / auto theme** (follows Windows).
@@ -74,10 +82,11 @@ python -m venv .venv
 .venv\Scripts\activate
 
 # Install the app with the feature extras you want
-pip install -e ".[dev,ocr,translate,tts,learning]"
+pip install -e ".[dev,ocr,translate,tts,learning,zh]"
 
-# Fetch the OCR models once (gitignored — they're large binary blobs)
+# Fetch the OCR models + build the Chinese dictionary once (gitignored binaries)
 python scripts/fetch_models.py
+python scripts/fetch_zh_data.py
 
 # Run
 python -m transsnip
@@ -89,6 +98,7 @@ API keys are read from Windows Credential Manager (via `keyring`) — set them i
 
 ```bash
 python scripts/fetch_models.py                  # ensure models are present
+python scripts/fetch_zh_data.py                 # ensure the Chinese dictionary is built
 pyinstaller --noconfirm --clean TransSnip.spec  # → dist\TransSnip\ (onedir)
 "%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer.iss  # → dist\installer\TransSnip-Setup.exe
 ```

@@ -32,7 +32,7 @@ from transsnip.ui import icons
 from transsnip.ui.atoms import CustomTitlebar, IconButton
 from transsnip.ui.theme import get_theme
 
-_VERSION = "v0.4.0"
+_VERSION = "v0.4.1"
 _BUILD = "cobalt-dark · 2026"
 _REPO_URL = "github.com/orms147/transsnip"
 _GITHUB_URL = "https://github.com/orms147"
@@ -46,6 +46,11 @@ _DEPS = [
     ("PySide6", "Qt for Python"),
     ("mss", "fast multi-monitor capture"),
     ("wordninja", "English word segmentation"),
+    ("jieba · pypinyin", "Chinese segmentation & pinyin"),
+    ("CVDICT", "Chinese→Vietnamese dictionary (CC BY-SA 4.0)"),
+    ("Thiều Chửu", "Hán-Việt readings (Hán Việt tự điển, 1942)"),
+    ("Make Me a Hanzi", "radicals, components & stroke order (LGPL / Arphic PL)"),
+    ("complete-hsk-vocabulary", "HSK 3.0 levels (MIT)"),
 ]
 
 

@@ -1,6 +1,6 @@
 [project]
 name = "transsnip"
-version = "0.4.0"
+version = "0.4.1"
 description = "Screen translation app for Windows — hotkey-driven OCR + multi-provider translation with context-aware results"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -64,6 +64,14 @@ tts = [
 ]
 learning = [
     "eng-to-ipa>=0.0.2",
+]
+zh = [
+    # Chinese study mode (pinyin + Hán-Việt per word, word card, notebook).
+    # The offline dictionary (resources/zh/zh.sqlite) is built by
+    # `python scripts/fetch_zh_data.py`; see resources/zh/NOTICE.md for data licences.
+    "jieba>=0.42",       # word segmentation (MIT)
+    "pypinyin>=0.55",    # pinyin with context-aware polyphones (MIT)
+    "zhconv>=1.4",       # simplified ↔ traditional
 ]
 audio = [
     # Audio-subtitle mode (Alt+A): translate the spoken audio of a video that has

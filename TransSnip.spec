@@ -87,6 +87,18 @@ if _missing:
     )
 datas += [(str(_models / n), "resources/models") for n in BUNDLED_FILES]
 
+# Chinese study data (built by scripts/fetch_zh_data.py) + its licence notice,
+# and the jieba / pypinyin dictionaries they read at runtime.
+_zh = Path("resources/zh")
+if not (_zh / "zh.sqlite").exists():
+    raise SystemExit("resources/zh/zh.sqlite missing — run `python scripts/fetch_zh_data.py`.")
+datas += [(str(_zh / "zh.sqlite"), "resources/zh"), (str(_zh / "NOTICE.md"), "resources/zh")]
+for _pkg in ("jieba", "pypinyin"):
+    _d, _b, _h = collect_all(_pkg)
+    datas += _d
+    binaries += _b
+    hiddenimports += _h
+
 # App icon — bundle so QApplication.setWindowIcon can load it at runtime via
 # sys._MEIPASS/assets (see transsnip/ui/branding.py). The EXE icon below uses
 # the same file at build time.
