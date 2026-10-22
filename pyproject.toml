@@ -55,7 +55,7 @@ translate = [
     "deep-translator>=1.11.0",  # wraps Google Translate / Linguee / Pons — no API key needed
 ]
 tts = [
-    "edge-tts>=6.1.10",
+    "edge-tts>=7.3.1",   # 7.3+: Microsoft rejects older clients with HTTP 403
     # Offline SAPI fallback (tts/sapi.py).
     "winrt-Windows.Media.SpeechSynthesis>=3.2.1,<4; sys_platform == 'win32'",
     "winrt-Windows.Media>=3.2.1,<4; sys_platform == 'win32'",

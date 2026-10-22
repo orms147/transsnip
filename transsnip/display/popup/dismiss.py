@@ -14,7 +14,23 @@ class _OutsideDismissMixin:
 
     Relies on the host widget's `_filter_installed`, `_click_outside_close`,
     `_pinned`, `_resize_edges` state and its `hide_popup()` / resize helpers.
+
+    Companions (the Chinese word card) count as "inside": clicking or focusing
+    them must not dismiss the popup — the popup and its word card behave as one
+    group that closes together when the user clicks anywhere else.
     """
+
+    def add_companion(self, window: QWidget) -> None:
+        companions = self.__dict__.setdefault("_companions", [])
+        if window not in companions:
+            companions.append(window)
+
+    def _companion_windows(self) -> list[QWidget]:
+        return [w for w in self.__dict__.get("_companions", []) if w.isVisible()]
+
+    def owns_window(self, window: QWidget | None) -> bool:
+        """True if `window` is this popup or one of its visible companions."""
+        return window is not None and (window is self or window in self._companion_windows())
 
     def _install_event_filter(self) -> None:
         if self._filter_installed:
@@ -34,11 +50,11 @@ class _OutsideDismissMixin:
 
     def _is_self_or_descendant(self, watched) -> bool:
         w = watched if isinstance(watched, QWidget) else None
-        while w is not None:
-            if w is self:
-                return True
-            w = w.parentWidget()
-        return False
+        return w is not None and w.window() is self
+
+    def _in_companion(self, watched) -> bool:
+        w = watched if isinstance(watched, QWidget) else None
+        return w is not None and w.window() in self._companion_windows()
 
     def eventFilter(self, watched, event):
         et = event.type()
@@ -75,6 +91,8 @@ class _OutsideDismissMixin:
                     if edges:
                         self._begin_resize(edges, gp)
                         return True
+                return super().eventFilter(watched, event)
+            if self._in_companion(watched):
                 return super().eventFilter(watched, event)
             if self._click_outside_close and not self._pinned \
                     and not self.geometry().contains(gp):
@@ -122,6 +140,11 @@ class _OutsideDismissMixin:
         # the desktop should dismiss it.
         if not self._click_outside_close or self._pinned or not self.isVisible():
             return
-        active = QApplication.activeWindow()
-        if active is None or active is not self:
+        if not self.owns_window(QApplication.activeWindow()):
+            self.hide_popup()
+
+    def dismiss_unless_pinned(self) -> None:
+        """A companion lost focus to something outside the group."""
+        if self._click_outside_close and not self._pinned and self.isVisible() \
+                and not self.owns_window(QApplication.activeWindow()):
             self.hide_popup()

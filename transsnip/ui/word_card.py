@@ -62,12 +62,20 @@ def _section(title: str) -> QLabel:
 
 
 class WordCardWindow(QWidget):
+    """Companion of the result popup: it closes together with the popup when
+    the user clicks elsewhere (see dismiss.py), unless its pin is on."""
+
     open_vocab_requested = Signal()
+    # Focus left this card for a window outside the popup group.
+    focus_left_group = Signal()
 
     def __init__(self, vocab: VocabStore, translator_provider: Callable[[], object],
                  parent: QWidget | None = None) -> None:
-        super().__init__(parent, Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint
+        # Tool window: no taskbar button of its own (it belongs with the popup).
+        super().__init__(parent, Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
                          | Qt.WindowType.WindowStaysOnTopHint)
+        self._pinned = False
+        self._group_owner: Callable[[QWidget | None], bool] | None = None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.resize(430, 640)
         self._vocab = vocab
@@ -91,6 +99,10 @@ class WordCardWindow(QWidget):
         self._titlebar = CustomTitlebar("Thẻ từ", show_minimize=False, show_maximize=False)
         self._titlebar.close_requested.connect(self.hide)
         root.addWidget(self._titlebar)
+        self._pin_btn = IconButton("pin", size=28, icon_size=14,
+                                   tooltip="Ghim thẻ (không tự đóng khi bấm ra ngoài)")
+        self._pin_btn.clicked.connect(self._toggle_pin)
+        self._titlebar.layout().insertWidget(self._titlebar.layout().count() - 1, self._pin_btn)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -175,6 +187,37 @@ class WordCardWindow(QWidget):
         self._apply_style()
 
     # ── public ───────────────────────────────────────────────────────────
+
+    def set_group_owner(self, owns: Callable[[QWidget | None], bool]) -> None:
+        """`owns(window)` → True if `window` is part of this card's popup group."""
+        self._group_owner = owns
+
+    def hide_unless_pinned(self) -> None:
+        if not self._pinned:
+            self.hide()
+
+    def _toggle_pin(self) -> None:
+        self._pinned = not self._pinned
+        self._pin_btn.set_kind("accent" if self._pinned else "default")
+        self._pin_btn.setToolTip("Bỏ ghim" if self._pinned else
+                                 "Ghim thẻ (không tự đóng khi bấm ra ngoài)")
+
+    def changeEvent(self, event) -> None:
+        from PySide6.QtCore import QEvent, QTimer
+        if (event.type() == QEvent.Type.ActivationChange and not self.isActiveWindow()
+                and self.isVisible()):
+            QTimer.singleShot(0, self._close_if_focus_left_group)
+        super().changeEvent(event)
+
+    def _close_if_focus_left_group(self) -> None:
+        from PySide6.QtWidgets import QApplication
+        active = QApplication.activeWindow()
+        if active is self or (self._group_owner and self._group_owner(active)):
+            return
+        if not self._pinned:
+            self.hide()
+        # Always tell the popup — an unpinned popup closes even if this card is pinned.
+        self.focus_left_group.emit()
 
     def set_settings(self, zs: ZhStudySettings) -> None:
         self._settings = zs

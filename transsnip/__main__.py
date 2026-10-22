@@ -86,6 +86,13 @@ def main() -> int:
     os.environ.setdefault(
         "QT_LOGGING_RULES", "qt.text.font.db=false;qt.qpa.fonts.warning=false"
     )
+    # Own taskbar identity: without it Windows groups our windows under the
+    # host process (python.exe when run from source) and shows ITS icon.
+    if sys.platform == "win32":
+        import contextlib
+        import ctypes
+        with contextlib.suppress(AttributeError, OSError):
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("orms147.TransSnip")
     # Before any import can pull in pywinrt — see utils/win_dll.py.
     from transsnip.utils.win_dll import preload_msvcp140
     preload_msvcp140()

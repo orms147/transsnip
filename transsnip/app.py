@@ -775,6 +775,12 @@ class AppController(QObject):
             from transsnip.ui.word_card import WordCardWindow
             self._word_card = WordCardWindow(self._vocab(), self._translator_for_card)
             self._word_card.open_vocab_requested.connect(self._open_vocab)
+            # Popup + word card = one group: clicks/focus inside either keep both;
+            # anywhere else closes both (unless pinned). See popup/dismiss.py.
+            self._popup.add_companion(self._word_card)
+            self._word_card.set_group_owner(self._popup.owns_window)
+            self._word_card.focus_left_group.connect(self._popup.dismiss_unless_pinned)
+            self._popup.closed.connect(self._word_card.hide_unless_pinned)
         self._word_card.set_settings(self._settings.zh)
         self._word_card.set_output_device(self._settings.voice.output_device)
         return self._word_card
