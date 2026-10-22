@@ -287,9 +287,13 @@ class WordCardWindow(QWidget):
             lines = [f"<span style='color:{p.text_3}'>Không có trong từ điển offline — "
                      "thử “Giải thích cách dùng”.</span>"]
         if self._sentence and self._sentence != self._word:
+            # The word itself stands out in its sentence.
+            sentence = html.escape(self._sentence).replace(
+                html.escape(self._word),
+                f'<b style="color:{p.accent}">{html.escape(self._word)}</b>')
             lines.append(
                 f"<span style='color:{p.text_3}'>Trong câu:</span> "
-                f'<span style="{cjk_font_css("zh-Hans")[1:]}">{html.escape(self._sentence)}'
+                f'<span style="{cjk_font_css("zh-Hans")[1:]}">{sentence}'
                 "</span>" + (f"<br><span style='color:{p.text_3}'>"
                              f"{html.escape(self._translation)}</span>"
                              if self._translation else ""))

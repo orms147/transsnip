@@ -219,7 +219,8 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         self._chinese = ChineseSource()
         self._chinese.relayout.connect(self._fit_height_to_content)
         self._chinese.word_clicked.connect(
-            lambda w, s: self.word_lookup_requested.emit(w, s, self._last_translation)
+            lambda w, s: self.word_lookup_requested.emit(
+                w, s, self._last_translation if s == self._last_source_text.strip() else "")
         )
         self._chinese.hide()
         self._divider = QFrame()

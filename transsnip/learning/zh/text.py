@@ -109,3 +109,16 @@ TONE_COLORS: dict[int, str] = {
     4: "#a855f7",   # falling
     5: "#8b8d98",   # neutral
 }
+
+
+_SENTENCE_END = re.compile(r"[。！？!?；;\n]")
+
+
+def sentence_at(text: str, start: int, end: int) -> str:
+    """The sentence of `text` that contains text[start:end] (its punctuation
+    included). A word card needs the word's own sentence, not a whole
+    paragraph snipped from an article."""
+    left = max((m.end() for m in _SENTENCE_END.finditer(text, 0, start)), default=0)
+    m = _SENTENCE_END.search(text, end)
+    right = m.end() if m else len(text)
+    return text[left:right].strip()

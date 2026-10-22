@@ -37,7 +37,8 @@ def test_long_chinese_starts_compact_and_toggles(qapp) -> None:
     clicked: list[tuple[str, str]] = []
     src.word_clicked.connect(lambda w, s: clicked.append((w, s)))
     src._compact_text._on_activate("w:0")
-    assert clicked and clicked[0][1] == LONG_ZH
+    # the card gets the word's own sentence, not the whole paragraph
+    assert clicked and clicked[0][1] == LONG_ZH[:len(LONG_ZH) // 3]
     relayouts: list[bool] = []
     src.relayout.connect(lambda: relayouts.append(True))
     src._toggle.toggled.emit(False)                   # "Hiện chú thích từng từ"

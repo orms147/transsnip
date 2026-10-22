@@ -92,3 +92,13 @@ def test_word_card_save_and_ai_usage(qapp, tmp_path, monkeypatch):
         time.sleep(0.01)
     assert "Tôi thực tập ở ngân hàng." in card._usage_lbl.text()
     card.hide()
+
+
+def test_sentence_at_picks_the_words_sentence() -> None:
+    from transsnip.learning.zh.text import sentence_at
+    t = "美国时间10月21日，公司发布了模型。CEO写道：从零开始！他向Wired解释了原因"
+    i = t.index("从零")
+    assert sentence_at(t, i, i + 2) == "CEO写道：从零开始！"
+    assert sentence_at(t, 0, 2) == "美国时间10月21日，公司发布了模型。"
+    i = t.index("Wired")
+    assert sentence_at(t, i, i + 5) == "他向Wired解释了原因"

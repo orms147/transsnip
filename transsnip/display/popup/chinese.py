@@ -149,7 +149,7 @@ class ChineseSource(QWidget):
     """The study-mode Chinese source block. `set_text()` is cheap after warm-up
     (jieba segmentation + SQLite lookups, a few ms per sentence)."""
 
-    word_clicked = Signal(str, str)   # (word, full sentence)
+    word_clicked = Signal(str, str)   # (word, the sentence it's in)
     relayout = Signal()               # switched compact/full — popup refits its height
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -164,7 +164,7 @@ class ChineseSource(QWidget):
         self._toggle.toggled.connect(self._set_compact)
         lay.addWidget(self._toggle)
         self._compact_text = CompactText()
-        self._compact_text.activated.connect(lambda w: self.word_clicked.emit(w, self._sentence))
+        self._compact_text.activated.connect(self._on_compact_click)
         lay.addWidget(self._compact_text)
         self._cells_host = QWidget()
         self._flow = FlowLayout(self._cells_host)
@@ -217,20 +217,25 @@ class ChineseSource(QWidget):
             if (w := item.widget()) is not None:
                 w.deleteLater()
         if self._compact:
+            runs, pos = [], 0
+            for t in tokens:     # key = the token's span, to find its sentence on click
+                key = f"{pos}:{pos + len(t.text)}" if t.is_word else None
+                runs.append((t.text, key, self._tooltip(t, dictionary) if key else ""))
+                pos += len(t.text)
             self._compact_text.set_runs(
-                [(t.text, t.text if t.is_word else None,
-                  self._tooltip(t, dictionary) if t.is_word else "") for t in tokens],
-                size_pt=max(10, round(13 * scale)), font_css=cjk_font_css("zh-Hans"),
+                runs, size_pt=max(10, round(13 * scale)), font_css=cjk_font_css("zh-Hans"),
                 line_height=160)
         show_pinyin, show_hanviet = o["show_pinyin"], o["show_hanviet"]
         tone_colors = o["tone_colors"]
+        pos = 0
         for t in tokens if not self._compact else ():
+            start, pos = pos, pos + len(t.text)
             if t.text.isspace():
                 continue
             cell = _WordCell(t, dictionary.token_hanviet(t) if t.is_word else "",
                              show_pinyin=show_pinyin, show_hv=show_hanviet,
                              tone_colors=tone_colors, scale=scale)
-            cell.clicked.connect(lambda w: self.word_clicked.emit(w, self._sentence))
+            cell.clicked.connect(lambda w, a=start, b=pos: self._emit_word(w, a, b))
             self._flow.addItem(QWidgetItem(cell))
             cell.setParent(self._cells_host)
             cell.show()
@@ -248,22 +253,33 @@ class ChineseSource(QWidget):
         self._cells_host.updateGeometry()
         self.updateGeometry()
 
+    def _emit_word(self, word: str, start: int, end: int) -> None:
+        from transsnip.learning.zh.text import sentence_at
+        self.word_clicked.emit(word, sentence_at(self._sentence, start, end))
+
+    def _on_compact_click(self, key: str) -> None:
+        start, end = (int(x) for x in key.split(":"))
+        self._emit_word(self._sentence[start:end], start, end)
+
     @staticmethod
     def _tooltip(token: Token, dictionary) -> str:
+        """Hover card: characters + tone-coloured pinyin, Hán-Việt, meanings."""
         p = get_theme().palette
         pinyin = " ".join(
-            f"<span style='color:{TONE_COLORS.get(s.tone, p.text_1)}'>{html.escape(s.pinyin)}"
+            f'<span style="color:{TONE_COLORS.get(s.tone, p.text_1)}">{html.escape(s.pinyin)}'
             "</span>" for s in token.syllables if s.pinyin)
         hv = dictionary.token_hanviet(token)
         entries = dictionary.lookup(token.text)
-        meanings = entries[0].meanings[:3] if entries else ()
-        meaning = "; ".join(m for m in meanings if not m.startswith("LT:"))
-        lines = [f"<b style='font-size:12pt'>{pinyin}</b>"]
+        meanings = [m for m in (entries[0].meanings if entries else ()) if not m.startswith("LT:")]
+        lines = [f'<span style="font-size:16pt;{cjk_font_css("zh-Hans")}">'
+                 f"{html.escape(token.text)}</span>&nbsp;&nbsp;"
+                 f'<b style="font-size:12pt">{pinyin}</b>']
         if hv:
-            lines.append(f"Hán-Việt: <b>{html.escape(hv)}</b>")
-        if meaning:
-            lines.append(html.escape(meaning))
-        lines.append(f"<span style='color:{p.text_3}'>Bấm để mở thẻ từ</span>")
+            lines.append(f'<span style="color:{p.text_3}">Hán-Việt</span>&nbsp; '
+                         f"<b>{html.escape(hv)}</b>")
+        lines += [f'<span style="color:{p.text_3}">{i}.</span> {html.escape(m)}'
+                  for i, m in enumerate(meanings[:3], 1)]
+        lines.append(f'<span style="color:{p.text_3}; font-size:9pt">Bấm để mở thẻ từ</span>')
         return "<br>".join(lines)
 
     def hasHeightForWidth(self) -> bool:
