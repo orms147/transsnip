@@ -269,6 +269,7 @@ class _PopupHeader(QWidget):
             item = self._status_layout.takeAt(0)
             w = item.widget()
             if w is not None:
+                w.hide()          # glass shows through the new badge — no ghost
                 w.deleteLater()
 
         p = get_theme().palette
@@ -285,7 +286,7 @@ class _PopupHeader(QWidget):
                 prov.setStyleSheet(
                     f"color: {p.text_2}; font-family: {p.font_mono}; "
                     f"font-size: 10.5px; padding: 1px 6px; "
-                    f"background: {p.bg_2}; border-radius: 4px;"
+                    f"background: {p.glass_2}; border-radius: 4px;"
                 )
                 self._status_layout.addWidget(prov)
             if self._cached:
@@ -337,7 +338,7 @@ class _Skeleton(QWidget):
     def _apply_style(self) -> None:
         p = get_theme().palette
         for frame, (width_ratio, is_accent) in zip(self._frames, self._bars, strict=True):
-            color = p.accent_soft if is_accent else p.bg_2
+            color = p.accent_soft if is_accent else p.glass_2
             frame.setStyleSheet(
                 f"background: {color}; border-radius: 6px;"
             )

@@ -153,6 +153,9 @@ class DisplaySettings(BaseModel):
     """
 
     theme_mode: str = "auto"            # "dark" / "light" / "auto"
+    # Liquid-glass windows: live blur of what's behind (ui/glass.py). Off =
+    # opaque surfaces (old GPUs, or if dragging a window feels laggy).
+    glass_effect: bool = True
     popup_default_width: int = 460       # px, used by FloatingPopup
     popup_font_scale_max: float = 2.0    # cap on font scaling when user resizes
     click_outside_close: bool = True

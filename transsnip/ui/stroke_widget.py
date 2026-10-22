@@ -26,6 +26,7 @@ from PySide6.QtWidgets import QSizePolicy, QWidget
 
 from transsnip.learning.zh.strokes import CharStrokes
 from transsnip.ui.theme import get_theme
+from transsnip.ui.tokens import qcolor
 
 _BOX = 1024.0
 _Y_FLIP = 900.0  # MMAH glyphs sit in a 1024 box with baseline offset; y' = 900 - y
@@ -66,13 +67,6 @@ def parse_svg_path(d: str) -> QPainterPath:
     return path
 
 
-def _color(spec: str) -> QColor:
-    """Theme tokens mix hex and `rgba(r, g, b, a)`; QColor only parses the former."""
-    m = re.fullmatch(r"\s*rgba\(([^)]*)\)\s*", spec)
-    if not m:
-        return QColor(spec)
-    r, g, b, a = (float(x) for x in m.group(1).split(","))
-    return QColor(int(r), int(g), int(b), round(a * 255))
 
 
 class StrokeOrderWidget(QWidget):
@@ -197,11 +191,11 @@ class StrokeOrderWidget(QWidget):
             (self.width() - side) / 2 + margin, (self.height() - side) / 2 + margin,
             side - 2 * margin, side - 2 * margin,
         )
-        painter.fillRect(box, _color(p.bg_2))
-        self._paint_grid(painter, box, _color(p.border_2))
+        painter.fillRect(box, qcolor(p.glass_1))
+        self._paint_grid(painter, box, qcolor(p.border_2))
 
         if not self._paths:
-            painter.setPen(_color(p.text_3))
+            painter.setPen(qcolor(p.text_3))
             painter.drawText(box, Qt.AlignmentFlag.AlignCenter | Qt.TextFlag.TextWordWrap,
                              "Chưa có dữ liệu cách viết")
             return
@@ -209,18 +203,18 @@ class StrokeOrderWidget(QWidget):
         scale = box.width() / _BOX
         painter.setTransform(QTransform().translate(box.x(), box.y()).scale(scale, scale))
         painter.setPen(Qt.PenStyle.NoPen)
-        faint = _color(p.text_3)
+        faint = qcolor(p.text_3)
         faint.setAlpha(70)
         for path in self._paths:
             painter.fillPath(path, faint)
-        solid = QBrush(_color(p.text_1))
+        solid = QBrush(qcolor(p.text_1))
         for path in self._paths[: self._index]:
             painter.fillPath(path, solid)
         if self._index < len(self._paths):
             i = self._index
             clip = _reveal_shape(self._medians[i], self._lengths[i] * self._progress())
             if not clip.isEmpty():
-                painter.fillPath(self._paths[i].intersected(clip), _color(p.accent))
+                painter.fillPath(self._paths[i].intersected(clip), qcolor(p.accent))
 
     @staticmethod
     def _paint_grid(painter: QPainter, box: QRectF, color: QColor) -> None:

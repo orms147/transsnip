@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from transsnip.config.history import HistoryEntry, HistoryStore
 from transsnip.tts.edge_tts_player import EdgeTTSPlayer
 from transsnip.ui.atoms import CustomTitlebar, IconButton
+from transsnip.ui.glass import Glass
 from transsnip.ui.theme import get_theme
 
 _MAX_SRC_CHARS = 160
@@ -32,6 +33,7 @@ class HistoryWindow(QWidget):
     def __init__(self, store: HistoryStore, parent: QWidget | None = None) -> None:
         super().__init__(parent, Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._glass = Glass(self)
         self.resize(440, 560)
         self._store = store
         self._tts = EdgeTTSPlayer(self)
@@ -158,7 +160,7 @@ class HistoryWindow(QWidget):
         lay.addLayout(row)
 
         card.setStyleSheet(
-            f"QFrame#histCard {{ background: {p.bg_2}; border: 1px solid {p.border_1}; "
+            f"QFrame#histCard {{ background: {p.glass_1}; border: 1px solid {p.border_1}; "
             f"border-radius: 10px; }}"
         )
         return card
@@ -182,8 +184,7 @@ class HistoryWindow(QWidget):
     def _apply_style(self) -> None:
         p = get_theme().palette
         self._root.setStyleSheet(
-            f"QWidget#histRoot {{ background: {p.bg_1}; border: 1px solid {p.border_2}; "
-            f"border-radius: 12px; }}"
+            "QWidget#histRoot { background: transparent; }"
         )
         self._count_label.setStyleSheet(f"color: {p.text_2}; font-size: 12px;")
         self.refresh()

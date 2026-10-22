@@ -10,7 +10,7 @@ Mirrors `surface-about.jsx` closely; only the chrome titlebar differs
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QRectF, Qt, QUrl, Signal
+from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtGui import (
     QBrush,
     QColor,
@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 
 from transsnip.ui import icons
 from transsnip.ui.atoms import CustomTitlebar, IconButton
+from transsnip.ui.glass import Glass
 from transsnip.ui.theme import get_theme
 
 _VERSION = "v0.4.1"
@@ -143,6 +144,7 @@ class AboutDialog(QWidget):
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._glass = Glass(self, radius=10)
         self.resize(480, 600)
         self.setMinimumSize(420, 540)
 
@@ -253,7 +255,7 @@ class AboutDialog(QWidget):
             btn = self._tab_buttons[i]
             if active:
                 btn.setStyleSheet(
-                    f"QPushButton {{ background: {p.bg_2}; color: {p.text_1}; "
+                    f"QPushButton {{ background: {p.glass_2}; color: {p.text_1}; "
                     f"border: 1px solid {p.border_2}; border-radius: 6px; "
                     f"padding: 6px 14px; font-size: 11.5px; font-weight: 600; }}"
                 )
@@ -383,11 +385,3 @@ class AboutDialog(QWidget):
         layout.addStretch(1)
         return pane
 
-    def paintEvent(self, event: QPaintEvent) -> None:
-        p = get_theme().palette
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        painter.setBrush(QBrush(QColor(p.bg_0)))
-        painter.setPen(QPen(QColor(p.border_2), 1))
-        painter.drawRoundedRect(rect, 10, 10)

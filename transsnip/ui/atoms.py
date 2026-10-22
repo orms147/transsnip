@@ -83,7 +83,7 @@ class IconButton(QPushButton):
             hover_bg = p.accent_soft
             hover_color = p.accent_hover
         else:
-            hover_bg = p.bg_3
+            hover_bg = p.glass_3
             hover_color = p.text_1
 
         self.setStyleSheet(f"""
@@ -212,13 +212,13 @@ class LangChip(QWidget):
         # Interactive chips get a stronger border + accent hover so they read
         # as buttons (they open the language picker), not static labels.
         hover_rule = (
-            f"LangChip:hover {{ border: 1px solid {p.accent}; background: {p.bg_3}; }}"
+            f"LangChip:hover {{ border: 1px solid {p.accent}; background: {p.glass_3}; }}"
             if self._interactive else ""
         )
         border = p.border_2 if self._interactive else p.border_1
         self.setStyleSheet(f"""
             LangChip {{
-                background: {p.bg_2};
+                background: {p.glass_2};
                 border: 1px solid {border};
                 border-radius: {p.r_pill}px;
                 padding: 0;
@@ -388,7 +388,7 @@ class KbdSeq(QWidget):
         for lbl in self._labels:
             if lbl.property("kbd"):
                 lbl.setStyleSheet(
-                    f"color: {p.text_2}; background: {p.bg_2}; "
+                    f"color: {p.text_2}; background: {p.glass_2}; "
                     f"border: 1px solid {p.border_2}; "
                     f"border-bottom-width: 2px; border-radius: 4px; "
                     f"padding: 1px 6px; min-width: 14px; "
@@ -440,13 +440,13 @@ class PillBadge(QWidget):
     def _apply_style(self) -> None:
         p = get_theme().palette
         if self._tone == "success":
-            fg, bg = p.success, p.bg_2
+            fg, bg = p.success, p.glass_2
         elif self._tone == "warn":
-            fg, bg = p.warning, p.bg_2
+            fg, bg = p.warning, p.glass_2
         elif self._tone == "muted":
-            fg, bg = p.text_3, p.bg_2
+            fg, bg = p.text_3, p.glass_2
         else:
-            fg, bg = p.text_2, p.bg_2
+            fg, bg = p.text_2, p.glass_2
         self.setStyleSheet(
             f"PillBadge {{ background: {bg}; border-radius: {p.r_pill}px; }}"
         )
@@ -610,7 +610,7 @@ class CustomTitlebar(QWidget):
         # theme switch (same Qt CSS engine quirk as SectionHead).
         self._title_label.setStyleSheet("font-size: 11.5px; font-weight: 600;")
         self.setStyleSheet(
-            f"CustomTitlebar {{ background: {p.bg_1}; "
+            f"CustomTitlebar {{ background: transparent; "
             f"border-bottom: 1px solid {p.border_1}; }}"
         )
 
@@ -832,12 +832,12 @@ class Segmented(QWidget):
     def _apply_style(self) -> None:
         p = get_theme().palette
         self.setStyleSheet(
-            f"Segmented {{ background: {p.bg_2}; border-radius: 8px; }}"
+            f"Segmented {{ background: {p.glass_1}; border-radius: 8px; }}"
         )
         for opt_id, btn in self._buttons.items():
             if opt_id == self._value:
                 btn.setStyleSheet(
-                    f"QPushButton {{ background: {p.bg_1}; "
+                    f"QPushButton {{ background: {p.glass_3}; "
                     f"border: 1px solid {p.border_2}; border-radius: 6px; "
                     f"color: {p.text_1}; }}"
                 )
@@ -1005,7 +1005,7 @@ class ProviderRadioCard(QWidget):
     def _apply_style(self) -> None:
         p = get_theme().palette
         border_color = p.accent if self._active else p.border_1
-        bg = p.accent_soft if self._active else p.bg_1
+        bg = p.accent_soft if self._active else p.glass_1
         self.setStyleSheet(
             f"ProviderRadioCard {{ background: {bg}; "
             f"border: 1px solid {border_color}; border-radius: 10px; }}"
@@ -1021,5 +1021,5 @@ class ProviderRadioCard(QWidget):
         tag_color = p.success if self._free else p.text_2
         self._tag_label.setStyleSheet(
             f"color: {tag_color}; font-size: 10px; font-weight: 500; "
-            f"background: {p.bg_2}; padding: 3px 8px; border-radius: 999px;"
+            f"background: {p.glass_2}; padding: 3px 8px; border-radius: 999px;"
         )

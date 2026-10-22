@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 
 from transsnip.learning.vocab import GRADES, VocabEntry, VocabStore, schedule
 from transsnip.ui.atoms import CustomTitlebar, IconButton, Segmented
+from transsnip.ui.glass import Glass
 from transsnip.ui.search_combo import fold
 from transsnip.ui.theme import get_theme
 
@@ -129,6 +130,7 @@ class VocabWindow(QWidget):
     def __init__(self, store: VocabStore, parent: QWidget | None = None) -> None:
         super().__init__(parent, Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._glass = Glass(self)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.resize(480, 620)
         self._store = store
@@ -301,7 +303,7 @@ class VocabWindow(QWidget):
         lay.addWidget(due)
 
         row.setStyleSheet(
-            f"QFrame#vocabRow {{ background: {p.bg_2}; border: 1px solid {p.border_1}; "
+            f"QFrame#vocabRow {{ background: {p.glass_1}; border: 1px solid {p.border_1}; "
             f"border-radius: 10px; }}"
             f"QFrame#vocabRow:hover {{ border-color: {p.border_strong}; }}"
         )
@@ -522,31 +524,30 @@ class VocabWindow(QWidget):
     def _apply_style(self) -> None:
         p = get_theme().palette
         self._root.setStyleSheet(
-            f"QWidget#vocabRoot {{ background: {p.bg_1}; border: 1px solid {p.border_2}; "
-            f"border-radius: 12px; }}"
+            "QWidget#vocabRoot { background: transparent; }"
         )
         self._scroll.setStyleSheet("QScrollArea { background: transparent; }"
                                    "QWidget#vocabList { background: transparent; }")
         self._search.setStyleSheet(
-            f"QLineEdit {{ background: {p.bg_2}; color: {p.text_1}; "
+            f"QLineEdit {{ background: {p.glass_2}; color: {p.text_1}; "
             f"border: 1px solid {p.border_2}; border-radius: 8px; padding: 6px 10px; "
             f"font-size: 13px; }} QLineEdit:focus {{ border-color: {p.accent}; }}")
         self._count_label.setStyleSheet(f"color: {p.text_2}; font-size: 12px;")
         self._status_label.setStyleSheet(f"color: {p.text_3}; font-size: 11px;")
         self._empty.setStyleSheet(f"color: {p.text_3}; padding: 40px;")
-        secondary = (f"QPushButton {{ background: {p.bg_2}; color: {p.text_1}; "
+        secondary = (f"QPushButton {{ background: {p.glass_2}; color: {p.text_1}; "
                      f"border: 1px solid {p.border_2}; border-radius: 8px; padding: 6px 12px; }}"
                      f"QPushButton:hover {{ border-color: {p.border_strong}; }}")
         primary = (f"QPushButton {{ background: {p.accent}; color: {p.accent_on}; border: none; "
                    f"border-radius: 8px; padding: 6px 12px; font-weight: 600; }}"
                    f"QPushButton:hover {{ background: {p.accent_hover}; }}"
-                   f"QPushButton:disabled {{ background: {p.bg_3}; color: {p.text_mute}; }}")
+                   f"QPushButton:disabled {{ background: {p.glass_1}; color: {p.text_mute}; }}")
         self._export_btn.setStyleSheet(secondary)
         self._review_now_btn.setStyleSheet(primary)
         self._reveal_btn.setStyleSheet(primary)
         self._progress.setStyleSheet(f"color: {p.text_2}; font-size: 12px;")
         self._card.setStyleSheet(
-            f"QFrame#vocabCard {{ background: {p.bg_2}; border: 1px solid {p.border_1}; "
+            f"QFrame#vocabCard {{ background: {p.glass_1}; border: 1px solid {p.border_1}; "
             f"border-radius: 14px; }}")
         self._c_word.setStyleSheet(f"color: {p.text_1}; font-size: 44px; font-weight: 600;")
         self._c_pinyin.setStyleSheet(f"color: {p.accent}; font-size: 18px;")
@@ -557,7 +558,7 @@ class VocabWindow(QWidget):
         tints = {"again": p.danger, "hard": p.warning, "good": p.success, "easy": p.accent}
         for g, btn in self._grade_btns.items():
             btn.setStyleSheet(
-                f"QPushButton {{ background: {p.bg_2}; color: {tints[g]}; "
+                f"QPushButton {{ background: {p.glass_2}; color: {tints[g]}; "
                 f"border: 1px solid {p.border_2}; border-radius: 8px; font-weight: 600; }}"
                 f"QPushButton:hover {{ border-color: {tints[g]}; }}")
         self._reload_list()  # rows bake palette colours in

@@ -31,6 +31,7 @@ from transsnip.learning.zh import dictionary as zd
 from transsnip.learning.zh.text import TONE_COLORS, Syllable, Token, tokenize
 from transsnip.tts.edge_tts_player import EdgeTTSPlayer
 from transsnip.ui.atoms import CustomTitlebar, IconButton
+from transsnip.ui.glass import Glass
 from transsnip.ui.theme import get_theme
 from transsnip.utils.workers import run_in_pool
 
@@ -77,6 +78,7 @@ class WordCardWindow(QWidget):
         self._pinned = False
         self._group_owner: Callable[[QWidget | None], bool] | None = None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._glass = Glass(self)
         self.resize(430, 640)
         self._vocab = vocab
         self._translator_provider = translator_provider   # active LLM translator, if any
@@ -479,8 +481,7 @@ class WordCardWindow(QWidget):
     def _apply_style(self) -> None:
         p = get_theme().palette
         self._root.setStyleSheet(
-            f"QWidget#cardRoot {{ background:{p.bg_1}; border:1px solid {p.border_2};"
-            f" border-radius:12px; }}"
+            "QWidget#cardRoot { background: transparent; }"
             f"QLabel[cardSection='true'] {{ color:{p.text_3}; font-size:10px;"
             f" font-weight:600; letter-spacing:1px; margin-top:6px; }}")
         self._word_lbl.setStyleSheet(f"font-size:30pt; {cjk_font_css('zh-Hans')[1:]}")

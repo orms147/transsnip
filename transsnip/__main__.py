@@ -143,11 +143,13 @@ def main() -> int:
     # preference survives an app restart — falling back to AUTO if the
     # stored value is missing or invalid.
     theme = get_theme()
+    display = load_settings().display
     try:
-        saved_mode = ThemeMode(load_settings().display.theme_mode)
+        saved_mode = ThemeMode(display.theme_mode)
     except ValueError:
         saved_mode = ThemeMode.AUTO
     theme.set_mode(saved_mode)
+    theme.set_glass(display.glass_effect)
     theme.apply(app)
 
     tray = TrayController(app, dev_mode=args.dev)

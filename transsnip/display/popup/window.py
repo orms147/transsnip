@@ -14,15 +14,10 @@ area in the header; selecting text in the body never starts a window move.
 """
 from __future__ import annotations
 
-from PySide6.QtCore import QPoint, QRect, QRectF, Qt, Signal
+from PySide6.QtCore import QPoint, QRect, Qt, Signal
 from PySide6.QtGui import (
-    QBrush,
-    QColor,
     QGuiApplication,
     QKeyEvent,
-    QPainter,
-    QPaintEvent,
-    QPen,
 )
 from PySide6.QtWidgets import (
     QFrame,
@@ -71,6 +66,7 @@ from transsnip.ui.atoms import (
     KbdSeq,
     LangChip,
 )
+from transsnip.ui.glass import Glass
 from transsnip.ui.theme import get_theme
 
 
@@ -104,6 +100,7 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         )
         self.setObjectName("FloatingPopupRoot")
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._glass = Glass(self)
         self.setMouseTracking(True)
 
         # Session state
@@ -794,17 +791,7 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
             f"font-size: 10px; font-weight: 600; letter-spacing: {p.letter_caps};"
         )
 
-    # ── Paint, drag-from-edge resize, event filter, key handlers ──────────
-
-    def paintEvent(self, event: QPaintEvent) -> None:
-        p = get_theme().palette
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        painter.setBrush(QBrush(QColor(p.bg_1)))
-        painter.setPen(QPen(QColor(p.border_2), 1))
-        painter.drawRoundedRect(rect, p.r_popup, p.r_popup)
-
+    # ── Drag-from-edge resize, event filter, key handlers ─────────────────
 
     def keyPressEvent(self, event: QKeyEvent) -> None:
         if event.key() == Qt.Key.Key_Escape:

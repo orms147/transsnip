@@ -61,6 +61,7 @@ from transsnip.ui.atoms import (
     ThemeCard,
     ToggleRow,
 )
+from transsnip.ui.glass import Glass
 from transsnip.ui.search_combo import ComboBox as _ComboBox
 from transsnip.ui.search_combo import SearchCombo
 from transsnip.ui.theme import get_theme
@@ -186,6 +187,7 @@ class SettingsWindow(QWidget):
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._glass = Glass(self, radius=10)
         self.resize(820, 640)
         self.setMinimumSize(720, 540)
 
@@ -326,10 +328,11 @@ class SettingsWindow(QWidget):
         # Local stylesheet for the chrome — body/tab/footer surfaces.
         p = get_theme().palette
         self.setStyleSheet(f"""
-            SettingsWindow {{ background: {p.bg_0}; }}
-            QWidget#tabStrip {{ background: {p.bg_0}; border-bottom: 1px solid {p.border_1}; }}
-            QWidget#footer {{ background: {p.bg_1}; border-top: 1px solid {p.border_1}; }}
-            QStackedWidget {{ background: {p.bg_0}; }}
+            SettingsWindow {{ background: transparent; }}
+            QWidget#tabStrip {{ background: transparent; border-bottom: 1px solid {p.border_1}; }}
+            QWidget#footer {{ background: {p.glass_1}; border-top: 1px solid {p.border_1};
+                border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }}
+            QStackedWidget {{ background: transparent; }}
         """)
 
     def _switch_tab(self, tab_id: str) -> None:
@@ -354,25 +357,13 @@ class SettingsWindow(QWidget):
                     f"QPushButton {{ background: transparent; color: {p.text_2}; "
                     f"border: none; border-radius: 7px; padding: 7px 14px 7px 10px; "
                     f"font-size: 12px; text-align: left; }}"
-                    f"QPushButton:hover {{ color: {p.text_1}; background: {p.bg_2}; }}"
+                    f"QPushButton:hover {{ color: {p.text_1}; background: {p.glass_2}; }}"
                 )
 
     def reject(self) -> None:
         """Close window without saving — mirrors QDialog.reject() name so
         AppController code that previously did `dialog.exec()` still works."""
         self.close()
-
-    def paintEvent(self, event) -> None:
-        # Paint frameless background — translucent root needs explicit fill.
-        from PySide6.QtGui import QBrush, QColor, QPainter, QPen
-        p = get_theme().palette
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        from PySide6.QtCore import QRectF
-        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        painter.setBrush(QBrush(QColor(p.bg_0)))
-        painter.setPen(QPen(QColor(p.border_2), 1))
-        painter.drawRoundedRect(rect, 10, 10)
 
     # ── Tab: Translation ──────────────────────────────────────────────────
 
@@ -664,6 +655,13 @@ class SettingsWindow(QWidget):
             theme_row.addWidget(card)
         theme_row.addStretch(1)
         layout.addLayout(theme_row)
+        self._glass_toggle = ToggleRow(
+            "Hiệu ứng kính (liquid glass)",
+            "Làm mờ nội dung phía sau popup / cửa sổ. Tắt nếu máy yếu hoặc kéo cửa sổ bị giật.",
+        )
+        # Live preview, like the theme cards.
+        self._glass_toggle.toggled.connect(get_theme().set_glass)
+        layout.addWidget(self._glass_toggle)
 
         layout.addWidget(SectionHead("Popup"))
         self._popup_width_slider = Slider(
@@ -936,6 +934,7 @@ class SettingsWindow(QWidget):
 
         # Display
         self._on_theme_picked(s.display.theme_mode)
+        self._glass_toggle.setChecked(s.display.glass_effect)
         self._popup_width_slider.setValue(s.display.popup_default_width)
         self._font_scale_slider.setValue(s.display.popup_font_scale_max)
         self._subtitle_opacity_slider.setValue(s.display.subtitle_bg_opacity)
@@ -1007,6 +1006,7 @@ class SettingsWindow(QWidget):
         )
         s.display = DisplaySettings(
             theme_mode=active_mode,
+            glass_effect=self._glass_toggle.isChecked(),
             popup_default_width=int(self._popup_width_slider.value()),
             popup_font_scale_max=self._font_scale_slider.value(),
             click_outside_close=self._click_outside_display.isChecked(),
@@ -1304,6 +1304,6 @@ class _HotkeyIcon(QLabel):
         p = get_theme().palette
         self.setPixmap(icons.get_pixmap(self._icon_name, color=p.text_2, size=14))
         self.setStyleSheet(
-            f"background: {p.bg_2}; border-radius: 6px; padding: 0;"
+            f"background: {p.glass_2}; border-radius: 6px; padding: 0;"
         )
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
