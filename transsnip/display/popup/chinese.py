@@ -3,8 +3,10 @@
 Each word is a small clickable "cell" of three rows — pinyin (tone-coloured),
 the characters, and their Hán-Việt reading — wrapped like text across lines,
 followed by the sentence's full Hán-Việt reading. Clicking a word opens the
-word card (`word_clicked`). Segmentation, pinyin and Hán-Việt are offline
-(learning/zh), so the block appears with the OCR result, before translation.
+word card (`word_clicked`). Long passages start in the compact reading view
+(compact.py): plain flowing characters, the reading in a hover tooltip.
+Segmentation, pinyin and Hán-Việt are offline (learning/zh), so the block
+appears with the OCR result, before translation.
 """
 from __future__ import annotations
 
@@ -23,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidgetItem,
 )
 
+from transsnip.display.popup.compact import COMPACT_HAN_CHARS, CompactText, ModeToggle
 from transsnip.display.popup.constants import cjk_font_css
 from transsnip.learning.zh.text import TONE_COLORS, Token
 from transsnip.ui.theme import get_theme
@@ -147,13 +150,22 @@ class ChineseSource(QWidget):
     (jieba segmentation + SQLite lookups, a few ms per sentence)."""
 
     word_clicked = Signal(str, str)   # (word, full sentence)
+    relayout = Signal()               # switched compact/full — popup refits its height
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._sentence = ""
+        self._compact = False
+        self._opts: dict = {}
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(8)
+        self._toggle = ModeToggle()
+        self._toggle.toggled.connect(self._set_compact)
+        lay.addWidget(self._toggle)
+        self._compact_text = CompactText()
+        self._compact_text.activated.connect(lambda w: self.word_clicked.emit(w, self._sentence))
+        lay.addWidget(self._compact_text)
         self._cells_host = QWidget()
         self._flow = FlowLayout(self._cells_host)
         self._cells_host.setSizePolicy(QSizePolicy.Policy.Preferred,
@@ -174,16 +186,45 @@ class ChineseSource(QWidget):
         if not zd.available():
             return False
         self._sentence = text
-        while (item := self._flow.takeAt(0)) is not None:
-            if (w := item.widget()) is not None:
-                w.deleteLater()
-        dictionary = zd.shared()
         try:
             tokens = tokenize(text)
         except Exception:
             log.exception("Chinese tokenize failed")
             return False
-        for t in tokens:
+        self._opts = dict(tokens=tokens, scale=scale, show_pinyin=show_pinyin,
+                          show_hanviet=show_hanviet, tone_colors=tone_colors)
+        long_text = sum(1 for c in text if "㐀" <= c <= "鿿") > COMPACT_HAN_CHARS
+        self._toggle.setVisible(long_text)
+        self._compact = long_text
+        self._render()
+        return True
+
+    def _set_compact(self, compact: bool) -> None:
+        self._compact = compact
+        self._render()
+        self.relayout.emit()
+
+    def _render(self) -> None:
+        from transsnip.learning.zh import dictionary as zd
+
+        o = self._opts
+        tokens, scale = o["tokens"], o["scale"]
+        dictionary = zd.shared()
+        self._toggle.set_compact(self._compact)
+        self._compact_text.setVisible(self._compact)
+        self._cells_host.setVisible(not self._compact)
+        while (item := self._flow.takeAt(0)) is not None:
+            if (w := item.widget()) is not None:
+                w.deleteLater()
+        if self._compact:
+            self._compact_text.set_runs(
+                [(t.text, t.text if t.is_word else None,
+                  self._tooltip(t, dictionary) if t.is_word else "") for t in tokens],
+                size_pt=max(10, round(13 * scale)), font_css=cjk_font_css("zh-Hans"),
+                line_height=160)
+        show_pinyin, show_hanviet = o["show_pinyin"], o["show_hanviet"]
+        tone_colors = o["tone_colors"]
+        for t in tokens if not self._compact else ():
             if t.text.isspace():
                 continue
             cell = _WordCell(t, dictionary.token_hanviet(t) if t.is_word else "",
@@ -194,8 +235,10 @@ class ChineseSource(QWidget):
             cell.setParent(self._cells_host)
             cell.show()
         p = get_theme().palette
-        self._hv_line.setVisible(show_hanviet)
-        if show_hanviet:
+        # A whole paragraph's Hán-Việt reading is a second wall of text — in the
+        # compact view it's per word, in the tooltip.
+        self._hv_line.setVisible(show_hanviet and not self._compact)
+        if show_hanviet and not self._compact:
             reading = zd.sentence_hanviet(tokens, dictionary)
             self._hv_line.setText(
                 f"<span style='color:{p.text_3}'>Hán-Việt: </span>"
@@ -204,7 +247,24 @@ class ChineseSource(QWidget):
                 f"font-size:{max(8, round(10 * scale))}pt; background:transparent;")
         self._cells_host.updateGeometry()
         self.updateGeometry()
-        return True
+
+    @staticmethod
+    def _tooltip(token: Token, dictionary) -> str:
+        p = get_theme().palette
+        pinyin = " ".join(
+            f"<span style='color:{TONE_COLORS.get(s.tone, p.text_1)}'>{html.escape(s.pinyin)}"
+            "</span>" for s in token.syllables if s.pinyin)
+        hv = dictionary.token_hanviet(token)
+        entries = dictionary.lookup(token.text)
+        meanings = entries[0].meanings[:3] if entries else ()
+        meaning = "; ".join(m for m in meanings if not m.startswith("LT:"))
+        lines = [f"<b style='font-size:12pt'>{pinyin}</b>"]
+        if hv:
+            lines.append(f"Hán-Việt: <b>{html.escape(hv)}</b>")
+        if meaning:
+            lines.append(html.escape(meaning))
+        lines.append(f"<span style='color:{p.text_3}'>Bấm để mở thẻ từ</span>")
+        return "<br>".join(lines)
 
     def hasHeightForWidth(self) -> bool:
         return True
@@ -217,7 +277,12 @@ class ChineseSource(QWidget):
         return QSize(w, self.heightForWidth(w))
 
     def heightForWidth(self, width: int) -> int:
-        h = self._flow.heightForWidth(width)
-        if self._hv_line.isVisible():
+        if self._compact:
+            h = self._compact_text.heightForWidth(width)
+        else:
+            h = self._flow.heightForWidth(width)
+        if not self._toggle.isHidden():
+            h += 8 + self._toggle.sizeHint().height()
+        if not self._hv_line.isHidden():
             h += 8 + self._hv_line.heightForWidth(width)
         return h

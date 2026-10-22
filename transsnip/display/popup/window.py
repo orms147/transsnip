@@ -207,14 +207,17 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         self._source_label.hide()
         self._phonetic = _PhoneticSource()
         self._phonetic.speak_requested.connect(self._on_speak_word)
+        self._phonetic.relayout.connect(self._fit_height_to_content)
         self._phonetic.hide()
         # Learning-mode per-word gloss (IPA + meaning + pos). Populated from
         # result.words; shown instead of the plain source when present.
         self._word_breakdown = _WordBreakdown()
         self._word_breakdown.speak_requested.connect(self._on_speak_word)
+        self._word_breakdown.relayout.connect(self._fit_height_to_content)
         self._word_breakdown.hide()
         self._last_words: list = []
         self._chinese = ChineseSource()
+        self._chinese.relayout.connect(self._fit_height_to_content)
         self._chinese.word_clicked.connect(
             lambda w, s: self.word_lookup_requested.emit(w, s, self._last_translation)
         )
@@ -734,7 +737,14 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
             return
         self._body.adjustSize()
         chrome = self.height() - self._scroll.viewport().height() + 12
-        desired = self._body.sizeHint().height() + chrome
+        # Height the content wraps to at the REAL width; sizeHint() guesses a
+        # narrower wrap for word-wrapped labels and left blank space below.
+        lay = self._body.layout()
+        content_h = lay.totalHeightForWidth(self._scroll.viewport().width()) \
+            if lay is not None and lay.hasHeightForWidth() else -1
+        if content_h <= 0:
+            content_h = self._body.sizeHint().height()
+        desired = content_h + chrome
         screen = QGuiApplication.screenAt(self.frameGeometry().center()) \
             or QGuiApplication.primaryScreen()
         max_h = (screen.availableGeometry().height() - 2 * _MARGIN_FROM_EDGE) if screen else desired

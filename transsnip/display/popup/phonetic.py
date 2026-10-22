@@ -14,6 +14,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from transsnip.display.popup.compact import (
+    COMPACT_BREAKDOWN_WORDS,
+    COMPACT_WORDS,
+    CompactText,
+    ModeToggle,
+)
 from transsnip.display.popup.constants import (
     _FONT_IPA_PT,
     _FONT_SOURCE_PT,
@@ -40,6 +46,7 @@ class _PhoneticSource(QWidget):
     """
 
     speak_requested = Signal(str)
+    relayout = Signal()   # switched compact/full — popup refits its height
 
     _COL_GAP = 12  # px between word columns
 
@@ -47,7 +54,15 @@ class _PhoneticSource(QWidget):
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(0)
+        layout.setSpacing(6)
+        # Long text: plain prose, IPA on hover (compact.py).
+        self._compact = False
+        self._toggle = ModeToggle()
+        self._toggle.toggled.connect(self._set_compact)
+        layout.addWidget(self._toggle)
+        self._compact_text = CompactText()
+        self._compact_text.activated.connect(self.speak_requested.emit)
+        layout.addWidget(self._compact_text)
         self._label = QLabel()
         self._label.setWordWrap(True)
         self._label.setTextFormat(Qt.TextFormat.RichText)
@@ -69,7 +84,15 @@ class _PhoneticSource(QWidget):
         self._scale = scale
         if avail_px and avail_px > 80:
             self._avail_px = avail_px
+        long_text = len(_IPA_TOKEN_RE.findall(text)) > COMPACT_WORDS
+        self._toggle.setVisible(long_text)
+        self._compact = long_text
         self._render()
+
+    def _set_compact(self, compact: bool) -> None:
+        self._compact = compact
+        self._render()
+        self.relayout.emit()
 
     def resizeEvent(self, event) -> None:
         # Re-pack rows to the widget's REAL width whenever it changes. This is
@@ -97,6 +120,12 @@ class _PhoneticSource(QWidget):
         # every row is a 2-row table (words over IPA, aligned per column). This
         # wraps VERTICALLY by stacking tables — unlike the old single-line
         # approach which used non-breaking spaces and overflowed on long text.
+        self._toggle.set_compact(self._compact)
+        self._compact_text.setVisible(self._compact)
+        self._label.setVisible(not self._compact)
+        if self._compact:
+            self._render_compact()
+            return
         p = get_theme().palette
         word_color = p.text_1
         ipa_color = p.accent
@@ -144,6 +173,25 @@ class _PhoneticSource(QWidget):
                                            word_color, ipa_color, dash_color))
         self._label.setText("".join(out))
 
+    def _render_compact(self) -> None:
+        p = get_theme().palette
+        runs: list[tuple[str, str | None, str]] = []
+        pos = 0
+        text = self._text or ""
+        for m in _IPA_TOKEN_RE.finditer(text):
+            if m.start() > pos:
+                runs.append((text[pos:m.start()], None, ""))
+            token = m.group(0)
+            ipa = get_ipa(token) if token.strip() else None
+            tip = (f"<span style='color:{p.accent}; font-family:{_IPA_FONT_CSS}; "
+                   f"font-size:12pt'>/{html.escape(ipa)}/</span><br>"
+                   f"<span style='color:{p.text_3}'>Bấm để nghe</span>") if ipa else ""
+            runs.append((token, token if ipa else None, tip))
+            pos = m.end()
+        if pos < len(text):
+            runs.append((text[pos:], None, ""))
+        self._compact_text.set_runs(runs, size_pt=max(8, round(_FONT_SOURCE_PT * self._scale)))
+
     @staticmethod
     def _row_table(row, source_pt, ipa_pt, word_color, ipa_color, dash_color) -> str:
         """One packed row → a 2-row HTML table (word over IPA, aligned columns)."""
@@ -186,12 +234,21 @@ class _WordBreakdown(QWidget):
     """
 
     speak_requested = Signal(str)
+    relayout = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 2, 0, 0)
-        layout.setSpacing(0)
+        layout.setSpacing(6)
+        # Many words: one flowing line of words, gloss on hover (compact.py).
+        self._compact = False
+        self._toggle = ModeToggle()
+        self._toggle.toggled.connect(self._set_compact)
+        layout.addWidget(self._toggle)
+        self._compact_text = CompactText()
+        self._compact_text.activated.connect(self.speak_requested.emit)
+        layout.addWidget(self._compact_text)
         self._label = QLabel()
         self._label.setWordWrap(True)
         self._label.setTextFormat(Qt.TextFormat.RichText)
@@ -209,7 +266,15 @@ class _WordBreakdown(QWidget):
     def set_words(self, words: list, *, scale: float = 1.0) -> None:
         self._words = words or []
         self._scale = scale
+        long_list = len(self._words) > COMPACT_BREAKDOWN_WORDS
+        self._toggle.setVisible(long_list)
+        self._compact = long_list
         self._render()
+
+    def _set_compact(self, compact: bool) -> None:
+        self._compact = compact
+        self._render()
+        self.relayout.emit()
 
     def _on_link(self, href: str) -> None:
         if href.startswith(_SPEAK_LINK_PREFIX):
@@ -221,6 +286,25 @@ class _WordBreakdown(QWidget):
         p = get_theme().palette
         token_pt = max(8, round(_FONT_SOURCE_PT * self._scale))
         small_pt = max(7, round(_FONT_IPA_PT * self._scale))
+        self._toggle.set_compact(self._compact)
+        self._compact_text.setVisible(self._compact)
+        self._label.setVisible(not self._compact)
+        if self._compact:
+            runs: list[tuple[str, str | None, str]] = []
+            for i, w in enumerate(self._words):
+                if i:
+                    runs.append((" ", None, ""))
+                tip = []
+                if getattr(w, "ipa", None):
+                    tip.append(f"<span style='color:{p.accent}; font-family:{_IPA_FONT_CSS};"
+                               f" font-size:12pt'>/{html.escape(w.ipa)}/</span>")
+                if getattr(w, "pos", None):
+                    tip.append(f"<span style='color:{p.text_3}'>{html.escape(w.pos)}</span>")
+                if getattr(w, "meaning", None):
+                    tip.append(html.escape(w.meaning))
+                runs.append((w.token, w.token, "<br>".join(tip)))
+            self._compact_text.set_runs(runs, size_pt=token_pt)
+            return
         rows: list[str] = []
         for w in self._words:
             esc = html.escape(w.token)
