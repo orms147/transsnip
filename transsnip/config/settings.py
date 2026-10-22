@@ -192,6 +192,23 @@ class VoiceSettings(BaseModel):
     output_device: str = ""
 
 
+class ZhStudySettings(BaseModel):
+    """Chinese study aids (Settings → Học tiếng Trung).
+
+    When the source is Chinese, the popup shows each word with pinyin and its
+    Hán-Việt reading plus the sentence's Hán-Việt; clicking a word opens the
+    word card (meaning, characters, AI usage notes, stroke order).
+    """
+
+    enabled: bool = True
+    show_pinyin: bool = True
+    show_hanviet: bool = True
+    tone_colors: bool = True
+    # Stroke-order animation in the word card. Off by default: it needs a
+    # one-time ~12 MB download (Make Me a Hanzi) and animates on a timer.
+    stroke_animation: bool = False
+
+
 class OCRSettings(BaseModel):
     """Which OCR engine runs first (see ocr.registry.default_pipeline).
 
@@ -227,6 +244,7 @@ class Settings(BaseModel):
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     audio: AudioSettings = Field(default_factory=AudioSettings)
     ocr: OCRSettings = Field(default_factory=OCRSettings)
+    zh: ZhStudySettings = Field(default_factory=ZhStudySettings)
     # v6: added hotkeys.high_priority (gaming mode). No migration needed —
     # Pydantic fills the missing bool with its default, so v5 loads fine.
     schema_version: int = 6

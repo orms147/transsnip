@@ -45,6 +45,7 @@ from transsnip.config.settings import (
     HotkeySettings,
     PresetSettings,
     VoiceSettings,
+    ZhStudySettings,
     load_settings,
     save_settings,
 )
@@ -252,6 +253,7 @@ class SettingsWindow(QWidget):
             ("display", "eye", "Display"),
             ("voice", "volume", "Voice"),
             ("audio", "subtitles", "Audio"),
+            ("zh", "edit", "Tiếng Trung"),
         ]
         from PySide6.QtCore import QSize
         for tab_id, icon_name, label in self._tabs_meta:
@@ -275,6 +277,7 @@ class SettingsWindow(QWidget):
         self._stack.addWidget(self._build_tab_display())
         self._stack.addWidget(self._build_tab_voice())
         self._stack.addWidget(self._build_tab_audio())
+        self._stack.addWidget(self._build_tab_zh())
         root.addWidget(self._stack, stretch=1)
 
         # Footer.
@@ -826,6 +829,62 @@ class SettingsWindow(QWidget):
         layout.addStretch(1)
         return self._wrap_in_scroll(body)
 
+    def _build_tab_zh(self) -> QWidget:
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+        layout.addWidget(SectionHead(
+            "Học tiếng Trung",
+            "Khi câu nguồn là tiếng Trung: mỗi từ hiện pinyin + âm Hán-Việt, kèm âm "
+            "Hán-Việt của cả câu. Bấm vào một từ để mở Thẻ từ (nghĩa, từng chữ, cách "
+            "viết, cách dùng). Lưu từ vào Sổ từ để ôn tập.",
+        ))
+        self._zh_enabled = ToggleRow("Bật chế độ học tiếng Trung")
+        self._zh_pinyin = ToggleRow("Hiện pinyin trên mỗi từ")
+        self._zh_hanviet = ToggleRow("Hiện âm Hán-Việt", "Dưới mỗi từ và cho cả câu.")
+        self._zh_tones = ToggleRow(
+            "Tô màu theo thanh điệu",
+            "Thanh 1 đỏ · thanh 2 xanh lá · thanh 3 xanh dương · thanh 4 tím · thanh nhẹ xám.")
+        self._zh_strokes = ToggleRow(
+            "Cách viết (animation) trong Thẻ từ",
+            "Cần tải dữ liệu nét viết một lần (~30 MB). Tắt để đỡ tốn tài nguyên.")
+        for row in (self._zh_enabled, self._zh_pinyin, self._zh_hanviet, self._zh_tones,
+                    self._zh_strokes):
+            layout.addWidget(row)
+
+        from transsnip.learning.zh import strokes
+        self._zh_stroke_status = QLabel()
+        self._zh_stroke_status.setProperty("hint", True)
+        self._zh_stroke_remove = QPushButton("Xoá dữ liệu cách viết")
+        self._zh_stroke_remove.setProperty("soft", True)
+
+        def refresh_status() -> None:
+            have = strokes.StrokeStore().available()
+            self._zh_stroke_status.setText(
+                "Đã có dữ liệu cách viết." if have else "Chưa tải dữ liệu cách viết.")
+            self._zh_stroke_remove.setVisible(have)
+
+        def remove() -> None:
+            strokes.remove()
+            refresh_status()
+
+        self._zh_stroke_remove.clicked.connect(remove)
+        refresh_status()
+        row = QHBoxLayout()
+        row.addWidget(self._zh_stroke_status, stretch=1)
+        row.addWidget(self._zh_stroke_remove)
+        layout.addLayout(row)
+        credits = QLabel(
+            "Dữ liệu: CVDICT (CC BY-SA 4.0) · âm Hán-Việt theo Thiều Chửu · "
+            "Make Me a Hanzi (LGPL / Arphic PL) · HSK 3.0 (MIT). Chi tiết: "
+            "resources/zh/NOTICE.md.")
+        credits.setWordWrap(True)
+        credits.setProperty("hint", True)
+        layout.addWidget(credits)
+        layout.addStretch(1)
+        return self._wrap_in_scroll(body)
+
     # ── Load / Save ───────────────────────────────────────────────────────
 
     def _load_from_model(self) -> None:
@@ -895,6 +954,11 @@ class SettingsWindow(QWidget):
         self._cache_audio_toggle.setChecked(s.voice.cache_audio)
         # Audio
         _select_by_data(self._whisper_tier_combo, s.audio.whisper_tier)
+        self._zh_enabled.setChecked(s.zh.enabled)
+        self._zh_pinyin.setChecked(s.zh.show_pinyin)
+        self._zh_hanviet.setChecked(s.zh.show_hanviet)
+        self._zh_tones.setChecked(s.zh.tone_colors)
+        self._zh_strokes.setChecked(s.zh.stroke_animation)
 
     def _on_save(self) -> None:
         s = self._settings
@@ -966,6 +1030,13 @@ class SettingsWindow(QWidget):
         s.audio = AudioSettings(
             whisper_tier=self._whisper_tier_combo.currentData() or "small",
             compute_type=s.audio.compute_type,
+        )
+        s.zh = ZhStudySettings(
+            enabled=self._zh_enabled.isChecked(),
+            show_pinyin=self._zh_pinyin.isChecked(),
+            show_hanviet=self._zh_hanviet.isChecked(),
+            tone_colors=self._zh_tones.isChecked(),
+            stroke_animation=self._zh_strokes.isChecked(),
         )
 
         save_settings(s)

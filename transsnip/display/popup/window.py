@@ -34,7 +34,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from transsnip.config.settings import VoiceSettings
+from transsnip.config.settings import VoiceSettings, ZhStudySettings
+from transsnip.display.popup.chinese import ChineseSource
 from transsnip.display.popup.constants import (
     _COMMON_LANGS,
     _DEFAULT_HEIGHT,
@@ -91,6 +92,8 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
     # the chip menus / swap button. AppController persists it and re-translates
     # the cached source text (no re-capture, no re-OCR).
     lang_pair_changed = Signal(object, str)
+    # Chinese study: a word in the source was clicked → (word, sentence, translation).
+    word_lookup_requested = Signal(str, str, str)
 
     def __init__(self) -> None:
         super().__init__(
@@ -140,6 +143,9 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         # Result detail level (Settings → Translation). "standard" adds a 🔊 to
         # read the source aloud even without the learning breakdown.
         self._display_mode = "simple"
+        # Chinese study block (pinyin + Hán-Việt per word, clickable).
+        self._zh_settings = ZhStudySettings()
+        self._zh_active = False
 
         self._build_ui()
         # On theme switch, re-apply label colors AND repaint the frame. Without
@@ -212,6 +218,11 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         self._word_breakdown.speak_requested.connect(self._on_speak_word)
         self._word_breakdown.hide()
         self._last_words: list = []
+        self._chinese = ChineseSource()
+        self._chinese.word_clicked.connect(
+            lambda w, s: self.word_lookup_requested.emit(w, s, self._last_translation)
+        )
+        self._chinese.hide()
         self._divider = QFrame()
         self._divider.setFixedHeight(1)
         self._divider.hide()
@@ -254,6 +265,7 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         src_layout.addWidget(self._source_label)
         src_layout.addWidget(self._phonetic)
         src_layout.addWidget(self._word_breakdown)
+        src_layout.addWidget(self._chinese)
 
         tx_section = QWidget()
         tx_layout = QVBoxLayout(tx_section)
@@ -366,6 +378,12 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         self._last_source_lang = source_lang
         self._source_detected = detected
         self._show_phonetic_active = show_phonetic and source_lang == "en"
+        self._zh_active = False
+        if self._zh_settings.enabled and (source_lang or "").lower().startswith("zh"):
+            zs = self._zh_settings
+            self._zh_active = self._chinese.set_text(
+                source_text[:400], scale=self._current_font_scale, show_pinyin=zs.show_pinyin,
+                show_hanviet=zs.show_hanviet, tone_colors=zs.tone_colors)
         self._header.set_status("translating")
         truncated = _truncate(source_text)
         self._render_source_block(truncated, source_lang)
@@ -449,7 +467,15 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         # is done and the provider returned per-word data.
         has_breakdown = is_done and bool(self._last_words)
         self._source_chip.setVisible(source_visible)
-        if has_breakdown:
+        self._chinese.setVisible(source_visible and self._zh_active)
+        if source_visible and self._zh_active:
+            # Chinese study block replaces every other source rendering.
+            self._learning_tag.setVisible(False)
+            self._phonetic.setVisible(False)
+            self._word_breakdown.setVisible(False)
+            self._source_label.setVisible(False)
+            self._header.set_voice_available(True)
+        elif has_breakdown:
             self._learning_tag.setVisible(True)
             self._word_breakdown.setVisible(True)
             self._phonetic.setVisible(False)
@@ -525,6 +551,10 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         """Push the user's Settings → Voice prefs (voice id, rate, volume, autoplay)."""
         self._voice_settings = vs
         self._tts_player.set_output_device(vs.output_device)
+
+    def set_zh_settings(self, zs: ZhStudySettings) -> None:
+        """Push Settings → Học tiếng Trung."""
+        self._zh_settings = zs
 
     def set_display_mode(self, mode: str) -> None:
         """Result detail level: 'simple' / 'standard' / 'learning'."""
@@ -615,9 +645,13 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         # Pinned popups survive clicks elsewhere; only Esc / close dismisses them.
         self._pinned = pinned
 
-    def _speak(self, text: str) -> None:
+    def _speak(self, text: str, lang: str | None = None) -> None:
         vs = self._voice_settings
-        self._tts_player.speak(text, voice=vs.voice, rate=vs.rate, volume=vs.volume)
+        # The configured voice is an English one (IPA / learning mode); any other
+        # known source language gets its own native voice.
+        primary = (lang or "en").split("-")[0]
+        voice = vs.voice if primary == "en" else _voice_for_lang(lang or "en")
+        self._tts_player.speak(text, voice=voice, rate=vs.rate, volume=vs.volume)
 
     def _on_speak_sentence(self) -> None:
         # Toggle: click the speaker once to play the source, again to stop.
@@ -626,13 +660,13 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
             return
         text = (self._last_source_text or "").strip()
         if text:
-            self._speak(text)
+            self._speak(text, lang=self._last_source_lang)
 
     def _on_speak_word(self, word: str) -> None:
         # Per-word: always play the clicked word (don't toggle — clicking a
         # different word should switch, not stop). speak() stops any prior clip.
         if word.strip():
-            self._speak(word.strip())
+            self._speak(word.strip(), lang=self._last_source_lang)
 
     def _on_speak_translation(self) -> None:
         """Toggle reading the translation aloud (target-language voice)."""

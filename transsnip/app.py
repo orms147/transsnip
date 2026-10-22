@@ -39,6 +39,8 @@ if TYPE_CHECKING:
     from transsnip.hotkeys.manager import HotkeyManager
     from transsnip.ui.about_dialog import AboutDialog
     from transsnip.ui.history_window import HistoryWindow
+    from transsnip.ui.vocab_window import VocabWindow
+    from transsnip.ui.word_card import WordCardWindow
 
 log = logging.getLogger(__name__)
 
@@ -94,6 +96,11 @@ class AppController(QObject):
         # In-popup language switching: persist the pair and re-translate the
         # cached source text (no re-capture / re-OCR).
         self._popup.lang_pair_changed.connect(self._on_popup_lang_changed)
+        # Chinese study: clicking a word in the popup opens the word card.
+        self._popup.word_lookup_requested.connect(self._open_word_card)
+        self._word_card: WordCardWindow | None = None
+        self._vocab_window: VocabWindow | None = None
+        self._vocab_store = None   # learning.vocab.VocabStore, opened lazily
 
         self._overlay = InlineOverlay()
         self._overlay.refresh_requested.connect(self._on_overlay_refresh)
@@ -158,6 +165,7 @@ class AppController(QObject):
         # Tray menu actions from the redesigned context menu.
         self._tray.about_requested.connect(self._open_about)
         self._tray.history_requested.connect(self._open_history)
+        self._tray.vocab_requested.connect(self._open_vocab)
         self._tray.region_translate_triggered.connect(
             lambda: self.handle_hotkey("region_translate")
         )
@@ -751,6 +759,41 @@ class AppController(QObject):
             log.debug("Toast failed, falling back to tray: %s", exc)
             self._notify("Settings đã lưu.")
 
+    # ── Chinese study ───────────────────────────────────────────────────────
+
+    def _vocab(self):
+        if self._vocab_store is None:
+            from transsnip.learning.vocab import VocabStore
+            self._vocab_store = VocabStore()
+        return self._vocab_store
+
+    def _translator_for_card(self):
+        return getattr(self._translation_pipeline, "_translator", None)
+
+    def _ensure_word_card(self) -> WordCardWindow:
+        if self._word_card is None:
+            from transsnip.ui.word_card import WordCardWindow
+            self._word_card = WordCardWindow(self._vocab(), self._translator_for_card)
+            self._word_card.open_vocab_requested.connect(self._open_vocab)
+        self._word_card.set_settings(self._settings.zh)
+        self._word_card.set_output_device(self._settings.voice.output_device)
+        return self._word_card
+
+    @Slot(str, str, str)
+    def _open_word_card(self, word: str, sentence: str = "", translation: str = "") -> None:
+        near = self._popup.frameGeometry() if self._popup.isVisible() else None
+        self._ensure_word_card().show_word(word, sentence, translation, near=near)
+
+    @Slot()
+    def _open_vocab(self) -> None:
+        if self._vocab_window is None:
+            from transsnip.ui.vocab_window import VocabWindow
+            self._vocab_window = VocabWindow(self._vocab())
+            self._vocab_window.open_word_requested.connect(lambda w: self._open_word_card(w))
+            self._vocab_window.speak_requested.connect(
+                lambda w: self._ensure_word_card().speak(w))
+        self._vocab_window.open_list()
+
     def _warm_up_ocr(self) -> None:
         """Pre-build whichever OCR engine will serve the source language, off
         the GUI thread — RapidOCR's first call is otherwise ~0.8 s slower
@@ -758,9 +801,14 @@ class AppController(QObject):
         pipeline, lang = self._ocr_pipeline, self._settings.translate.source_lang
         run_in_pool(lambda: pipeline.warm_up(lang), lambda _r: None, lambda _e: None,
                     label="OCR warm-up")
+        if self._settings.zh.enabled and (lang or "zh").startswith("zh"):
+            from transsnip.learning.zh import text as zh_text
+            run_in_pool(zh_text.warm_up, lambda _r: None, lambda _e: None,
+                        label="Chinese tokenizer warm-up")
 
     def _apply_popup_settings(self) -> None:
         self._popup.set_voice_settings(self._settings.voice)
+        self._popup.set_zh_settings(self._settings.zh)
         self._popup.set_display_mode(self._settings.translate.display_mode)
         self._popup.set_click_outside_close(self._settings.display.click_outside_close)
 
