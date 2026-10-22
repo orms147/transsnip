@@ -115,7 +115,6 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         self._show_phonetic_active: bool = False
         self._filter_installed = False
         # Whether clicking outside the popup dismisses it (Settings → Display).
-        self._click_outside_close = True
         # When pinned (pin button), the popup ignores click-outside / focus-loss
         # auto-close — it stays put until Esc or the close button.
         self._pinned = False
@@ -338,8 +337,6 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         self._show_phonetic_active = False
         self._last_words = []
         self._user_resized = False
-        self._pinned = False
-        self._header.reset_pin()
         self._tts_player.stop()
         self._set_state("loading")
         self._header.set_status("ocr")
@@ -563,10 +560,6 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         """Result detail level: 'simple' / 'standard' / 'learning'."""
         self._display_mode = mode
 
-    def set_click_outside_close(self, enabled: bool) -> None:
-        """Whether a click outside the popup dismisses it (Settings → Display)."""
-        self._click_outside_close = enabled
-
     # ── In-popup language switching ───────────────────────────────────────
 
     def set_lang_pair(self, source_lang: str | None, target_lang: str) -> None:
@@ -643,6 +636,12 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         self._source_chip.setEnabled(enabled)
         self._target_chip.setEnabled(enabled)
         self._swap_btn.setEnabled(enabled)
+
+    def set_pinned(self, pinned: bool) -> None:
+        """Apply the saved pin state — it persists across snips (and restarts,
+        see DisplaySettings.popup_pinned) until the user unpins."""
+        self._pinned = pinned
+        self._header.set_pinned(pinned)
 
     def _on_pin_toggled(self, pinned: bool) -> None:
         # Pinned popups survive clicks elsewhere; only Esc / close dismisses them.

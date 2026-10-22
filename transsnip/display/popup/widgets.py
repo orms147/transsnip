@@ -247,11 +247,10 @@ class _PopupHeader(QWidget):
     def is_pinned(self) -> bool:
         return self._pinned
 
-    def reset_pin(self) -> None:
-        """Unpin on a fresh translation cycle (called by the popup)."""
-        if self._pinned:
-            self._pinned = False
-            self._refresh_pin_style()
+    def set_pinned(self, pinned: bool) -> None:
+        """Restore the saved pin state (no pin_toggled emitted)."""
+        self._pinned = pinned
+        self._refresh_pin_style()
 
     # ── Internals ─────────────────────────────────────────────────────────
     def _on_pin_clicked(self) -> None:

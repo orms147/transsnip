@@ -1,7 +1,10 @@
 """Click-outside / focus-loss dismissal for the popup (mixin)."""
 from __future__ import annotations
 
+import sys
+
 from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtGui import QCursor
 from PySide6.QtWidgets import (
     QApplication,
     QScrollBar,
@@ -12,7 +15,7 @@ from PySide6.QtWidgets import (
 class _OutsideDismissMixin:
     """App-wide event filter + focus-loss handling for FloatingPopup.
 
-    Relies on the host widget's `_filter_installed`, `_click_outside_close`,
+    Relies on the host widget's `_filter_installed`,
     `_pinned`, `_resize_edges` state and its `hide_popup()` / resize helpers.
 
     Companions (the Chinese word card) count as "inside": clicking or focusing
@@ -39,6 +42,7 @@ class _OutsideDismissMixin:
         if app is not None:
             app.installEventFilter(self)
             self._filter_installed = True
+        self._start_outside_click_poll()
 
     def _remove_event_filter(self) -> None:
         if not self._filter_installed:
@@ -47,6 +51,52 @@ class _OutsideDismissMixin:
         if app is not None:
             app.removeEventFilter(self)
         self._filter_installed = False
+        poll = self.__dict__.get("_outside_poll")
+        if poll is not None:
+            poll.stop()
+
+    # Clicks on OTHER apps never reach our event filter, and the focus-loss
+    # path below only fires if the popup was ever activated — Windows'
+    # foreground lock often refuses that for a popup opened from a global
+    # hotkey, so it then stayed up as if pinned. While it's visible we poll
+    # the physical mouse buttons (cheap: one Win32 call per 40 ms) and treat a
+    # fresh press outside every TransSnip window as a click outside.
+    _POLL_MS = 40
+    _VK_BUTTONS = (0x01, 0x02, 0x04)    # left, right, middle
+
+    def _start_outside_click_poll(self) -> None:
+        if sys.platform != "win32":
+            return
+        poll = self.__dict__.get("_outside_poll")
+        if poll is None:
+            poll = QTimer(self)
+            poll.setInterval(self._POLL_MS)
+            poll.timeout.connect(self._poll_outside_click)
+            self._outside_poll = poll
+        self._buttons_down = self._mouse_buttons_down()   # a held button isn't a new click
+        poll.start()
+
+    @staticmethod
+    def _mouse_buttons_down() -> bool:
+        import ctypes
+        state = ctypes.windll.user32.GetAsyncKeyState
+        return any(state(vk) & 0x8000 for vk in _OutsideDismissMixin._VK_BUTTONS)
+
+    def _poll_outside_click(self) -> None:
+        down = self._mouse_buttons_down()
+        pressed = down and not self._buttons_down
+        self._buttons_down = down
+        if not pressed or self._pinned or not self.isVisible() or self._resize_edges:
+            return
+        pos = QCursor.pos()
+        if self.geometry().contains(pos) \
+                or any(w.geometry().contains(pos) for w in self._companion_windows()):
+            return
+        # Over one of our own windows (settings, language menu, region
+        # selector…) → the app-wide event filter / focus logic decides.
+        if QApplication.widgetAt(pos) is not None:
+            return
+        self.hide_popup()
 
     def _is_self_or_descendant(self, watched) -> bool:
         w = watched if isinstance(watched, QWidget) else None
@@ -94,8 +144,7 @@ class _OutsideDismissMixin:
                 return super().eventFilter(watched, event)
             if self._in_companion(watched):
                 return super().eventFilter(watched, event)
-            if self._click_outside_close and not self._pinned \
-                    and not self.geometry().contains(gp):
+            if not self._pinned and not self.geometry().contains(gp):
                 self.hide_popup()
         elif et == QEvent.Type.MouseMove and inside:
             # Show the resize cursor ONLY on the popup's own outer edge. We set
@@ -123,7 +172,6 @@ class _OutsideDismissMixin:
         # clicks on a foreign window this WindowDeactivate is what fires.
         if (
             event.type() == QEvent.Type.ActivationChange
-            and self._click_outside_close
             and not self._pinned
             and self.isVisible()
             and not self.isActiveWindow()
@@ -138,13 +186,13 @@ class _OutsideDismissMixin:
         # Re-check on the next tick: if focus went to one of our OWN windows
         # (settings/about/history) we keep the popup; only a foreign window or
         # the desktop should dismiss it.
-        if not self._click_outside_close or self._pinned or not self.isVisible():
+        if self._pinned or not self.isVisible():
             return
         if not self.owns_window(QApplication.activeWindow()):
             self.hide_popup()
 
     def dismiss_unless_pinned(self) -> None:
         """A companion lost focus to something outside the group."""
-        if self._click_outside_close and not self._pinned and self.isVisible() \
+        if not self._pinned and self.isVisible() \
                 and not self.owns_window(QApplication.activeWindow()):
             self.hide_popup()

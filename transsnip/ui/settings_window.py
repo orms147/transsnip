@@ -691,22 +691,15 @@ class SettingsWindow(QWidget):
         form.addRow("Cỡ chữ phụ đề video:", self._subtitle_font_slider)
         layout.addLayout(form)
 
-        self._click_outside_display = ToggleRow(
-            "Click outside để đóng popup",
-            "Tắt nếu bạn hay click ra ngoài để copy text từ app khác.",
-        )
         self._esc_overlay_toggle = ToggleRow(
             "Esc đóng overlay fullscreen",
             "Bất kỳ click nào trên overlay cũng đóng — phím Esc là tuỳ chọn.",
         )
-        self._pin_persist_toggle = ToggleRow("Pin popup mở lại lần dịch sau")
         self._footer_hint_toggle = ToggleRow(
             "Hiện footer hint trong popup",
             "Ẩn dòng 'Esc · Ctrl+C · click vào từ' để gọn hơn.",
         )
-        layout.addWidget(self._click_outside_display)
         layout.addWidget(self._esc_overlay_toggle)
-        layout.addWidget(self._pin_persist_toggle)
         layout.addWidget(self._footer_hint_toggle)
 
         # Fullscreen overlay has only one rendering style now (opaque box
@@ -939,8 +932,6 @@ class SettingsWindow(QWidget):
         self._font_scale_slider.setValue(s.display.popup_font_scale_max)
         self._subtitle_opacity_slider.setValue(s.display.subtitle_bg_opacity)
         self._subtitle_font_slider.setValue(s.display.subtitle_font_pt)
-        self._click_outside_display.setChecked(s.display.click_outside_close)
-        self._pin_persist_toggle.setChecked(s.display.pin_persist)
         self._footer_hint_toggle.setChecked(s.display.show_footer_hint)
         self._esc_overlay_toggle.setChecked(True)
 
@@ -1009,8 +1000,9 @@ class SettingsWindow(QWidget):
             glass_effect=self._glass_toggle.isChecked(),
             popup_default_width=int(self._popup_width_slider.value()),
             popup_font_scale_max=self._font_scale_slider.value(),
-            click_outside_close=self._click_outside_display.isChecked(),
-            pin_persist=self._pin_persist_toggle.isChecked(),
+            # Owned by the popup's pin button (saved on toggle) — read it fresh,
+            # this window's copy may predate the last toggle.
+            popup_pinned=load_settings().display.popup_pinned,
             show_footer_hint=self._footer_hint_toggle.isChecked(),
             subtitle_bg_opacity=self._subtitle_opacity_slider.value(),
             subtitle_font_pt=int(self._subtitle_font_slider.value()),

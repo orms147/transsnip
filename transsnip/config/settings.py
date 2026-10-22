@@ -158,8 +158,10 @@ class DisplaySettings(BaseModel):
     glass_effect: bool = True
     popup_default_width: int = 460       # px, used by FloatingPopup
     popup_font_scale_max: float = 2.0    # cap on font scaling when user resizes
-    click_outside_close: bool = True
-    pin_persist: bool = False            # restore pinned popup next session
+    # Popup pin (header 📌 button). Pinned = clicking outside doesn't hide
+    # the popup. Saved on toggle and kept across snips + restarts until the
+    # user unpins.
+    popup_pinned: bool = False
     show_footer_hint: bool = True
     # Opacity of the video-subtitle bar's background (0.0 = fully transparent,
     # 1.0 = solid). Lower it to see more of the video behind the translation.
@@ -201,9 +203,10 @@ class ZhStudySettings(BaseModel):
     When the source is Chinese, the popup shows each word with pinyin and its
     Hán-Việt reading plus the sentence's Hán-Việt; clicking a word opens the
     word card (meaning, characters, AI usage notes, stroke order).
+    Opt-in: a fresh install shows plain translations.
     """
 
-    enabled: bool = True
+    enabled: bool = False
     show_pinyin: bool = True
     show_hanviet: bool = True
     tone_colors: bool = True

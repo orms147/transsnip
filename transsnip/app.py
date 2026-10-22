@@ -89,6 +89,7 @@ class AppController(QObject):
 
         self._popup = FloatingPopup()
         self._apply_popup_settings()
+        self._popup.pin_changed.connect(self._on_popup_pin_changed)
         self._popup.settings_requested.connect(self._open_settings)
         # New Cobalt-design signals from the rebuilt popup.
         self._popup.retry_requested.connect(self._on_popup_retry)
@@ -832,7 +833,12 @@ class AppController(QObject):
         self._popup.set_voice_settings(self._settings.voice)
         self._popup.set_zh_settings(self._settings.zh)
         self._popup.set_display_mode(self._settings.translate.display_mode)
-        self._popup.set_click_outside_close(self._settings.display.click_outside_close)
+        self._popup.set_pinned(self._settings.display.popup_pinned)
+
+    @Slot(bool)
+    def _on_popup_pin_changed(self, pinned: bool) -> None:
+        self._settings.display.popup_pinned = pinned
+        save_settings(self._settings)
 
     # ── Misc ────────────────────────────────────────────────────────────────
 
