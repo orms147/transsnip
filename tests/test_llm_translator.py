@@ -101,3 +101,27 @@ def test_cjk_target_is_not_treated_as_untranslated():
     llm = _FakeLLM("今日は")
     out = llm.translate("hello", TranslationContext(target_lang="ja"))
     assert out.translated_text == "今日は" and len(llm.calls) == 1
+
+
+class _EmptyUnderFullPrompt(_FakeLLM):
+    """hy-mt2-style quirk: the full prompt yields no content, a bare one works."""
+
+    def _complete(self, system: str, user: str) -> str:
+        self.calls.append((system, user))
+        return "" if "Output ONLY" in system else "xin chào"
+
+
+def test_empty_reply_falls_back_to_minimal_prompt() -> None:
+    llm = _EmptyUnderFullPrompt()
+    ctx = TranslationContext(target_lang="vi", source_lang="zh-Hans", glossary={"HP": "máu"})
+    assert llm.translate("你好", ctx).translated_text == "xin chào"
+    fallback_system = llm.calls[1][0]
+    assert "Output ONLY" not in fallback_system
+    assert "Vietnamese" in fallback_system and "HP → máu" in fallback_system
+
+
+def test_empty_reply_from_both_prompts_still_raises() -> None:
+    llm = _FakeLLM("")
+    with pytest.raises(TranslationError, match="empty response"):
+        llm.translate("x", TranslationContext())
+    assert len(llm.calls) == 2

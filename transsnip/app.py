@@ -646,8 +646,24 @@ class AppController(QObject):
         Falls back to a no-op if we never had a region (vision-only sessions
         with no OCR context to retry from).
         """
-        if self._last_region_for_retry is not None:
-            self._capture_and_ocr(self._last_region_for_retry, image=self._last_region_image)
+        # OCR already worked and only the translation failed → re-translate the
+        # same text. Re-capturing would OCR the error popup itself when it sits
+        # over the region (seen: "Đổi provider Thử lại" fed to the translator).
+        text = self._popup.last_source_text().strip()
+        if text:
+            self._popup.retry_translation()
+            self._submit_translation(text)
+            return
+        rect, image = self._last_region_for_retry, self._last_region_image
+        if rect is None:
+            return
+        if image is not None:
+            self._capture_and_ocr(rect, image=image)
+            return
+        # Live re-capture: get the popup off the region first and give DWM a
+        # frame to repaint what was under it.
+        self._popup.hide()
+        QTimer.singleShot(120, lambda: self._capture_and_ocr(rect))
 
     @Slot(object, str)
     def _on_popup_lang_changed(self, source_lang: str | None, target_lang: str) -> None:

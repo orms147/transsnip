@@ -22,6 +22,7 @@ from transsnip.translate.base import (
 )
 from transsnip.translate.prompts import (
     BREAKDOWN_SYSTEM_PROMPT,
+    build_minimal_system_prompt,
     build_system_prompt,
     build_user_turn,
     build_vision_prompt,
@@ -125,6 +126,11 @@ class LLMTranslator(Translator):
         else:
             system, user = build_system_prompt(ctx), build_user_turn(text, ctx)
         raw = self._call(system, user)
+        if not raw and not ctx.want_word_breakdown:
+            # Empty reply is deterministic for that prompt (retrying it as-is
+            # just fails again) — a bare prompt gets a real answer.
+            log.info("%s returned nothing — retrying with the minimal prompt", self.name)
+            raw = self._call(build_minimal_system_prompt(ctx), user)
         if not ctx.want_word_breakdown and raw and looks_untranslated(raw, ctx.target_lang):
             # Model answered in the source script instead of translating — one
             # retry usually fixes it (sampling), and costs nothing when it doesn't fire.

@@ -74,6 +74,20 @@ def build_system_prompt(ctx: TranslationContext) -> str:
     return "\n".join(parts)
 
 
+def build_minimal_system_prompt(ctx: TranslationContext) -> str:
+    """Bare fallback prompt for when the full one gets an empty reply.
+
+    Some models hide their whole answer as "reasoning" under the stricter
+    instructions — tencent/hy-mt2 on OpenRouter: content=None with every
+    output token counted as reasoning_tokens, for "让你唱歌爆炸好听" with the
+    "ENTIRE response MUST…" / "Output ONLY…" lines, fine without them.
+    """
+    target = lang_name(ctx.target_lang)
+    parts = [f"You are a professional translator. Translate the user's text into {target}."]
+    parts += _context_lines(ctx)
+    return "\n".join(parts)
+
+
 def build_user_turn(text: str, ctx: TranslationContext) -> str:
     """The user turn for plain translation — restates the target language.
 

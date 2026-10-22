@@ -434,6 +434,12 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         ):
             self._speak(self._last_source_text)
 
+    def retry_translation(self) -> None:
+        """Back from the error state to "source shown, translating…" — the
+        OCR'd text is kept and only the translation is re-run."""
+        self._header.set_status("translating")
+        self._set_state("source-known")
+
     def show_error(self, message: str) -> None:
         self._header.set_status("error")
         self._error_panel.set_error(message)
