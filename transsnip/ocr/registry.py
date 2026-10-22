@@ -92,10 +92,16 @@ class OCRPipeline:
                 log.info("OCR success via %s (%d blocks)", engine.name, len(result.blocks))
                 return result
             log.debug("Engine %s returned empty — trying next", engine.name)
+        if last_err is None:
+            # Every engine ran fine and simply saw no text — not a failure of
+            # ours, so the popup says so plainly instead of dumping internals.
+            raise OCRError(NO_TEXT_FOUND)
         raise OCRError(
             f"No engine produced text. Tried: {attempted}. Last error: {last_err}"
         )
 
+
+NO_TEXT_FOUND = "no text found in the selected region"
 
 PRIMARY_ENGINES = ("rapid", "windows")
 

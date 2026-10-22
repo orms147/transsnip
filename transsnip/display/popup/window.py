@@ -441,6 +441,7 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         self._header.set_status("error")
         self._error_panel.set_error(message)
         self._set_state("error")
+        self._fit_height_to_content()     # shrink from a previous long result
 
     def hide_popup(self) -> None:
         self._remove_event_filter()
@@ -700,10 +701,13 @@ class FloatingPopup(_OutsideDismissMixin, _EdgeResizeMixin, QWidget):
         if screen is None:
             return
         available = screen.availableGeometry()
+        # Keep the width (the user may have widened it); the height starts
+        # compact every snip — the last result's height (a long translation)
+        # would otherwise carry over, e.g. a screen-tall popup for a 2-line
+        # error. _fit_height_to_content() grows it to the new content.
         cur_w = self.width()
-        cur_h = self.height()
         w = cur_w if cur_w >= _MIN_WIDTH else _DEFAULT_WIDTH
-        h = cur_h if cur_h >= _MIN_HEIGHT else _DEFAULT_HEIGHT
+        h = _DEFAULT_HEIGHT
         w = min(w, available.width() - 2 * _MARGIN_FROM_EDGE)
         h = min(h, available.height() - 2 * _MARGIN_FROM_EDGE)
 

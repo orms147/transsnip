@@ -23,7 +23,7 @@ from transsnip.linguistic.langdetect import effective_source
 from transsnip.modes.fullscreen import build_numbered_batch, overlay_boxes, parse_numbered_batch
 from transsnip.modes.video_subtitle import VideoSubtitleController
 from transsnip.ocr.base import OCRBlock, OCRError, OCRResult
-from transsnip.ocr.registry import OCRPipeline
+from transsnip.ocr.registry import NO_TEXT_FOUND, OCRPipeline
 from transsnip.ocr.registry import default_pipeline as default_ocr_pipeline
 from transsnip.ocr.segment import segment_english_runon
 from transsnip.translate.base import TranslationContext, TranslationError, TranslationResult
@@ -473,6 +473,10 @@ class AppController(QObject):
 
     @Slot(str)
     def _on_ocr_failed(self, error: str) -> None:
+        if error == NO_TEXT_FOUND:
+            self._popup.show_error("Không thấy chữ trong vùng đã chọn — thử khoanh vùng "
+                                   "sát dòng chữ hơn, hoặc phóng to nội dung rồi chụp lại.")
+            return
         self._popup.show_error(f"OCR — {error}")
 
     @Slot(object)

@@ -76,3 +76,16 @@ def test_held_button_is_not_a_new_click(popup, monkeypatch) -> None:
     popup._buttons_down = True                  # …button still held from before
     popup._poll_outside_click()
     assert popup.isVisible()
+
+
+def test_error_after_long_result_is_compact(popup) -> None:
+    from transsnip.translate.base import TranslationResult
+    popup.show_for_region(QRect(100, 100, 300, 40))
+    long_text = "Một câu dịch khá dài để popup giãn cao ra. " * 40
+    popup.update_source("long source", source_lang="en")
+    popup.update_translation(TranslationResult("long source", long_text, "en", "vi", "x"))
+    tall = popup.height()
+    popup.show_for_region(QRect(100, 100, 300, 40))
+    popup.show_error("Không thấy chữ trong vùng đã chọn.")
+    assert popup.height() < tall
+    assert popup.height() <= 260
