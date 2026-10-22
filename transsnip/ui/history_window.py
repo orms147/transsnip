@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 from transsnip.config.history import HistoryEntry, HistoryStore
 from transsnip.tts.edge_tts_player import EdgeTTSPlayer
 from transsnip.ui.atoms import CustomTitlebar, IconButton
+from transsnip.ui.edge_resize import EdgeResize
 from transsnip.ui.glass import Glass
 from transsnip.ui.theme import get_theme
 
@@ -34,7 +35,9 @@ class HistoryWindow(QWidget):
         super().__init__(parent, Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._glass = Glass(self)
+        self._edge_resize = EdgeResize(self)
         self.resize(440, 560)
+        self.setMinimumSize(340, 320)
         self._store = store
         self._tts = EdgeTTSPlayer(self)
 

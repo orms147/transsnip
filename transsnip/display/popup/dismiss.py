@@ -102,9 +102,26 @@ class _OutsideDismissMixin:
         w = watched if isinstance(watched, QWidget) else None
         return w is not None and w.window() is self
 
-    def _in_companion(self, watched) -> bool:
+    def _press_in_group(self, watched, gp) -> bool:
+        """Is this in-app mouse press inside the popup group (popup + word card)?
+
+        Qt delivers each press twice through the app filter — to the native
+        QWindow, then to the widget. Only the widget event can be judged: the
+        QWindow one is skipped (treated as inside), otherwise a click in the
+        word card counted as "outside the popup" and closed both.
+        """
         w = watched if isinstance(watched, QWidget) else None
-        return w is not None and w.window() in self._companion_windows()
+        if w is None:
+            return True
+        top = w.window()
+        if top is self or top in self._companion_windows():
+            return True
+        # Menus / dropdown lists / tooltips opened from inside the group are
+        # separate top-level windows (the language menu, combo popups).
+        if top.windowType() in (Qt.WindowType.Popup, Qt.WindowType.ToolTip):
+            return True
+        return self.geometry().contains(gp) \
+            or any(c.geometry().contains(gp) for c in self._companion_windows())
 
     def eventFilter(self, watched, event):
         et = event.type()
@@ -142,9 +159,7 @@ class _OutsideDismissMixin:
                         self._begin_resize(edges, gp)
                         return True
                 return super().eventFilter(watched, event)
-            if self._in_companion(watched):
-                return super().eventFilter(watched, event)
-            if not self._pinned and not self.geometry().contains(gp):
+            if not self._pinned and not self._press_in_group(watched, gp):
                 self.hide_popup()
         elif et == QEvent.Type.MouseMove and inside:
             # Show the resize cursor ONLY on the popup's own outer edge. We set

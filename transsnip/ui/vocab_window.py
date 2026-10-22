@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 
 from transsnip.learning.vocab import GRADES, VocabEntry, VocabStore, schedule
 from transsnip.ui.atoms import CustomTitlebar, IconButton, Segmented
+from transsnip.ui.edge_resize import EdgeResize
 from transsnip.ui.glass import Glass
 from transsnip.ui.search_combo import fold
 from transsnip.ui.theme import get_theme
@@ -131,8 +132,10 @@ class VocabWindow(QWidget):
         super().__init__(parent, Qt.WindowType.Window | Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._glass = Glass(self)
+        self._edge_resize = EdgeResize(self)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.resize(480, 620)
+        self.setMinimumSize(380, 360)
         self._store = store
         self._rows: list[_Row] = []
         self._queue: list[VocabEntry] = []

@@ -31,6 +31,7 @@ from transsnip.learning.zh import dictionary as zd
 from transsnip.learning.zh.text import TONE_COLORS, Syllable, Token, tokenize
 from transsnip.tts.edge_tts_player import EdgeTTSPlayer
 from transsnip.ui.atoms import CustomTitlebar, IconButton
+from transsnip.ui.edge_resize import EdgeResize
 from transsnip.ui.glass import Glass
 from transsnip.ui.theme import get_theme
 from transsnip.utils.workers import run_in_pool
@@ -79,7 +80,9 @@ class WordCardWindow(QWidget):
         self._group_owner: Callable[[QWidget | None], bool] | None = None
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self._glass = Glass(self)
+        self._edge_resize = EdgeResize(self)
         self.resize(430, 640)
+        self.setMinimumSize(340, 320)
         self._vocab = vocab
         self._translator_provider = translator_provider   # active LLM translator, if any
         self._settings = ZhStudySettings()

@@ -89,3 +89,22 @@ def test_error_after_long_result_is_compact(popup) -> None:
     popup.show_error("Không thấy chữ trong vùng đã chọn.")
     assert popup.height() < tall
     assert popup.height() <= 260
+
+
+def test_press_in_group_classification(popup) -> None:
+    from PySide6.QtWidgets import QLabel, QMenu, QWidget
+    popup.show_for_region(QRect(100, 100, 300, 40))
+    card = QWidget()
+    inner = QLabel("x", card)
+    card.setGeometry(900, 100, 200, 200)
+    card.show()
+    popup.add_companion(card)
+    menu = QMenu(popup)                      # e.g. the language menu
+    other = QWidget()                        # another TransSnip window
+    other.setGeometry(1400, 600, 100, 100)
+    far = QPoint(1450, 650)
+    assert popup._press_in_group(popup.windowHandle(), far)    # QWindow copy: skipped
+    assert popup._press_in_group(inner, far)                  # inside the word card
+    assert popup._press_in_group(menu, far)
+    assert not popup._press_in_group(other, far)
+    card.close()
