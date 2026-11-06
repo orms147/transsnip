@@ -9,14 +9,10 @@ time — older ones slide off the top when a fourth arrives.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from PySide6.QtCore import (
-    QEasingCurve,
-    QPropertyAnimation,
-    QRect,
-    QTimer,
     Qt,
+    QTimer,
     Signal,
 )
 from PySide6.QtGui import (
@@ -54,7 +50,7 @@ class _Toast(QWidget):
         tone: str = "default",
         icon_name: str = "info",
         duration_ms: int = _DEFAULT_DURATION_MS,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
@@ -161,7 +157,7 @@ class _Toast(QWidget):
 class ToastStack(QWidget):
     """Container anchored to a screen corner. Add toasts via `show_toast`."""
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint, True)
@@ -186,7 +182,7 @@ class ToastStack(QWidget):
         description: str = "",
         *,
         tone: str = "default",
-        icon_name: Optional[str] = None,
+        icon_name: str | None = None,
         duration_ms: int = _DEFAULT_DURATION_MS,
     ) -> None:
         """Push a new toast onto the stack, pruning the oldest if at cap."""
@@ -238,7 +234,7 @@ class ToastStack(QWidget):
 
 
 # Singleton accessor so AppController gets the same stack every call.
-_toast_stack: Optional[ToastStack] = None
+_toast_stack: ToastStack | None = None
 
 
 def get_toast_stack() -> ToastStack:

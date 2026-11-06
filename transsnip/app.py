@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import logging
-import re
+from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
+from functools import partial
+from typing import TYPE_CHECKING, Any
 
 from PIL import Image
-from PySide6.QtCore import QObject, QRect, QThreadPool, QTimer, Slot
+from PySide6.QtCore import QObject, QRect, QTimer, Slot
 from PySide6.QtGui import QGuiApplication
 from PySide6.QtWidgets import QApplication, QSystemTrayIcon
 
@@ -16,23 +19,37 @@ from transsnip.config.settings import Settings, get_preset, load_settings, save_
 from transsnip.display.floating_popup import FloatingPopup
 from transsnip.display.inline_overlay import InlineOverlay
 from transsnip.display.subtitle_bar import SubtitleBar
+from transsnip.linguistic.langdetect import effective_source
+from transsnip.modes.fullscreen import build_numbered_batch, overlay_boxes, parse_numbered_batch
 from transsnip.modes.video_subtitle import VideoSubtitleController
-from transsnip.ocr.base import OCRBlock, OCRResult
-from transsnip.ocr.registry import OCRPipeline
+from transsnip.ocr.base import OCRBlock, OCRError, OCRResult
+from transsnip.ocr.registry import NO_TEXT_FOUND, OCRPipeline
 from transsnip.ocr.registry import default_pipeline as default_ocr_pipeline
 from transsnip.ocr.segment import segment_english_runon
-from transsnip.ocr.worker import OCRWorker
-from transsnip.translate.base import TranslationContext, TranslationResult
-from transsnip.translate.registry import TranslationPipeline, build_pipeline
-from transsnip.translate.worker import TranslationWorker, VisionWorker
+from transsnip.translate.base import TranslationContext, TranslationError, TranslationResult
+from transsnip.translate.registry import TranslationPipeline, pipeline_from_settings
 from transsnip.tray.tray_icon import TrayController
 from transsnip.ui.settings_window import SettingsWindow
+from transsnip.utils.workers import run_in_pool
+
+if TYPE_CHECKING:
+    # Lazily-built windows — imported for annotations only so app start stays
+    # snappy (neither is needed during the snip-and-translate flow).
+    from transsnip.asr.whisper import WhisperTranscriber
+    from transsnip.hotkeys.manager import HotkeyManager
+    from transsnip.ui.about_dialog import AboutDialog
+    from transsnip.ui.history_window import HistoryWindow
+    from transsnip.ui.vocab_window import VocabWindow
+    from transsnip.ui.word_card import WordCardWindow
 
 log = logging.getLogger(__name__)
 
 # Tiny delay between hiding the region overlay and grabbing pixels. Without it,
 # the OS may still be compositing the (now-hidden) overlay into the next frame.
 _CAPTURE_DELAY_MS = 80
+# Background OCR warm-up runs this long after start, so it doesn't compete
+# with building the tray/UI.
+_WARM_UP_DELAY_MS = 1500
 
 
 class AppController(QObject):
@@ -54,13 +71,15 @@ class AppController(QObject):
         super().__init__(parent=app)
         self._app = app
         self._tray = tray
-        self._ocr_pipeline = ocr_pipeline or default_ocr_pipeline()
         self._settings_window: SettingsWindow | None = None
 
         self._settings = load_settings()
-        self._translation_pipeline = translation_pipeline or build_pipeline(
-            self._settings.translate.provider,
-            openrouter_model=self._settings.translate.openrouter_model,
+        self._ocr_pipeline_injected = ocr_pipeline is not None
+        self._ocr_pipeline = ocr_pipeline or default_ocr_pipeline(
+            self._settings.ocr.primary_engine
+        )
+        self._translation_pipeline = translation_pipeline or pipeline_from_settings(
+            self._settings
         )
         self._translation_ctx = _build_translation_ctx(self._settings)
 
@@ -69,9 +88,8 @@ class AppController(QObject):
         self._region_selector.cancelled.connect(self._on_region_cancelled)
 
         self._popup = FloatingPopup()
-        self._popup.set_voice_settings(self._settings.voice)
-        self._popup.set_display_mode(self._settings.translate.display_mode)
-        self._popup.set_click_outside_close(self._settings.display.click_outside_close)
+        self._apply_popup_settings()
+        self._popup.pin_changed.connect(self._on_popup_pin_changed)
         self._popup.settings_requested.connect(self._open_settings)
         # New Cobalt-design signals from the rebuilt popup.
         self._popup.retry_requested.connect(self._on_popup_retry)
@@ -79,6 +97,11 @@ class AppController(QObject):
         # In-popup language switching: persist the pair and re-translate the
         # cached source text (no re-capture / re-OCR).
         self._popup.lang_pair_changed.connect(self._on_popup_lang_changed)
+        # Chinese study: clicking a word in the popup opens the word card.
+        self._popup.word_lookup_requested.connect(self._open_word_card)
+        self._word_card: WordCardWindow | None = None
+        self._vocab_window: VocabWindow | None = None
+        self._vocab_store = None   # learning.vocab.VocabStore, opened lazily
 
         self._overlay = InlineOverlay()
         self._overlay.refresh_requested.connect(self._on_overlay_refresh)
@@ -108,15 +131,9 @@ class AppController(QObject):
         self._audio.error.connect(lambda msg: self._notify(f"Audio subtitle: {msg}"))
         self._audio.stopped.connect(self._subtitle_bar.stop)
         self._app.aboutToQuit.connect(self._audio.stop)
-        self._transcriber = None  # asr.whisper.WhisperTranscriber, built on first start
-        # AboutDialog instance — created lazily on first open so app start
-        # stays snappy (it's never needed during the snipe-and-translate flow).
-        # Typed as the actual AboutDialog via a TYPE_CHECKING-guarded import to
-        # avoid pulling the UI module just for an annotation.
-        from typing import TYPE_CHECKING
-        if TYPE_CHECKING:
-            from transsnip.ui.about_dialog import AboutDialog  # noqa: F401
-        self._about_dialog: "AboutDialog | None" = None  # type: ignore[name-defined]
+        self._transcriber: WhisperTranscriber | None = None  # built on first Alt+A
+        # Created lazily on first open (heavy to build, rarely opened).
+        self._about_dialog: AboutDialog | None = None
         # Last region cached so the popup's error-state Retry button can
         # re-run the same capture flow without forcing the user to re-snipe.
         # The companion image is the freeze-frame crop (gaming mode) — retry
@@ -139,33 +156,32 @@ class AppController(QObject):
         # Set later via `set_hotkey_manager()` — main() owns the manager so it
         # can wire `triggered` to `handle_hotkey` before we get a reference. We
         # only need it to rebind on settings-save.
-        self._hotkey_manager = None
+        self._hotkey_manager: HotkeyManager | None = None
 
         # Translation history (recent results, browsable from the tray).
         self._history = HistoryStore()
-        from typing import TYPE_CHECKING as _TC
-        if _TC:
-            from transsnip.ui.history_window import HistoryWindow  # noqa: F401
-        self._history_window: "HistoryWindow | None" = None  # type: ignore[name-defined]
+        self._history_window: HistoryWindow | None = None
 
         self._tray.settings_requested.connect(self._open_settings)
         # Tray menu actions from the redesigned context menu.
         self._tray.about_requested.connect(self._open_about)
         self._tray.history_requested.connect(self._open_history)
+        self._tray.vocab_requested.connect(self._open_vocab)
         self._tray.region_translate_triggered.connect(
             lambda: self.handle_hotkey("region_translate")
         )
         self._tray.fullscreen_translate_triggered.connect(
             lambda: self.handle_hotkey("fullscreen_translate")
         )
+        QTimer.singleShot(_WARM_UP_DELAY_MS, self._warm_up_ocr)
 
     @property
-    def settings(self):
+    def settings(self) -> Settings:
         """Public accessor for the loaded settings — main() uses this to bind
         initial hotkeys without having to re-call load_settings() itself."""
         return self._settings
 
-    def set_hotkey_manager(self, manager) -> None:
+    def set_hotkey_manager(self, manager: HotkeyManager) -> None:
         """Wire the HotkeyManager so settings-save can rebind hotkeys."""
         self._hotkey_manager = manager
 
@@ -255,7 +271,7 @@ class AppController(QObject):
         monitor_rect = active_monitor_logical_rect()
         try:
             return capture_rect(monitor_rect), monitor_rect
-        except Exception:  # noqa: BLE001
+        except Exception:
             log.exception("Freeze-frame capture failed — using live selector")
             return None, None
 
@@ -296,13 +312,18 @@ class AppController(QObject):
         """Begin the live subtitle loop over `rect` (logical coords)."""
         screen = QGuiApplication.screenAt(rect.center()) or QGuiApplication.primaryScreen()
         dpr = screen.devicePixelRatio() if screen is not None else 1.0
-        self._subtitle_bar.set_bg_opacity(self._settings.display.subtitle_bg_opacity)
-        self._subtitle_bar.set_font_pt(self._settings.display.subtitle_font_pt)
+        self._style_subtitle_bar()
+        self._subtitle_bar.set_two_lines(False)  # video: one on-screen line ↔ one subtitle
         self._subtitle_bar.start_for_region(rect)
         self._video.start(
             rect, dpr, self._ocr_pipeline, self._translation_pipeline, self._translation_ctx,
         )
         self._notify("Video subtitle: đang chạy. Bấm Alt+V để dừng.")
+
+    def _style_subtitle_bar(self) -> None:
+        """Re-read bar style at each start so Settings changes apply next run."""
+        self._subtitle_bar.set_bg_opacity(self._settings.display.subtitle_bg_opacity)
+        self._subtitle_bar.set_font_pt(self._settings.display.subtitle_font_pt)
 
     def _stop_video(self) -> None:
         self._video.stop()
@@ -330,8 +351,8 @@ class AppController(QObject):
                 tier=self._settings.audio.whisper_tier,
                 source_lang=self._settings.translate.source_lang,
             )
-        self._subtitle_bar.set_bg_opacity(self._settings.display.subtitle_bg_opacity)
-        self._subtitle_bar.set_font_pt(self._settings.display.subtitle_font_pt)
+        self._style_subtitle_bar()
+        self._subtitle_bar.set_two_lines(True)   # audio: previous + newest utterance
         self._subtitle_bar.start_anchored(active_monitor_logical_rect())
         self._audio.start(self._transcriber, self._translation_pipeline, self._translation_ctx)
         mb = self._transcriber.expected_download_mb()
@@ -352,7 +373,7 @@ class AppController(QObject):
         if image is None:
             try:
                 image = capture_rect(rect)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 log.exception("Capture failed")
                 # Show popup now just to surface the error to the user.
                 self._popup.show_for_region(rect)
@@ -378,22 +399,46 @@ class AppController(QObject):
             return
 
         self._popup.update_status("Đang OCR…")
-        # Honor the source language picked in Settings; None means auto-detect.
-        self._submit_ocr(image, lang=self._settings.translate.source_lang)
+        # Honors the source language picked in Settings; None means auto-detect.
+        self._submit_ocr(image, self._on_ocr_done, self._on_ocr_failed)
 
-    def _submit_ocr(self, image: Image.Image, *, lang: str | None = None) -> None:
-        worker = OCRWorker(image, lang, self._ocr_pipeline)
-        worker.signals.done.connect(self._on_ocr_done)
-        worker.signals.failed.connect(self._on_ocr_failed)
-        QThreadPool.globalInstance().start(worker)
+    # ── Background workers ──────────────────────────────────────────────────
+    #
+    # All three block for 0.2-5 s, so they run on the QThreadPool; results come
+    # back on the main thread. Pipelines/ctx are bound NOW (not looked up when
+    # the worker runs) so a settings save mid-flight can't mix configs.
+
+    def _submit_ocr(
+        self,
+        image: Image.Image,
+        on_done: Callable[[Any], None],
+        on_failed: Callable[[str], None],
+    ) -> None:
+        pipeline, lang = self._ocr_pipeline, self._settings.translate.source_lang
+        run_in_pool(lambda: pipeline.recognize(image, lang), on_done, on_failed,
+                    expected=(OCRError,), label="OCR")
+
+    def _submit_translation(
+        self,
+        text: str,
+        on_done: Callable[[Any], None] | None = None,
+        on_failed: Callable[[str], None] | None = None,
+        *,
+        ctx: TranslationContext | None = None,
+    ) -> None:
+        pipeline, ctx = self._translation_pipeline, ctx or self._translation_ctx
+        run_in_pool(lambda: pipeline.translate(text, ctx),
+                    on_done or self._on_translation_done,
+                    on_failed or self._on_translation_failed,
+                    expected=(TranslationError,), label="translation")
 
     def _submit_vision(self, image: Image.Image) -> None:
-        worker = VisionWorker(image, self._translation_ctx, self._translation_pipeline)
+        pipeline, ctx = self._translation_pipeline, self._translation_ctx
         # Vision path produces a TranslationResult directly — same shape as the
         # OCR-then-translate path, so we reuse the existing done/failed slots.
-        worker.signals.done.connect(self._on_translation_done)
-        worker.signals.failed.connect(self._on_translation_failed)
-        QThreadPool.globalInstance().start(worker)
+        run_in_pool(lambda: pipeline.translate_image(image, ctx),
+                    self._on_translation_done, self._on_translation_failed,
+                    expected=(TranslationError, NotImplementedError), label="vision")
 
     @Slot(object)
     def _on_ocr_done(self, result: OCRResult) -> None:
@@ -401,30 +446,38 @@ class AppController(QObject):
         if not text:
             self._popup.show_error("Không tìm thấy text trong vùng đã chọn.")
             return
-        source_lang = self._settings.translate.source_lang
+        setting = self._settings.translate.source_lang
+        # Auto mode: settle the language from the text's script so the English
+        # features (run-on split, IPA), the popup chip and fonts still work.
+        source_lang, confident = effective_source(setting, text)
         # Stylized English titles (YouTube thumbnails, logos) often come back
-        # from Windows OCR as one giant run-on token. wordninja inserts spaces
-        # back; we only do this for explicit English source, since segmenting
-        # CJK or other scripts would be nonsense.
+        # from OCR as one giant run-on token. wordninja inserts spaces back;
+        # only for English, since segmenting CJK or other scripts is nonsense.
         if source_lang == "en":
             text = segment_english_runon(text)
-        log.info("OCR result (%s, %d blocks): %r", result.engine, len(result.blocks), text[:120])
+        log.info("OCR result (%s, %d blocks, lang=%s%s): %r", result.engine, len(result.blocks),
+                 source_lang, "" if setting else " detected", text[:120])
         self._popup.update_source(
             text,
             source_lang=source_lang,
             show_phonetic=self._settings.translate.phonetic_audio_en,
+            detected=setting is None,
         )
-        self._submit_translation(text)
+        # Pin the translator's source only when the script is unambiguous
+        # (kana → ja, plain Latin → en); Han-only text could be either zh or
+        # kanji-only ja, so the provider keeps its own auto-detect there.
+        ctx = self._translation_ctx
+        if setting is None and confident:
+            ctx = replace(ctx, source_lang=source_lang)
+        self._submit_translation(text, ctx=ctx)
 
     @Slot(str)
     def _on_ocr_failed(self, error: str) -> None:
+        if error == NO_TEXT_FOUND:
+            self._popup.show_error("Không thấy chữ trong vùng đã chọn — thử khoanh vùng "
+                                   "sát dòng chữ hơn, hoặc phóng to nội dung rồi chụp lại.")
+            return
         self._popup.show_error(f"OCR — {error}")
-
-    def _submit_translation(self, text: str) -> None:
-        worker = TranslationWorker(text, self._translation_ctx, self._translation_pipeline)
-        worker.signals.done.connect(self._on_translation_done)
-        worker.signals.failed.connect(self._on_translation_failed)
-        QThreadPool.globalInstance().start(worker)
 
     @Slot(object)
     def _on_translation_done(self, result: TranslationResult) -> None:
@@ -461,16 +514,10 @@ class AppController(QObject):
 
     # ── Full-screen translate flow ──────────────────────────────────────────
     #
-    # Flow: hotkey → capture active monitor → OCR (multi-block) → batch all
-    # block texts into one prompt with numeric prefixes [1], [2], ... → submit
-    # to text translator → parse output back per index → render InlineOverlay
-    # with one opaque box per OCR bbox.
-    #
-    # We deliberately stay on the TEXT translation path (`pipeline.translate`)
-    # even if the active provider supports vision: vision providers return a
-    # single blob with no bbox info, so we couldn't position overlay boxes.
-    # Forcing text mode keeps the bbox→overlay coordinate chain intact for
-    # every provider.
+    # capture monitor → OCR blocks → one numbered batch translate → overlay.
+    # The pure parts (batching, parsing, bbox conversion) live in
+    # modes/fullscreen.py, including why this stays on the TEXT path even for
+    # vision-capable providers.
 
     def _start_fullscreen_translate(self) -> None:
         # Each invocation gets a generation number; async results carry it and
@@ -489,19 +536,16 @@ class AppController(QObject):
         )
         try:
             image = capture_rect(monitor_rect)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.exception("Fullscreen capture failed")
             self._notify(f"Capture lỗi: {exc}")
             return
         log.debug("Fullscreen captured: %dx%d", image.width, image.height)
         self._fullscreen_monitor_rect = monitor_rect
-        self._submit_fullscreen_ocr(image, lang=self._settings.translate.source_lang, gen=gen)
-
-    def _submit_fullscreen_ocr(self, image: Image.Image, *, lang: str | None, gen: int) -> None:
-        worker = OCRWorker(image, lang, self._ocr_pipeline)
-        worker.signals.done.connect(lambda r, g=gen: self._on_fullscreen_ocr_done(r, g))
-        worker.signals.failed.connect(self._on_fullscreen_ocr_failed)
-        QThreadPool.globalInstance().start(worker)
+        self._submit_ocr(
+            image, partial(self._on_fullscreen_ocr_done, gen=gen),
+            partial(self._on_fullscreen_failed, gen=gen),
+        )
 
     def _on_fullscreen_ocr_done(self, result: OCRResult, gen: int) -> None:
         if gen != self._fullscreen_gen:
@@ -518,26 +562,15 @@ class AppController(QObject):
             result.engine, len(blocks), sum(len(b.text) for b in blocks),
         )
         self._fullscreen_blocks = blocks
-
         # Numbered batch — one API call for the whole screen. Robust if the
         # translator preserves the [N] markers (Claude/OpenRouter/Gemini do
         # this fine; Google Translate sometimes re-orders the brackets but
-        # `_parse_numbered_batch` salvages whatever it gets back).
-        batch = "\n".join(f"[{i + 1}] {b.text}" for i, b in enumerate(blocks))
-        self._submit_fullscreen_translation(batch, gen=gen)
-
-    @Slot(str)
-    def _on_fullscreen_ocr_failed(self, error: str) -> None:
-        log.warning("Fullscreen OCR failed: %s", error)
-        self._notify(f"OCR fullscreen lỗi: {error}")
-        self._fullscreen_blocks = []
-        self._fullscreen_monitor_rect = None
-
-    def _submit_fullscreen_translation(self, batch: str, *, gen: int) -> None:
-        worker = TranslationWorker(batch, self._translation_ctx, self._translation_pipeline)
-        worker.signals.done.connect(lambda r, g=gen: self._on_fullscreen_translation_done(r, g))
-        worker.signals.failed.connect(self._on_fullscreen_translation_failed)
-        QThreadPool.globalInstance().start(worker)
+        # `parse_numbered_batch` salvages whatever it gets back).
+        self._submit_translation(
+            build_numbered_batch(blocks),
+            partial(self._on_fullscreen_translation_done, gen=gen),
+            partial(self._on_fullscreen_failed, gen=gen),
+        )
 
     def _on_fullscreen_translation_done(self, result: TranslationResult, gen: int) -> None:
         if gen != self._fullscreen_gen:
@@ -552,27 +585,14 @@ class AppController(QObject):
             log.debug("Fullscreen translation arrived but state was cleared")
             return
 
-        translations = _parse_numbered_batch(result.translated_text, len(blocks))
-
-        # Convert each block's bbox from CAPTURED-image pixel coords (which the
-        # OCR engine returned and we already de-scaled for the preprocessor)
-        # into LOGICAL coords relative to the monitor's top-left. The overlay's
-        # geometry IS the monitor rect, so monitor-local = overlay-local.
-        screen = QGuiApplication.screenAt(monitor_rect.center()) \
-            or QGuiApplication.primaryScreen()
+        translations = parse_numbered_batch(result.translated_text, len(blocks))
+        screen = (
+            QGuiApplication.screenAt(monitor_rect.center()) or QGuiApplication.primaryScreen()
+        )
         dpr = screen.devicePixelRatio() if screen is not None else 1.0
-
-        overlay_blocks: list[tuple[QRect, str]] = []
-        for block, text in zip(blocks, translations):
-            text = text.strip()
-            if not text:
-                continue
-            x, y, w, h = block.bbox
-            overlay_blocks.append((
-                QRect(int(x / dpr), int(y / dpr), int(w / dpr), int(h / dpr)),
-                text,
-            ))
-
+        overlay_blocks = [
+            (QRect(*box), text) for box, text in overlay_boxes(blocks, translations, dpr)
+        ]
         if not overlay_blocks:
             log.warning("Fullscreen: translation returned nothing usable")
             self._notify("Fullscreen: kết quả dịch rỗng, vui lòng thử lại.")
@@ -584,9 +604,12 @@ class AppController(QObject):
         )
         self._overlay.show_for_monitor(monitor_rect, overlay_blocks)
 
-    @Slot(str)
-    def _on_fullscreen_translation_failed(self, error: str) -> None:
-        log.warning("Fullscreen translation failed: %s", error)
+    def _on_fullscreen_failed(self, error: str, gen: int) -> None:
+        # Shared by the OCR and translate stages. A stale run's failure must
+        # not wipe the state a newer run is still waiting on.
+        if gen != self._fullscreen_gen:
+            return
+        log.warning("Fullscreen translate failed: %s", error)
         self._notify(f"Dịch fullscreen lỗi: {error}")
         self._fullscreen_blocks = []
         self._fullscreen_monitor_rect = None
@@ -628,11 +651,27 @@ class AppController(QObject):
         Falls back to a no-op if we never had a region (vision-only sessions
         with no OCR context to retry from).
         """
-        if self._last_region_for_retry is not None:
-            self._capture_and_ocr(self._last_region_for_retry, image=self._last_region_image)
+        # OCR already worked and only the translation failed → re-translate the
+        # same text. Re-capturing would OCR the error popup itself when it sits
+        # over the region (seen: "Đổi provider Thử lại" fed to the translator).
+        text = self._popup.last_source_text().strip()
+        if text:
+            self._popup.retry_translation()
+            self._submit_translation(text)
+            return
+        rect, image = self._last_region_for_retry, self._last_region_image
+        if rect is None:
+            return
+        if image is not None:
+            self._capture_and_ocr(rect, image=image)
+            return
+        # Live re-capture: get the popup off the region first and give DWM a
+        # frame to repaint what was under it.
+        self._popup.hide()
+        QTimer.singleShot(120, lambda: self._capture_and_ocr(rect))
 
     @Slot(object, str)
-    def _on_popup_lang_changed(self, source_lang, target_lang: str) -> None:
+    def _on_popup_lang_changed(self, source_lang: str | None, target_lang: str) -> None:
         """User picked a new language pair via the popup chips / swap button.
 
         Persists to global settings (the next snip almost always wants the
@@ -645,6 +684,7 @@ class AppController(QObject):
         t.target_lang = target_lang
         save_settings(self._settings)
         self._translation_ctx = _build_translation_ctx(self._settings)
+        self._warm_up_ocr()
         log.info("Popup lang pair changed: %s -> %s", source_lang or "auto", target_lang)
         text = self._popup.last_source_text().strip()
         if text:
@@ -663,11 +703,13 @@ class AppController(QObject):
     @Slot()
     def _on_settings_saved(self) -> None:
         self._settings = load_settings()
-        self._translation_pipeline = build_pipeline(
-            self._settings.translate.provider,
-            openrouter_model=self._settings.translate.openrouter_model,
-        )
+        self._translation_pipeline = pipeline_from_settings(self._settings)
         self._translation_ctx = _build_translation_ctx(self._settings)
+        if not self._ocr_pipeline_injected:
+            # Cheap: engines build their models lazily (and warm-up below
+            # pre-builds the new primary off the GUI thread).
+            self._ocr_pipeline = default_ocr_pipeline(self._settings.ocr.primary_engine)
+        self._warm_up_ocr()
         # Drop the cached transcriber so a changed Whisper tier / source-lang
         # takes effect on the next Alt+A (rebuilt lazily in _start_audio).
         self._transcriber = None
@@ -676,9 +718,7 @@ class AppController(QObject):
         # live pixels like it always did.
         if not self._settings.hotkeys.high_priority:
             self._last_region_image = None
-        self._popup.set_voice_settings(self._settings.voice)
-        self._popup.set_display_mode(self._settings.translate.display_mode)
-        self._popup.set_click_outside_close(self._settings.display.click_outside_close)
+        self._apply_popup_settings()
         if self._hotkey_manager is not None:
             failed = self._hotkey_manager.apply_from_settings(self._settings.hotkeys)
             if failed:
@@ -740,6 +780,70 @@ class AppController(QObject):
             log.debug("Toast failed, falling back to tray: %s", exc)
             self._notify("Settings đã lưu.")
 
+    # ── Chinese study ───────────────────────────────────────────────────────
+
+    def _vocab(self):
+        if self._vocab_store is None:
+            from transsnip.learning.vocab import VocabStore
+            self._vocab_store = VocabStore()
+        return self._vocab_store
+
+    def _translator_for_card(self):
+        return getattr(self._translation_pipeline, "_translator", None)
+
+    def _ensure_word_card(self) -> WordCardWindow:
+        if self._word_card is None:
+            from transsnip.ui.word_card import WordCardWindow
+            self._word_card = WordCardWindow(self._vocab(), self._translator_for_card)
+            self._word_card.open_vocab_requested.connect(self._open_vocab)
+            # Popup + word card = one group: clicks/focus inside either keep both;
+            # anywhere else closes both (unless pinned). See popup/dismiss.py.
+            self._popup.add_companion(self._word_card)
+            self._word_card.set_group_owner(self._popup.owns_window)
+            self._word_card.focus_left_group.connect(self._popup.dismiss_unless_pinned)
+            self._popup.closed.connect(self._word_card.hide_unless_pinned)
+        self._word_card.set_settings(self._settings.zh)
+        self._word_card.set_output_device(self._settings.voice.output_device)
+        return self._word_card
+
+    @Slot(str, str, str)
+    def _open_word_card(self, word: str, sentence: str = "", translation: str = "") -> None:
+        near = self._popup.frameGeometry() if self._popup.isVisible() else None
+        self._ensure_word_card().show_word(word, sentence, translation, near=near)
+
+    @Slot()
+    def _open_vocab(self) -> None:
+        if self._vocab_window is None:
+            from transsnip.ui.vocab_window import VocabWindow
+            self._vocab_window = VocabWindow(self._vocab())
+            self._vocab_window.open_word_requested.connect(lambda w: self._open_word_card(w))
+            self._vocab_window.speak_requested.connect(
+                lambda w: self._ensure_word_card().speak(w))
+        self._vocab_window.open_list()
+
+    def _warm_up_ocr(self) -> None:
+        """Pre-build whichever OCR engine will serve the source language, off
+        the GUI thread — RapidOCR's first call is otherwise ~0.8 s slower
+        than the rest. No-op when Windows OCR serves it (already fast cold)."""
+        pipeline, lang = self._ocr_pipeline, self._settings.translate.source_lang
+        run_in_pool(lambda: pipeline.warm_up(lang), lambda _r: None, lambda _e: None,
+                    label="OCR warm-up")
+        if self._settings.zh.enabled and (lang or "zh").startswith("zh"):
+            from transsnip.learning.zh import text as zh_text
+            run_in_pool(zh_text.warm_up, lambda _r: None, lambda _e: None,
+                        label="Chinese tokenizer warm-up")
+
+    def _apply_popup_settings(self) -> None:
+        self._popup.set_voice_settings(self._settings.voice)
+        self._popup.set_zh_settings(self._settings.zh)
+        self._popup.set_display_mode(self._settings.translate.display_mode)
+        self._popup.set_pinned(self._settings.display.popup_pinned)
+
+    @Slot(bool)
+    def _on_popup_pin_changed(self, pinned: bool) -> None:
+        self._settings.display.popup_pinned = pinned
+        save_settings(self._settings)
+
     # ── Misc ────────────────────────────────────────────────────────────────
 
     def _notify(self, message: str, *, timeout_ms: int = 2500) -> None:
@@ -786,35 +890,3 @@ def _build_translation_ctx(settings: Settings) -> TranslationContext:
         # Learning mode asks LLM providers for the per-word breakdown JSON.
         want_word_breakdown=settings.translate.display_mode == "learning",
     )
-
-
-_BATCH_MARKER = re.compile(r"\[(\d+)\]\s*", re.MULTILINE)
-
-
-def _parse_numbered_batch(output: str, n: int) -> list[str]:
-    """Split a `[1] ... [2] ... [3] ...` batch translation back into n strings.
-
-    We feed the translator a single prompt with each OCR block prefixed by a
-    `[N]` marker so we can keep N→1 (one API call, single context window) and
-    still map results back to their bbox. The translator MOSTLY preserves the
-    markers, but real providers misbehave in predictable ways:
-
-    - Google Free occasionally re-wraps `[N]` as `( N )` or `「N」` — we won't
-      match these and the affected block gets dropped from the overlay.
-    - Some LLMs add commentary before the first marker (e.g. "Sure, here are
-      the translations:") — anything before `[1]` is ignored.
-    - Numbering can come back out of order; we map by the integer, not order.
-
-    Output: list of length `n` where index `i` holds the translation of input
-    block `i` (or empty string if the translator skipped that index).
-    """
-    matches = list(_BATCH_MARKER.finditer(output))
-    result = [""] * n
-    for i, m in enumerate(matches):
-        idx = int(m.group(1)) - 1
-        if not (0 <= idx < n):
-            continue
-        start = m.end()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(output)
-        result[idx] = output[start:end].strip()
-    return result

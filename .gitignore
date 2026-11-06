@@ -65,3 +65,5 @@ docs/
 _diag_*.py
 _shot*.png
 build_log.txt
+# Chinese study database — built by scripts/fetch_zh_data.py
+resources/zh/*.sqlite

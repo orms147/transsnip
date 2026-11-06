@@ -23,7 +23,6 @@ from PySide6.QtCore import QByteArray, QSize, Qt
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
 
-
 # ── SVG path table ─────────────────────────────────────────────────────────
 # Inner-`<path>` / `<g>` payload only; the wrapper `<svg viewBox="0 0 16 16">`
 # is added at paint time so we can swap stroke color per call. Every entry is

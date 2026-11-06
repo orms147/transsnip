@@ -1,22 +1,26 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from transsnip.translate.base import (
-    Translator,
     TranslationContext,
     TranslationResult,
+    Translator,
 )
-
-if TYPE_CHECKING:
-    from PIL import Image
 from transsnip.translate.cache import TranslationCache
 from transsnip.translate.claude import ClaudeTranslator
 from transsnip.translate.gemini import GeminiTranslator
 from transsnip.translate.google_free import GoogleTranslateFree
 from transsnip.translate.openrouter import OpenRouterTranslator
+from transsnip.utils.retry import with_retry
+
+if TYPE_CHECKING:
+    from PIL import Image
+
+    from transsnip.config.settings import Settings
 
 log = logging.getLogger(__name__)
 
@@ -49,7 +53,9 @@ class ProviderInfo:
     display_name: str
     needs_api_key: bool
     api_key_hint: str  # where the user gets the key — shown in settings
-    factory: Callable[[], Translator]
+    # LLM factories take `model=` / `api_key=` kwargs; google_free takes none.
+    factory: Callable[..., Translator]
+    configurable_model: bool = False
 
 
 PROVIDER_REGISTRY: dict[str, ProviderInfo] = {
@@ -66,6 +72,7 @@ PROVIDER_REGISTRY: dict[str, ProviderInfo] = {
         needs_api_key=True,
         api_key_hint="Lấy free tại aistudio.google.com → Get API key",
         factory=GeminiTranslator,
+        configurable_model=True,
     ),
     "claude": ProviderInfo(
         key="claude",
@@ -73,6 +80,7 @@ PROVIDER_REGISTRY: dict[str, ProviderInfo] = {
         needs_api_key=True,
         api_key_hint="Lấy tại console.anthropic.com → API Keys",
         factory=ClaudeTranslator,
+        configurable_model=True,
     ),
     "openrouter": ProviderInfo(
         key="openrouter",
@@ -80,6 +88,7 @@ PROVIDER_REGISTRY: dict[str, ProviderInfo] = {
         needs_api_key=True,
         api_key_hint="Lấy free tại openrouter.ai → Keys (có nhiều model miễn phí)",
         factory=OpenRouterTranslator,
+        configurable_model=True,
     ),
 }
 
@@ -110,7 +119,7 @@ class TranslationPipeline:
     def supports_vision(self) -> bool:
         return self._translator.supports_vision()
 
-    def translate_image(self, image: "Image.Image", ctx: TranslationContext) -> TranslationResult:
+    def translate_image(self, image: Image.Image, ctx: TranslationContext) -> TranslationResult:
         """Vision path — skips OCR + cache, sends image directly to a vision-capable provider.
 
         We don't cache image translations: hashing arbitrary screenshots produces near-zero
@@ -122,7 +131,8 @@ class TranslationPipeline:
 
     def translate(self, text: str, ctx: TranslationContext) -> TranslationResult:
         provider = self._translator.name
-        cached = self._cache.get(text, ctx, provider)
+        cache_id = self._translator.cache_id
+        cached = self._cache.get(text, ctx, cache_id)
         if cached is not None:
             log.info("Translation cache hit (%s)", provider)
             return cached
@@ -130,14 +140,13 @@ class TranslationPipeline:
         log.info("Translation cache miss — calling %s", provider)
         # Retry transient network failures (dropped connection, 503, rate-limit)
         # with backoff; permanent failures (bad key, missing SDK) fail fast.
-        from transsnip.utils.retry import with_retry
         result = with_retry(
             lambda: self._translator.translate(text, ctx),
             retries=2,
             transient=is_transient_translation_error,
             label=f"translate({provider})",
         )
-        self._cache.put(text, ctx, provider, result)
+        self._cache.put(text, ctx, cache_id, result)
         return result
 
 
@@ -145,31 +154,47 @@ def build_pipeline(
     provider_key: str,
     cache: TranslationCache | None = None,
     *,
-    openrouter_model: str | None = None,
+    model: str | None = None,
+    **options: object,
 ) -> TranslationPipeline:
     """Construct a pipeline using the named provider.
 
     Falls back to `google_free` if the requested provider key is unknown — keeps
     the app usable when settings.json references a provider that was removed.
 
-    `openrouter_model` is forwarded to the OpenRouter provider so the model the
-    user picked in Settings is actually used at runtime (without it the provider
-    silently fell back to its hardcoded default — the saved choice did nothing).
+    `model` is forwarded to providers with a configurable model so the choice
+    saved in Settings is actually used at runtime (ignored by the others).
     """
     info = PROVIDER_REGISTRY.get(provider_key)
     if info is None:
         log.warning("Unknown provider %r — falling back to google_free", provider_key)
         info = PROVIDER_REGISTRY["google_free"]
-    if info.key == "openrouter" and openrouter_model:
-        translator = info.factory(model=openrouter_model)  # type: ignore[call-arg]
-    else:
-        translator = info.factory()
-    return TranslationPipeline(translator, cache)
+    kwargs: dict[str, object] = {"model": model} if info.configurable_model and model else {}
+    if info.key == "openrouter":
+        kwargs.update(options)  # e.g. thinking=… (OpenRouter-only knobs)
+    return TranslationPipeline(info.factory(**kwargs), cache)
+
+
+def model_for_provider(settings: Settings, provider_key: str) -> str | None:
+    """The model saved in Settings for `provider_key` (None → provider default)."""
+    if provider_key == "openrouter":
+        return settings.translate.openrouter_model or None
+    return None
+
+
+def pipeline_from_settings(
+    settings: Settings, cache: TranslationCache | None = None
+) -> TranslationPipeline:
+    """Build the pipeline for whatever provider + model the user picked."""
+    provider = settings.translate.provider
+    return build_pipeline(
+        provider, cache, model=model_for_provider(settings, provider),
+        thinking=settings.translate.openrouter_thinking,
+    )
 
 
 def default_pipeline() -> TranslationPipeline:
-    """Build the standard pipeline using whatever the user picked in settings."""
+    """Build the standard pipeline from the settings on disk."""
     # Lazy import — settings depends on pydantic, this module is hit early at startup.
     from transsnip.config.settings import load_settings
-    s = load_settings()
-    return build_pipeline(s.translate.provider, openrouter_model=s.translate.openrouter_model)
+    return pipeline_from_settings(load_settings())

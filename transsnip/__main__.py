@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import logging
 import logging.handlers
 import os
@@ -32,13 +33,12 @@ def _make_streams_safe() -> None:
     for name in ("stdout", "stderr"):
         stream = getattr(sys, name)
         if stream is None:
-            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))
+            # Deliberately left open for the process lifetime.
+            setattr(sys, name, open(os.devnull, "w", encoding="utf-8"))  # noqa: SIM115
             continue
-        try:
+        # Non-reconfigurable stream (e.g. already wrapped) — best effort.
+        with contextlib.suppress(AttributeError, ValueError, OSError):
             stream.reconfigure(encoding="utf-8", errors="replace")
-        except (AttributeError, ValueError, OSError):
-            # Non-reconfigurable stream (e.g. already wrapped) — best effort.
-            pass
 
 
 def _setup_logging(dev: bool) -> None:
@@ -81,9 +81,28 @@ def _setup_logging(dev: bool) -> None:
 
 def main() -> int:
     _make_streams_safe()
+    # Qt's font database prints dozens of harmless "OpenType support missing
+    # for <font>, script N" lines whenever CJK text falls back across fonts.
+    os.environ.setdefault(
+        "QT_LOGGING_RULES", "qt.text.font.db=false;qt.qpa.fonts.warning=false"
+    )
+    # Own taskbar identity: without it Windows groups our windows under the
+    # host process (python.exe when run from source) and shows ITS icon.
+    if sys.platform == "win32":
+        import contextlib
+        import ctypes
+        with contextlib.suppress(AttributeError, OSError):
+            ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("orms147.TransSnip")
+    # Before any import can pull in pywinrt — see utils/win_dll.py.
+    from transsnip.utils.win_dll import preload_msvcp140
+    preload_msvcp140()
 
     parser = argparse.ArgumentParser(prog="transsnip")
-    parser.add_argument("--dev", action="store_true", help="Open settings window on launch and enable debug logging")
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Open settings window on launch and enable debug logging",
+    )
     args = parser.parse_args()
 
     _setup_logging(args.dev)
@@ -124,11 +143,13 @@ def main() -> int:
     # preference survives an app restart — falling back to AUTO if the
     # stored value is missing or invalid.
     theme = get_theme()
+    display = load_settings().display
     try:
-        saved_mode = ThemeMode(load_settings().display.theme_mode)
+        saved_mode = ThemeMode(display.theme_mode)
     except ValueError:
         saved_mode = ThemeMode.AUTO
     theme.set_mode(saved_mode)
+    theme.set_glass(display.glass_effect)
     theme.apply(app)
 
     tray = TrayController(app, dev_mode=args.dev)

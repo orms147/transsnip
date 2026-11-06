@@ -65,6 +65,12 @@ class Translator(ABC):
 
     name: str = "unknown"
 
+    @property
+    def cache_id(self) -> str:
+        """Identity used in translation-cache keys. Providers whose output
+        depends on a configurable model must include it (see LLMTranslator)."""
+        return self.name
+
     @abstractmethod
     def translate(self, text: str, ctx: TranslationContext) -> TranslationResult:
         """Return a translation result, or raise `TranslationError` to signal failure."""
@@ -77,7 +83,7 @@ class Translator(ABC):
         """True if `translate_image` is implemented. Override in vision-capable providers."""
         return False
 
-    def translate_image(self, image: "Image.Image", ctx: TranslationContext) -> TranslationResult:
+    def translate_image(self, image: Image.Image, ctx: TranslationContext) -> TranslationResult:
         """Single-pass OCR + translate. Skips the OCR layer entirely.
 
         Vision-capable providers (Gemini Flash, Claude, GPT-4V) override this to

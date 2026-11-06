@@ -15,8 +15,6 @@ duplicate "draw a 4px-radius chip" code in every file.
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from PySide6.QtCore import QPoint, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QMouseEvent, QPainter, QPaintEvent
 from PySide6.QtWidgets import (
@@ -51,7 +49,7 @@ class IconButton(QPushButton):
         size: int = 28,
         icon_size: int = 14,
         tooltip: str = "",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._icon_name = icon_name
@@ -75,10 +73,7 @@ class IconButton(QPushButton):
 
     def _apply_style(self) -> None:
         p = get_theme().palette
-        if self._kind == "accent":
-            color = p.accent
-        else:
-            color = p.text_2
+        color = p.accent if self._kind == "accent" else p.text_2
         self.setIcon(icons.get_icon(self._icon_name, color=color, size=self._icon_size))
 
         if self._kind == "close":
@@ -88,7 +83,7 @@ class IconButton(QPushButton):
             hover_bg = p.accent_soft
             hover_color = p.accent_hover
         else:
-            hover_bg = p.bg_3
+            hover_bg = p.glass_3
             hover_color = p.text_1
 
         self.setStyleSheet(f"""
@@ -132,8 +127,8 @@ class LangChip(QWidget):
     def __init__(
         self,
         code: str,
-        name: Optional[str] = None,
-        parent: Optional[QWidget] = None,
+        name: str | None = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._code = code
@@ -149,12 +144,12 @@ class LangChip(QWidget):
         self._code_label.setProperty("mono", True)
         self._layout.addWidget(self._code_label)
 
-        self._name_label: Optional[QLabel] = None
+        self._name_label: QLabel | None = None
         if name:
             self._name_label = QLabel(name)
             self._layout.addWidget(self._name_label)
 
-        self._chevron_label: Optional[QLabel] = None
+        self._chevron_label: QLabel | None = None
 
         self._apply_style()
         get_theme().mode_changed.connect(lambda _p: self._apply_style())
@@ -187,7 +182,7 @@ class LangChip(QWidget):
             return
         super().mousePressEvent(event)
 
-    def set_lang(self, code: str, name: Optional[str] = None) -> None:
+    def set_lang(self, code: str, name: str | None = None) -> None:
         """Update the chip's code/name in place — used when popup source
         language changes mid-session (vision provider returns a different
         source). Avoids reparenting QWidget which fights with parent layouts.
@@ -217,13 +212,13 @@ class LangChip(QWidget):
         # Interactive chips get a stronger border + accent hover so they read
         # as buttons (they open the language picker), not static labels.
         hover_rule = (
-            f"LangChip:hover {{ border: 1px solid {p.accent}; background: {p.bg_3}; }}"
+            f"LangChip:hover {{ border: 1px solid {p.accent}; background: {p.glass_3}; }}"
             if self._interactive else ""
         )
         border = p.border_2 if self._interactive else p.border_1
         self.setStyleSheet(f"""
             LangChip {{
-                background: {p.bg_2};
+                background: {p.glass_2};
                 border: 1px solid {border};
                 border-radius: {p.r_pill}px;
                 padding: 0;
@@ -261,7 +256,7 @@ class Toggle(QWidget):
 
     toggled = Signal(bool)
 
-    def __init__(self, checked: bool = False, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, checked: bool = False, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._checked = checked
         self.setFixedSize(36, 20)
@@ -314,7 +309,7 @@ class ToggleRow(QWidget):
         description: str = "",
         *,
         checked: bool = False,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         layout = QHBoxLayout(self)
@@ -327,7 +322,7 @@ class ToggleRow(QWidget):
         self._title_label = QLabel(title)
         self._title_label.setStyleSheet("font-size: 12.5px; font-weight: 500;")
         text_col.addWidget(self._title_label)
-        self._desc_label: Optional[QLabel] = None
+        self._desc_label: QLabel | None = None
         if description:
             self._desc_label = QLabel(description)
             self._desc_label.setWordWrap(True)
@@ -367,7 +362,7 @@ class KbdSeq(QWidget):
     uses a real QKeySequenceEdit.
     """
 
-    def __init__(self, keys: list[str], parent: Optional[QWidget] = None) -> None:
+    def __init__(self, keys: list[str], parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._keys = keys
         layout = QHBoxLayout(self)
@@ -393,7 +388,7 @@ class KbdSeq(QWidget):
         for lbl in self._labels:
             if lbl.property("kbd"):
                 lbl.setStyleSheet(
-                    f"color: {p.text_2}; background: {p.bg_2}; "
+                    f"color: {p.text_2}; background: {p.glass_2}; "
                     f"border: 1px solid {p.border_2}; "
                     f"border-bottom-width: 2px; border-radius: 4px; "
                     f"padding: 1px 6px; min-width: 14px; "
@@ -421,7 +416,7 @@ class PillBadge(QWidget):
         *,
         icon_name: str = "",
         tone: str = "default",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._tone = tone
@@ -429,7 +424,7 @@ class PillBadge(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(7, 2, 8, 2)
         layout.setSpacing(4)
-        self._icon_label: Optional[QLabel] = None
+        self._icon_label: QLabel | None = None
         if icon_name:
             self._icon_label = QLabel()
             self._icon_label.setPixmap(icons.get_pixmap(icon_name, size=10))
@@ -445,13 +440,13 @@ class PillBadge(QWidget):
     def _apply_style(self) -> None:
         p = get_theme().palette
         if self._tone == "success":
-            fg, bg = p.success, p.bg_2
+            fg, bg = p.success, p.glass_2
         elif self._tone == "warn":
-            fg, bg = p.warning, p.bg_2
+            fg, bg = p.warning, p.glass_2
         elif self._tone == "muted":
-            fg, bg = p.text_3, p.bg_2
+            fg, bg = p.text_3, p.glass_2
         else:
-            fg, bg = p.text_2, p.bg_2
+            fg, bg = p.text_2, p.glass_2
         self.setStyleSheet(
             f"PillBadge {{ background: {bg}; border-radius: {p.r_pill}px; }}"
         )
@@ -474,7 +469,7 @@ class SectionHead(QWidget):
         self,
         title: str,
         description: str = "",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         layout = QVBoxLayout(self)
@@ -482,7 +477,7 @@ class SectionHead(QWidget):
         layout.setSpacing(4)
         self._title = QLabel(title)
         layout.addWidget(self._title)
-        self._desc: Optional[QLabel] = None
+        self._desc: QLabel | None = None
         if description:
             self._desc = QLabel(description)
             self._desc.setWordWrap(True)
@@ -515,7 +510,7 @@ class Spinner(QLabel):
     pixmap rotation. Use this in popup loading state and toolbar busy hints.
     """
 
-    def __init__(self, size: int = 12, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, size: int = 12, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setFixedSize(QSize(size, size))
         self._size = size
@@ -544,7 +539,9 @@ class Spinner(QLabel):
         self._angle = (self._angle + 30) % 360
         from PySide6.QtGui import QTransform
         pixmap = icons.get_spinner_pixmap(self._color, self._size)
-        transformed = pixmap.transformed(QTransform().rotate(self._angle), Qt.TransformationMode.SmoothTransformation)
+        transformed = pixmap.transformed(
+            QTransform().rotate(self._angle), Qt.TransformationMode.SmoothTransformation
+        )
         self.setPixmap(transformed)
 
 
@@ -569,16 +566,16 @@ class CustomTitlebar(QWidget):
         self,
         title: str,
         *,
-        icon_widget: Optional[QWidget] = None,
+        icon_widget: QWidget | None = None,
         show_minimize: bool = True,
         show_maximize: bool = True,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setFixedHeight(36)
         self.setCursor(Qt.CursorShape.SizeAllCursor)
-        self._press_global: Optional[QPoint] = None
-        self._press_frame_topleft: Optional[QPoint] = None
+        self._press_global: QPoint | None = None
+        self._press_frame_topleft: QPoint | None = None
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 0, 4, 0)
@@ -613,7 +610,7 @@ class CustomTitlebar(QWidget):
         # theme switch (same Qt CSS engine quirk as SectionHead).
         self._title_label.setStyleSheet("font-size: 11.5px; font-weight: 600;")
         self.setStyleSheet(
-            f"CustomTitlebar {{ background: {p.bg_1}; "
+            f"CustomTitlebar {{ background: transparent; "
             f"border-bottom: 1px solid {p.border_1}; }}"
         )
 
@@ -669,7 +666,7 @@ class Slider(QWidget):
         min_label: str = "",
         max_label: str = "",
         format_readout=lambda v: f"{v:.2f}",
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setFixedHeight(48)
@@ -782,8 +779,8 @@ class Segmented(QWidget):
         self,
         options: list[tuple[str, str, str, str]],
         *,
-        value: Optional[str] = None,
-        parent: Optional[QWidget] = None,
+        value: str | None = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._options = options
@@ -835,12 +832,12 @@ class Segmented(QWidget):
     def _apply_style(self) -> None:
         p = get_theme().palette
         self.setStyleSheet(
-            f"Segmented {{ background: {p.bg_2}; border-radius: 8px; }}"
+            f"Segmented {{ background: {p.glass_1}; border-radius: 8px; }}"
         )
         for opt_id, btn in self._buttons.items():
             if opt_id == self._value:
                 btn.setStyleSheet(
-                    f"QPushButton {{ background: {p.bg_1}; "
+                    f"QPushButton {{ background: {p.glass_3}; "
                     f"border: 1px solid {p.border_2}; border-radius: 6px; "
                     f"color: {p.text_1}; }}"
                 )
@@ -860,7 +857,7 @@ class ThemeCard(QWidget):
 
     selected = Signal(str)
 
-    def __init__(self, mode: str, name: str, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, mode: str, name: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._mode = mode
         self._active = False
@@ -913,8 +910,9 @@ class ThemeCard(QWidget):
         painter.drawEllipse(swatch_rect.left() + 8, swatch_rect.top() + 8, 6, 6)
         # Faux text line
         painter.setBrush(sw_text)
-        painter.drawRoundedRect(swatch_rect.left() + 20, swatch_rect.top() + 10, swatch_rect.width() - 30, 2, 1, 1)
-        painter.drawRoundedRect(swatch_rect.left() + 8, swatch_rect.top() + 28, swatch_rect.width() - 16, 2, 1, 1)
+        left, top, width = swatch_rect.left(), swatch_rect.top(), swatch_rect.width()
+        painter.drawRoundedRect(left + 20, top + 10, width - 30, 2, 1, 1)
+        painter.drawRoundedRect(left + 8, top + 28, width - 16, 2, 1, 1)
 
         # Name row
         name_y = swatch_rect.bottom() + 6
@@ -959,7 +957,7 @@ class ProviderRadioCard(QWidget):
         tag: str = "",
         free: bool = False,
         active: bool = False,
-        parent: Optional[QWidget] = None,
+        parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self._id = provider_id
@@ -1007,7 +1005,7 @@ class ProviderRadioCard(QWidget):
     def _apply_style(self) -> None:
         p = get_theme().palette
         border_color = p.accent if self._active else p.border_1
-        bg = p.accent_soft if self._active else p.bg_1
+        bg = p.accent_soft if self._active else p.glass_1
         self.setStyleSheet(
             f"ProviderRadioCard {{ background: {bg}; "
             f"border: 1px solid {border_color}; border-radius: 10px; }}"
@@ -1023,5 +1021,5 @@ class ProviderRadioCard(QWidget):
         tag_color = p.success if self._free else p.text_2
         self._tag_label.setStyleSheet(
             f"color: {tag_color}; font-size: 10px; font-weight: 500; "
-            f"background: {p.bg_2}; padding: 3px 8px; border-radius: 999px;"
+            f"background: {p.glass_2}; padding: 3px 8px; border-radius: 999px;"
         )

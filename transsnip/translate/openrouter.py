@@ -1,99 +1,77 @@
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
-from transsnip.translate.base import (
-    Translator,
-    TranslationContext,
-    TranslationError,
-    TranslationResult,
-)
+from transsnip.translate.llm import MAX_OUTPUT_TOKENS, REQUEST_TIMEOUT_S, LLMTranslator
 
 log = logging.getLogger(__name__)
 
 _API_BASE = "https://openrouter.ai/api/v1"
-_DEFAULT_MODEL = "google/gemini-2.0-flash-001"
+DEFAULT_MODEL = "google/gemini-3.6-flash"
 
-# Curated list shown in the Settings model dropdown.
+# Curated list shown in the Settings model dropdown ("Fetch" pulls the full
+# live catalog). IDs checked against openrouter.ai/api/v1/models, 2026-10.
 # Format: (display_name, model_id)
 OPENROUTER_MODELS: list[tuple[str, str]] = [
     # --- Free models (không tốn credit) ---
-    ("DeepSeek V4 Flash (free)", "deepseek/deepseek-v4-flash:free"),
-    ("Gemini 2.0 Flash (free)", "google/gemini-2.0-flash-001:free"),
-    ("DeepSeek R1 (free)", "deepseek/deepseek-r1:free"),
-    ("DeepSeek V3 (free)", "deepseek/deepseek-chat-v3-5:free"),
-    ("Llama 4 Maverick (free)", "meta-llama/llama-4-maverick:free"),
-    ("Llama 4 Scout (free)", "meta-llama/llama-4-scout:free"),
-    ("Mistral Small 3.2 (free)", "mistralai/mistral-small-3.2-24b-instruct:free"),
-    ("Qwen3 30B A3B (free)", "qwen/qwen3-30b-a3b:free"),
-    ("Qwen3 8B (free)", "qwen/qwen3-8b:free"),
+    ("Gemma 4 31B (free)", "google/gemma-4-31b-it:free"),
+    ("Gemma 4 26B A4B (free)", "google/gemma-4-26b-a4b-it:free"),
     # --- Paid models ---
-    ("Gemini 2.5 Flash", "google/gemini-2.5-flash-preview"),
-    ("Gemini 2.5 Pro", "google/gemini-2.5-pro-preview"),
-    ("Claude Haiku 4.5", "anthropic/claude-haiku-4-5"),
-    ("Claude Sonnet 4.5", "anthropic/claude-sonnet-4-5"),
+    # Measured 2026-10 on zh→vi subtitle lines through the app's translate()
+    # (reasoning off, wrong-language retry on): median / worst latency, $ per
+    # 1000 lines. deepseek-v4-flash is deliberately absent — it echoed the
+    # Chinese source untranslated on 5/8 lines even after the retry.
+    ("Hy-MT2 30B — nhanh nhất cho phụ đề (0.7s, $0.05/1k câu)", "tencent/hy-mt2-30b-a3b"),
+    ("Gemini 2.5 Flash-Lite (1.0s, $0.07/1k câu)", "google/gemini-2.5-flash-lite"),
+    ("DeepSeek V4.1 Flash (1.3s, $0.11/1k câu)", "deepseek/deepseek-v4.1-flash"),
+    ("Qwen3.7 Flash — rẻ nhất (1.4s, $0.02/1k câu)", "qwen/qwen3.7-flash"),
+    ("Gemini 3.6 Flash", "google/gemini-3.6-flash"),
+    ("Gemini 3.5 Flash-Lite", "google/gemini-3.5-flash-lite"),
+    ("Claude Haiku 5.5", "anthropic/claude-haiku-5.5"),
+    ("Claude Sonnet 5.5", "anthropic/claude-sonnet-5.5"),
     ("GPT-4o Mini", "openai/gpt-4o-mini"),
-    ("GPT-4o", "openai/gpt-4o"),
 ]
 
-_LANG_NAMES: dict[str, str] = {
-    "vi": "Vietnamese", "en": "English", "ja": "Japanese",
-    "ko": "Korean", "zh-Hans": "Simplified Chinese", "zh-Hant": "Traditional Chinese",
-    "fr": "French", "de": "German", "es": "Spanish", "th": "Thai",
-    "ru": "Russian", "ar": "Arabic", "pt": "Portuguese", "it": "Italian",
+# Shut-down model IDs still sitting in users' settings.json → live successor,
+# so an upgrade doesn't leave OpenRouter failing on every request.
+_RETIRED_MODELS: dict[str, str] = {
+    "google/gemini-2.0-flash-001": DEFAULT_MODEL,
+    "google/gemini-2.0-flash-001:free": DEFAULT_MODEL,
+    "google/gemini-2.5-flash-preview": DEFAULT_MODEL,
+    "google/gemini-2.5-pro-preview": DEFAULT_MODEL,
 }
 
 
-class OpenRouterTranslator(Translator):
+class OpenRouterTranslator(LLMTranslator):
     """OpenRouter provider — exposes 300+ models via a single OpenAI-compatible API.
 
     API key from keyring (key "openrouter") or env var OPENROUTER_API_KEY.
-    Model is stored in settings as `openrouter_model` (defaults to Gemini Flash free).
+    The model comes from settings (`translate.openrouter_model`) via
+    `registry.build_pipeline`.
     """
 
     name = "openrouter"
+    default_model = DEFAULT_MODEL
+    env_var = "OPENROUTER_API_KEY"
+    sdk_module = "openai"
+    sdk_package = "openai"
+    missing_key_message = "OpenRouter API key chưa set. Lấy key miễn phí tại openrouter.ai → Keys"
 
-    def __init__(self, *, model: str | None = None, api_key: str | None = None) -> None:
-        self._api_key = api_key or self._lookup_key()
-        self._model = model or self._lookup_model()
-        self._client: Any | None = None
-        self._import_ok = self._try_import()
+    def __init__(
+        self, *, model: str | None = None, api_key: str | None = None, thinking: bool = False
+    ) -> None:
+        if model in _RETIRED_MODELS:
+            log.info("OpenRouter model %s is retired — using %s", model, _RETIRED_MODELS[model])
+            model = _RETIRED_MODELS[model]
+        super().__init__(model=model, api_key=api_key)
+        self._thinking = thinking
+        self._reasoning_off = not thinking  # see _complete
 
-    @staticmethod
-    def _lookup_key() -> str | None:
-        try:
-            from transsnip.config.keyring_store import get_api_key
-            stored = get_api_key("openrouter")
-            if stored:
-                return stored
-        except ImportError:
-            pass
-        return os.environ.get("OPENROUTER_API_KEY")
-
-    @staticmethod
-    def _lookup_model() -> str:
-        try:
-            from transsnip.config.settings import load_settings
-            s = load_settings()
-            return getattr(s.translate, "openrouter_model", None) or _DEFAULT_MODEL
-        except Exception:
-            return _DEFAULT_MODEL
-
-    @staticmethod
-    def _try_import() -> bool:
-        try:
-            import openai  # noqa: F401
-            return True
-        except ImportError:
-            log.warning(
-                "openai SDK not installed — OpenRouter disabled. Run: pip install openai"
-            )
-            return False
-
-    def is_available(self) -> bool:
-        return self._import_ok and bool(self._api_key)
+    @property
+    def cache_id(self) -> str:
+        # Thinking can change the wording — don't serve one mode's cache to the other.
+        return super().cache_id + (":think" if self._thinking else "")
 
     def _ensure_client(self) -> Any:
         if self._client is None:
@@ -101,9 +79,7 @@ class OpenRouterTranslator(Translator):
             self._client = OpenAI(
                 api_key=self._api_key,
                 base_url=_API_BASE,
-                # Bounded timeout so a dead connection errors out instead of
-                # pinning a QThreadPool slot forever ("Đang dịch…" hang).
-                timeout=30.0,
+                timeout=REQUEST_TIMEOUT_S,
                 default_headers={
                     "HTTP-Referer": "https://github.com/transsnip",
                     "X-Title": "TransSnip",
@@ -111,87 +87,40 @@ class OpenRouterTranslator(Translator):
             )
         return self._client
 
-    def translate(self, text: str, ctx: TranslationContext) -> TranslationResult:
-        if not self._import_ok:
-            raise TranslationError("openai SDK not installed — run: pip install openai")
-        if not self._api_key:
-            raise TranslationError(
-                "OpenRouter API key chưa set. Lấy key miễn phí tại openrouter.ai → Keys"
-            )
-
-        # Learning mode: per-word breakdown JSON (shared prompt/parser).
-        want_breakdown = ctx.want_word_breakdown
-        if want_breakdown:
-            from transsnip.linguistic.word_breakdown import build_breakdown_prompt
-            system_prompt = "You are a translator and language tutor. Reply with JSON only."
-            user_content = build_breakdown_prompt(text, ctx)
-        else:
-            system_prompt = self._build_system_prompt(ctx)
-            user_content = text
+    def _complete(self, system: str, user: str) -> str:
+        kwargs: dict[str, Any] = {
+            "model": self._model,
+            "messages": [
+                {"role": "system", "content": system},
+                {"role": "user", "content": user},
+            ],
+            "max_tokens": MAX_OUTPUT_TOKENS,
+            "temperature": 0.1,
+        }
+        # Many current cheap models think by default (qwen3.7-flash,
+        # deepseek-v4-flash…): a one-line translation then waited 16-25 s for
+        # hidden reasoning — billed as output — before the answer. Translation
+        # needs none of it. Models that REQUIRE reasoning reject "none"; on
+        # that error retry once without it and stop sending it.
+        if self._reasoning_off:
+            kwargs["extra_body"] = {"reasoning": {"effort": "none"}}
         try:
-            response = self._ensure_client().chat.completions.create(
-                model=self._model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_content},
-                ],
-                max_tokens=2048,
-                temperature=0.1,
-            )
+            response = self._ensure_client().chat.completions.create(**kwargs)
         except Exception as exc:
-            raise TranslationError(f"OpenRouter API call failed: {exc}") from exc
-
-        choice = response.choices[0] if response.choices else None
-        raw = (choice.message.content or "").strip() if choice else ""
-
-        words = None
-        if want_breakdown:
-            from transsnip.linguistic.word_breakdown import parse_breakdown
-            translation, parsed_words = parse_breakdown(raw)
-            if not translation:
-                translation = raw
-            words = parsed_words or None
-        else:
-            translation = raw
-
-        if not translation:
-            raise TranslationError("OpenRouter returned empty response")
-
-        usage = response.usage
-        if usage:
+            if not self._reasoning_off or "reasoning" not in str(exc).lower():
+                raise
+            log.info("OpenRouter [%s] requires reasoning — sending requests without "
+                     "reasoning.effort=none from now on", self._model)
+            self._reasoning_off = False
+            kwargs.pop("extra_body")
+            response = self._ensure_client().chat.completions.create(**kwargs)
+        if response.usage:
             log.debug(
                 "OpenRouter [%s]: in=%d out=%d tokens",
-                self._model, usage.prompt_tokens, usage.completion_tokens,
+                self._model, response.usage.prompt_tokens, response.usage.completion_tokens,
             )
+        choice = response.choices[0] if response.choices else None
+        return (choice.message.content or "") if choice else ""
 
-        return TranslationResult(
-            source_text=text,
-            translated_text=translation,
-            source_lang=ctx.source_lang or "auto",
-            target_lang=ctx.target_lang,
-            provider=f"openrouter/{self._model.split('/')[-1]}",
-            words=words,
-        )
-
-    @staticmethod
-    def _build_system_prompt(ctx: TranslationContext) -> str:
-        target_name = _LANG_NAMES.get(ctx.target_lang, ctx.target_lang)
-        parts: list[str] = [
-            f"You are a professional translator. Translate the user's text into {target_name}.",
-            f"Your ENTIRE response MUST be written in {target_name}. Never reply in the "
-            f"source language; if the text is already in {target_name}, return it unchanged.",
-            "Translate exactly what is given even if it is fragmented, incomplete, or "
-            "contains transcription/OCR errors — do NOT fix, rephrase, complete, or "
-            "comment on the source; just translate it as-is.",
-            "Output ONLY the translation — no quotes, no markdown fences, no preface, no explanation.",
-            "Preserve formatting (line breaks, lists). Keep proper nouns and code identifiers in their original form.",
-        ]
-        if ctx.source_lang:
-            source_name = _LANG_NAMES.get(ctx.source_lang, ctx.source_lang)
-            parts.append(f"The source is {source_name}.")
-        if ctx.system_prompt.strip():
-            parts.append(ctx.system_prompt.strip())
-        if ctx.glossary:
-            entries = "; ".join(f"{src} → {tgt}" for src, tgt in ctx.glossary.items())
-            parts.append(f"Use this glossary when the source matches: {entries}.")
-        return "\n".join(parts)
+    def _provider_label(self) -> str:
+        return f"openrouter/{self._model.split('/')[-1]}"

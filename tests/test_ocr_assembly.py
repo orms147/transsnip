@@ -62,3 +62,25 @@ def test_list_item_with_dropped_marker_not_merged():
 
 def test_empty_result():
     assert OCRResult("t", []).text == ""
+
+
+def test_padded_boxes_taller_than_line_pitch_stay_separate_lines():
+    # Real PP-OCRv6 boxes on 13 px text: ~26-31 px tall at a 19 px pitch, so
+    # neighbouring boxes overlap vertically. Each must remain its own line,
+    # in order (the old rule glued line 03 onto 02 → "03 … 02 …").
+    boxes = [(8, 26, "01. alpha"), (28, 26, "02. beta"), (42, 31, "03. gamma"),
+             (64, 25, "04. delta")]
+    result = OCRResult(engine="t", blocks=[
+        OCRBlock(text=t, bbox=(4, y, 370, h)) for y, h, t in boxes
+    ])
+    assert result.text.split("\n") == ["01. alpha", "02. beta", "03. gamma", "04. delta"]
+
+
+def test_word_blocks_of_mixed_height_on_one_line_still_join():
+    # A tall glyph box and a short one on the same baseline (e.g. kanji next
+    # to small kana, or a capital next to lowercase) belong to one line.
+    result = OCRResult(engine="t", blocks=[
+        OCRBlock(text="Hello", bbox=(0, 10, 50, 22)),
+        OCRBlock(text="world", bbox=(60, 14, 50, 16)),
+    ])
+    assert result.text == "Hello world"

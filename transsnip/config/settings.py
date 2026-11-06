@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -7,15 +8,14 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from transsnip.utils.paths import app_data_dir
+
 log = logging.getLogger(__name__)
 
 
 def config_dir() -> Path:
     """%APPDATA%\\transsnip on Windows, ~/.transsnip/transsnip elsewhere."""
-    base = os.environ.get("APPDATA") or os.path.expanduser("~/.transsnip")
-    path = Path(base) / "transsnip"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    return app_data_dir()
 
 
 def _settings_path() -> Path:
@@ -60,11 +60,15 @@ class TranslateSettings(BaseModel):
     target_lang: str = "vi"
     source_lang: str | None = None  # None → provider auto-detects
     preset_name: str = "default"
-    openrouter_model: str = "google/gemini-2.0-flash-001"
+    openrouter_model: str = "google/gemini-3.6-flash"
     # Cache of the OpenRouter model list fetched via Settings → "Fetch" so the
     # dropdown repopulates with the full catalog on the next launch (instead of
     # only the small hardcoded starter list). Each item is [display, model_id].
     openrouter_models: list[list[str]] = Field(default_factory=list)
+    # Let OpenRouter reasoning models "think" before answering. Off: a one-line
+    # translation on qwen3.7-flash took 16-25 s with thinking vs ~2 s without,
+    # and the hidden reasoning is billed as output tokens.
+    openrouter_thinking: bool = False
 
     # English-source enhancements: IPA shown inline under each word + a 🔊
     # button next to source text using Edge TTS. Off by default to avoid
@@ -149,10 +153,15 @@ class DisplaySettings(BaseModel):
     """
 
     theme_mode: str = "auto"            # "dark" / "light" / "auto"
+    # Liquid-glass windows: live blur of what's behind (ui/glass.py). Off =
+    # opaque surfaces (old GPUs, or if dragging a window feels laggy).
+    glass_effect: bool = True
     popup_default_width: int = 460       # px, used by FloatingPopup
     popup_font_scale_max: float = 2.0    # cap on font scaling when user resizes
-    click_outside_close: bool = True
-    pin_persist: bool = False            # restore pinned popup next session
+    # Popup pin (header 📌 button). Pinned = clicking outside doesn't hide
+    # the popup. Saved on toggle and kept across snips + restarts until the
+    # user unpins.
+    popup_pinned: bool = False
     show_footer_hint: bool = True
     # Opacity of the video-subtitle bar's background (0.0 = fully transparent,
     # 1.0 = solid). Lower it to see more of the video behind the translation.
@@ -188,6 +197,36 @@ class VoiceSettings(BaseModel):
     output_device: str = ""
 
 
+class ZhStudySettings(BaseModel):
+    """Chinese study aids (Settings → Học tiếng Trung).
+
+    When the source is Chinese, the popup shows each word with pinyin and its
+    Hán-Việt reading plus the sentence's Hán-Việt; clicking a word opens the
+    word card (meaning, characters, AI usage notes, stroke order).
+    Opt-in: a fresh install shows plain translations.
+    """
+
+    enabled: bool = False
+    show_pinyin: bool = True
+    show_hanviet: bool = True
+    tone_colors: bool = True
+    # Stroke-order animation in the word card. Off by default: it needs a
+    # one-time ~12 MB download (Make Me a Hanzi) and animates on a timer.
+    stroke_animation: bool = False
+
+
+class OCRSettings(BaseModel):
+    """Which OCR engine runs first (see ocr.registry.default_pipeline).
+
+    "rapid"   — bundled PP-OCRv6: far more accurate on subtitles / game UI /
+                Chinese; 20-110 ms per region. Default.
+    "windows" — Windows.Media.Ocr first: faster on clean UI text, but needs the
+                language pack and misreads stylised text.
+    """
+
+    primary_engine: str = "rapid"
+
+
 class AudioSettings(BaseModel):
     """Audio-subtitle mode (Settings → Audio tab) — translate the spoken audio of
     a video that has no on-screen text via Whisper ASR.
@@ -210,6 +249,8 @@ class Settings(BaseModel):
     display: DisplaySettings = Field(default_factory=DisplaySettings)
     voice: VoiceSettings = Field(default_factory=VoiceSettings)
     audio: AudioSettings = Field(default_factory=AudioSettings)
+    ocr: OCRSettings = Field(default_factory=OCRSettings)
+    zh: ZhStudySettings = Field(default_factory=ZhStudySettings)
     # v6: added hotkeys.high_priority (gaming mode). No migration needed —
     # Pydantic fills the missing bool with its default, so v5 loads fine.
     schema_version: int = 6
@@ -257,7 +298,5 @@ def save_settings(settings: Settings) -> None:
         log.info("Saved settings to %s", path)
     except OSError as exc:
         log.error("Failed to write %s: %s", path, exc)
-        try:
+        with contextlib.suppress(OSError):
             tmp.unlink(missing_ok=True)
-        except OSError:
-            pass

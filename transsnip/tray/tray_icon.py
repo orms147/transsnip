@@ -28,6 +28,7 @@ class TrayController(QSystemTrayIcon):
     settings_requested = Signal()
     about_requested = Signal()
     history_requested = Signal()
+    vocab_requested = Signal()
     region_translate_triggered = Signal()
     fullscreen_translate_triggered = Signal()
 
@@ -55,7 +56,8 @@ class TrayController(QSystemTrayIcon):
         print(
             "[transsnip] Tray icon đã start.\n"
             "  → Trên Windows 11: icon có thể bị giấu — click '^' gần đồng hồ để xem overflow.\n"
-            "  → Để pin icon ra ngoài: Settings → Personalization → Taskbar → Other system tray icons.\n"
+            "  → Để pin icon ra ngoài: Settings → Personalization → Taskbar"
+            " → Other system tray icons.\n"
             "  → Thoát app: right-click icon → Quit."
         )
 
@@ -86,6 +88,10 @@ class TrayController(QSystemTrayIcon):
         history_action = QAction("Lịch sử dịch", self)
         history_action.triggered.connect(self.history_requested.emit)
         menu.addAction(history_action)
+
+        vocab_action = QAction("Sổ từ (ôn tập tiếng Trung)", self)
+        vocab_action.triggered.connect(self.vocab_requested.emit)
+        menu.addAction(vocab_action)
 
         about_action = QAction("About TransSnip", self)
         about_action.triggered.connect(self.about_requested.emit)

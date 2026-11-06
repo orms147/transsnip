@@ -74,7 +74,7 @@ def _join_blocks_smart(texts: list[str]) -> str:
     and inserts a space only where one belongs.
     """
     parts: list[str] = []
-    for i, cur in enumerate(texts):
+    for cur in texts:
         if not cur:
             continue
         if not parts:
@@ -126,22 +126,33 @@ class OCRResult:
         sorted_blocks = sorted(self.blocks, key=lambda b: (b.bbox[1], b.bbox[0]))
 
         # Stage 1 — group into lines.
+        #
+        # Detector boxes are padded ("unclipped") and can be TALLER than the
+        # line pitch — PP-OCR boxes on 13 px text run ~26-31 px tall at a 19 px
+        # pitch — so adjacent lines overlap vertically. Two rules keep them
+        # apart: the tolerance is half the SMALLER of the two heights (blocks
+        # of one visual line have near-identical centers; neighbours sit a full
+        # pitch apart), and a block joins the CLOSEST qualifying line rather
+        # than the first one (the old first-match + 0.6x-own-height rule glued
+        # line 03 onto line 02 and emitted "03 … 02 …").
         lines: list[list[OCRBlock]] = []
         for block in sorted_blocks:
             _x, y_top, _w, height = block.bbox
             y_center = y_top + height / 2
-            tolerance = max(height * 0.6, 6)
 
-            attached = False
+            best: list[OCRBlock] | None = None
+            best_dist = float("inf")
             for line in lines:
                 line_top = min(b.bbox[1] for b in line)
                 line_bot = max(b.bbox[1] + b.bbox[3] for b in line)
                 line_center = (line_top + line_bot) / 2
-                if abs(y_center - line_center) <= tolerance:
-                    line.append(block)
-                    attached = True
-                    break
-            if not attached:
+                line_h = sum(b.bbox[3] for b in line) / len(line)
+                dist = abs(y_center - line_center)
+                if dist <= max(min(height, line_h) * 0.5, 4) and dist < best_dist:
+                    best, best_dist = line, dist
+            if best is not None:
+                best.append(block)
+            else:
                 lines.append([block])
 
         # Materialize per-line metadata: (y_top, y_bot, avg_height, text).
@@ -198,7 +209,7 @@ class OCREngine(ABC):
     """Common interface for every OCR backend.
 
     Implementations must be thread-safe for `recognize()` — they are invoked from
-    a worker thread (see `transsnip/ocr/worker.py`).
+    a worker thread (see `transsnip/utils/workers.py`).
     """
 
     name: str = "unknown"
@@ -218,3 +229,6 @@ class OCREngine(ABC):
     def is_available(self) -> bool:
         """Whether the engine can run right now (DLLs present, models loaded, ...)."""
         return True
+
+    def warm_up(self, lang: str | None = None) -> None:  # noqa: B027 — optional hook
+        """Pay one-time init costs ahead of the first real call (default: none)."""

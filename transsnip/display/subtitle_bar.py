@@ -31,11 +31,13 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import QWidget
 
 _FG = QColor(245, 246, 248, 255)
+_PREV_FG = QColor(245, 246, 248, 150)  # previous line in two-line mode, dimmed
 _STATUS_FG = QColor(129, 140, 248, 255)  # cobalt accent
 _PAD_X = 16
 _PAD_Y = 11
 _RADIUS = 10
 _GAP = 8           # px between the source region and the bar
+_LINE_GAP = 6      # px between the previous and newest line (two-line mode)
 _MIN_W = 280
 _FONT_PT = 15
 _STATUS_PT = 10
@@ -66,6 +68,8 @@ class SubtitleBar(QWidget):
         self._region = QRect()
         self._anchor_monitor: QRect | None = None  # set by start_anchored (audio mode)
         self._text = ""
+        self._prev = ""                       # previous line (two-line mode)
+        self._two_lines = False               # set via set_two_lines()
         self._status = "Đang nghe phụ đề…"   # shown until the first translation lands
         self._bg_alpha = 235                  # 0-255; set via set_bg_opacity()
         self._font_pt = _FONT_PT              # set via set_font_pt()
@@ -120,6 +124,18 @@ class SubtitleBar(QWidget):
         self._relayout()
         self.update()
 
+    def set_two_lines(self, on: bool) -> None:
+        """Show the previous line (dimmed) above the newest one.
+
+        Audio mode: speech arrives as a stream of short utterances; keeping the
+        last line on screen gives context and reading time without the dwell
+        hold below (which dropped lines that arrived during it).
+        """
+        self._two_lines = on
+        self._prev = ""
+        self._relayout()
+        self.update()
+
     def set_status(self, status: str) -> None:
         self._status = status
         self.update()
@@ -134,6 +150,12 @@ class SubtitleBar(QWidget):
         """
         text = text.strip()
         if not text:
+            return
+        if self._two_lines:
+            # Every line stays visible for two arrivals — no hold, no dropping.
+            if text != self._text:
+                self._prev = self._text
+                self._display(text)
             return
         elapsed_ms = (time.monotonic() - self._shown_at) * 1000.0
         if self._status or elapsed_ms >= self._shown_dwell_ms:
@@ -168,6 +190,7 @@ class SubtitleBar(QWidget):
     def stop(self) -> None:
         self.hide()
         self._text = ""
+        self._prev = ""
         self._reset_pacing()
 
     # ── Drag-to-move ─────────────────────────────────────────────────────────
@@ -218,13 +241,7 @@ class SubtitleBar(QWidget):
             mon = self._anchor_monitor
             width = max(_MIN_W, int(mon.width() * 0.6))
             inner_w = width - 2 * _PAD_X
-            body = self._text or self._status
-            bound = QFontMetrics(self._font()).boundingRect(
-                QRect(0, 0, inner_w, 10_000),
-                int(Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignHCenter),
-                body or " ",
-            )
-            height = bound.height() + 2 * _PAD_Y
+            height = self._body_height(inner_w) + 2 * _PAD_Y
             if self._user_moved:
                 self.resize(width, height)
                 return
@@ -236,15 +253,7 @@ class SubtitleBar(QWidget):
         region = self._region
         width = max(region.width(), _MIN_W)
         inner_w = width - 2 * _PAD_X
-
-        body = self._text or self._status
-        metrics = QFontMetrics(self._font())
-        bound = metrics.boundingRect(
-            QRect(0, 0, inner_w, 10_000),
-            int(Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignHCenter),
-            body or " ",
-        )
-        height = bound.height() + 2 * _PAD_Y
+        height = self._body_height(inner_w) + 2 * _PAD_Y
 
         if self._user_moved:
             # Keep where the user parked it; only resize (anchor top-left)…
@@ -265,6 +274,19 @@ class SubtitleBar(QWidget):
             x = max(geo.left(), min(x, geo.right() - width))
         self.setGeometry(x, y, width, height)
 
+    def _text_height(self, text: str, inner_w: int) -> int:
+        return QFontMetrics(self._font()).boundingRect(
+            QRect(0, 0, inner_w, 10_000),
+            int(Qt.TextFlag.TextWordWrap | Qt.AlignmentFlag.AlignHCenter),
+            text or " ",
+        ).height()
+
+    def _body_height(self, inner_w: int) -> int:
+        h = self._text_height(self._text or self._status, inner_w)
+        if self._two_lines and self._text and self._prev:
+            h += self._text_height(self._prev, inner_w) + _LINE_GAP
+        return h
+
     def _font(self) -> QFont:
         f = QFont()
         f.setPointSize(self._font_pt)
@@ -283,7 +305,17 @@ class SubtitleBar(QWidget):
         painter.drawRoundedRect(self.rect(), _RADIUS, _RADIUS)
 
         inner = self.rect().adjusted(_PAD_X, _PAD_Y, -_PAD_X, -_PAD_Y)
-        if self._text:
+        if self._text and self._two_lines and self._prev:
+            painter.setFont(self._font())
+            prev_h = self._text_height(self._prev, inner.width())
+            flags = int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop
+                        | Qt.TextFlag.TextWordWrap)
+            painter.setPen(_PREV_FG)
+            painter.drawText(inner.adjusted(0, 0, 0, -(inner.height() - prev_h)), flags,
+                             self._prev)
+            painter.setPen(_FG)
+            painter.drawText(inner.adjusted(0, prev_h + _LINE_GAP, 0, 0), flags, self._text)
+        elif self._text:
             painter.setFont(self._font())
             painter.setPen(_FG)
             painter.drawText(

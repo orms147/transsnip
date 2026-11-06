@@ -17,11 +17,14 @@ When the design tokens change (designer updates Cobalt), only this file +
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
+
+from PySide6.QtGui import QColor
 
 
-class ThemeMode(str, Enum):
+class ThemeMode(StrEnum):
     DARK = "dark"
     LIGHT = "light"
     # AUTO follows Windows ColorPrevalence / WallpaperLightTheme via theme.py.
@@ -45,6 +48,14 @@ class Palette:
     bg_2: str
     bg_3: str
     bg_elev: str  # elevated surfaces with subtle alpha (toolbar, sticky bars)
+    # Translucent fills for surfaces INSIDE a glass window (ui/glass.py):
+    # glass_1 = cards/sections, glass_2 = controls, glass_3 = hover. They
+    # let the blurred backdrop show through, where solid bg_2/bg_3 would
+    # punch opaque holes in the glass. Separate top-level popups (menus,
+    # tooltips, combo lists) keep the solid bg_* tokens.
+    glass_1: str
+    glass_2: str
+    glass_3: str
 
     border_1: str  # subtle (hairline section dividers)
     border_2: str  # default (around inputs, cards)
@@ -96,6 +107,9 @@ DARK = Palette(
     bg_2="#1a1d24",
     bg_3="#232730",
     bg_elev="rgba(20, 22, 28, 0.92)",
+    glass_1="rgba(255, 255, 255, 0.045)",
+    glass_2="rgba(255, 255, 255, 0.075)",
+    glass_3="rgba(255, 255, 255, 0.13)",
     border_1="rgba(255, 255, 255, 0.07)",
     border_2="rgba(255, 255, 255, 0.12)",
     border_strong="rgba(255, 255, 255, 0.20)",
@@ -133,6 +147,9 @@ LIGHT = Palette(
     bg_2="#f1f3f8",
     bg_3="#e6e9f0",
     bg_elev="rgba(255, 255, 255, 0.96)",
+    glass_1="rgba(255, 255, 255, 0.42)",
+    glass_2="rgba(255, 255, 255, 0.60)",
+    glass_3="rgba(255, 255, 255, 0.85)",
     border_1="rgba(15, 23, 42, 0.06)",
     border_2="rgba(15, 23, 42, 0.11)",
     border_strong="rgba(15, 23, 42, 0.20)",
@@ -171,3 +188,12 @@ def palette_for(mode: ThemeMode) -> Palette:
     if mode == ThemeMode.LIGHT:
         return LIGHT
     return DARK
+
+
+def qcolor(spec: str) -> QColor:
+    """Tokens mix hex and `rgba(r, g, b, a)` (a in 0–1); QColor only parses hex."""
+    m = re.fullmatch(r"\s*rgba\(([^)]*)\)\s*", spec)
+    if not m:
+        return QColor(spec)
+    r, g, b, a = (float(x) for x in m.group(1).split(","))
+    return QColor(int(r), int(g), int(b), round(a * 255))

@@ -13,14 +13,12 @@ data between widgets and the Pydantic Settings model.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from PySide6.QtCore import Qt, Signal, Slot
-from PySide6.QtGui import QKeySequence, QWheelEvent
+from PySide6.QtGui import QKeySequence
 from PySide6.QtMultimedia import QMediaDevices
 from PySide6.QtWidgets import (
     QComboBox,
-    QCompleter,
     QFormLayout,
     QHBoxLayout,
     QHeaderView,
@@ -47,6 +45,7 @@ from transsnip.config.settings import (
     HotkeySettings,
     PresetSettings,
     VoiceSettings,
+    ZhStudySettings,
     load_settings,
     save_settings,
 )
@@ -62,6 +61,9 @@ from transsnip.ui.atoms import (
     ThemeCard,
     ToggleRow,
 )
+from transsnip.ui.glass import Glass
+from transsnip.ui.search_combo import ComboBox as _ComboBox
+from transsnip.ui.search_combo import SearchCombo
 from transsnip.ui.theme import get_theme
 from transsnip.ui.tokens import ThemeMode
 
@@ -135,60 +137,22 @@ _VOICE_GROUPS: list[tuple[str, list[tuple[str, str]]]] = [
 
 
 # ── Helpers (kept from previous impl) ─────────────────────────────────────
-class _ComboBox(QComboBox):
-    """QComboBox that (1) doesn't change value on scroll-wheel and (2) paints
-    its own down-chevron.
-
-    Scroll: default Qt combos cycle their value when you scroll the wheel over
-    them — easy to change a setting by accident while scrolling the page. We
-    pass the wheel event up to the parent (so the panel scrolls), consuming it
-    only when the dropdown popup is open.
-
-    Arrow: Qt's QSS `::down-arrow { image: url(...) }` renders blank for these
-    (esp. editable combos), so we draw the chevron ourselves in paintEvent —
-    reliable in both themes. Typeahead (editable + completer) still works.
-    """
-
-    _ARROW_W = 26  # must match QComboBox::drop-down width in theme.py
-
-    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802
-        if self.view().isVisible():
-            super().wheelEvent(event)  # popup open → normal scroll inside it
-        else:
-            event.ignore()  # bubble up so the scroll area scrolls instead
-
-    def paintEvent(self, event) -> None:  # noqa: N802
-        super().paintEvent(event)
-        from PySide6.QtGui import QColor, QPainter, QPen
-
-        from transsnip.ui.theme import get_theme
-        p = get_theme().palette
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pen = QPen(QColor(p.text_1), 2.0)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
-        painter.setPen(pen)
-        cx = self.width() - self._ARROW_W / 2
-        cy = self.height() / 2
-        # Down chevron: ⌄
-        painter.drawLine(int(cx - 4), int(cy - 2), int(cx), int(cy + 2))
-        painter.drawLine(int(cx), int(cy + 2), int(cx + 4), int(cy - 2))
-        painter.end()
-
-
-def _make_searchable_lang_combo(options: list[tuple[str, str]]) -> QComboBox:
-    combo = _ComboBox()
-    combo.setEditable(True)
-    combo.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+def _lang_combo(options: list[tuple[str, str]]) -> SearchCombo:
+    combo = SearchCombo(placeholder="Gõ tên hoặc mã ngôn ngữ (vd: viet, ja)…")
     for label, data in options:
         combo.addItem(label, data)
-    completer = combo.completer()
-    if completer is not None:
-        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
-        completer.setFilterMode(Qt.MatchFlag.MatchContains)
-        completer.setCompletionMode(QCompleter.CompletionMode.PopupCompletion)
     return combo
+
+
+def _price_tag(pricing: dict) -> str:
+    """" · $0.03/$0.13" per 1M tokens (in/out), or " (free)"."""
+    try:
+        pin, pout = float(pricing.get("prompt", 0)) * 1e6, float(pricing.get("completion", 0)) * 1e6
+    except (TypeError, ValueError):
+        return ""
+    if pin <= 0 and pout <= 0:
+        return " (free)"
+    return f" · ${pin:.3g}/${pout:.3g}"
 
 
 def _select_by_data(combo: QComboBox, data: str) -> None:
@@ -219,10 +183,11 @@ class SettingsWindow(QWidget):
     _models_fetched = Signal(list)
     _fetch_error = Signal(str)
 
-    def __init__(self, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self._glass = Glass(self, radius=10)
         self.resize(820, 640)
         self.setMinimumSize(720, 540)
 
@@ -249,7 +214,7 @@ class SettingsWindow(QWidget):
         # Find the currently active tab and re-style — `_switch_tab` rebuilds
         # the icon at the right color for both active and idle states.
         for tid, btn in zip(
-            (m[0] for m in self._tabs_meta), self._tab_buttons
+            (m[0] for m in self._tabs_meta), self._tab_buttons, strict=True
         ):
             if btn.isChecked():
                 self._switch_tab(tid)
@@ -290,6 +255,7 @@ class SettingsWindow(QWidget):
             ("display", "eye", "Display"),
             ("voice", "volume", "Voice"),
             ("audio", "subtitles", "Audio"),
+            ("zh", "edit", "Tiếng Trung"),
         ]
         from PySide6.QtCore import QSize
         for tab_id, icon_name, label in self._tabs_meta:
@@ -313,6 +279,7 @@ class SettingsWindow(QWidget):
         self._stack.addWidget(self._build_tab_display())
         self._stack.addWidget(self._build_tab_voice())
         self._stack.addWidget(self._build_tab_audio())
+        self._stack.addWidget(self._build_tab_zh())
         root.addWidget(self._stack, stretch=1)
 
         # Footer.
@@ -361,10 +328,11 @@ class SettingsWindow(QWidget):
         # Local stylesheet for the chrome — body/tab/footer surfaces.
         p = get_theme().palette
         self.setStyleSheet(f"""
-            SettingsWindow {{ background: {p.bg_0}; }}
-            QWidget#tabStrip {{ background: {p.bg_0}; border-bottom: 1px solid {p.border_1}; }}
-            QWidget#footer {{ background: {p.bg_1}; border-top: 1px solid {p.border_1}; }}
-            QStackedWidget {{ background: {p.bg_0}; }}
+            SettingsWindow {{ background: transparent; }}
+            QWidget#tabStrip {{ background: transparent; border-bottom: 1px solid {p.border_1}; }}
+            QWidget#footer {{ background: {p.glass_1}; border-top: 1px solid {p.border_1};
+                border-bottom-left-radius: 10px; border-bottom-right-radius: 10px; }}
+            QStackedWidget {{ background: transparent; }}
         """)
 
     def _switch_tab(self, tab_id: str) -> None:
@@ -389,25 +357,13 @@ class SettingsWindow(QWidget):
                     f"QPushButton {{ background: transparent; color: {p.text_2}; "
                     f"border: none; border-radius: 7px; padding: 7px 14px 7px 10px; "
                     f"font-size: 12px; text-align: left; }}"
-                    f"QPushButton:hover {{ color: {p.text_1}; background: {p.bg_2}; }}"
+                    f"QPushButton:hover {{ color: {p.text_1}; background: {p.glass_2}; }}"
                 )
 
     def reject(self) -> None:
         """Close window without saving — mirrors QDialog.reject() name so
         AppController code that previously did `dialog.exec()` still works."""
         self.close()
-
-    def paintEvent(self, event) -> None:
-        # Paint frameless background — translucent root needs explicit fill.
-        from PySide6.QtGui import QPainter, QBrush, QColor, QPen
-        p = get_theme().palette
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        from PySide6.QtCore import QRectF
-        rect = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        painter.setBrush(QBrush(QColor(p.bg_0)))
-        painter.setPen(QPen(QColor(p.border_2), 1))
-        painter.drawRoundedRect(rect, 10, 10)
 
     # ── Tab: Translation ──────────────────────────────────────────────────
 
@@ -447,7 +403,7 @@ class SettingsWindow(QWidget):
         self._api_key_hint.setWordWrap(True)
         provider_form.addRow("", self._api_key_hint)
 
-        self._model_combo = _ComboBox()
+        self._model_combo = SearchCombo(placeholder="Gõ tên hoặc id model (vd: qwen flash, free)…")
         # Prefer the user's previously-fetched catalog; fall back to the small
         # hardcoded starter list on a fresh install.
         for display, model_id in (self._fetched_models or OPENROUTER_MODELS):
@@ -460,6 +416,13 @@ class SettingsWindow(QWidget):
         self._fetch_models_button.clicked.connect(self._on_fetch_models)
         model_row.addWidget(self._fetch_models_button)
         provider_form.addRow(self._model_row_label, model_row)
+
+        self._thinking_toggle = ToggleRow(
+            "Thinking (suy luận trước khi dịch)",
+            "Chỉ có tác dụng với model hỗ trợ reasoning. Tắt = nhanh hơn nhiều "
+            "(Qwen3.7 Flash: ~2s thay vì 16-25s) và rẻ hơn — dịch không cần suy luận.",
+        )
+        provider_form.addRow("", self._thinking_toggle)
 
         self._test_button = QPushButton("Test connection")
         self._test_button.setProperty("soft", True)
@@ -474,9 +437,9 @@ class SettingsWindow(QWidget):
         ))
         lang_form = QFormLayout()
         lang_form.setSpacing(12)
-        self._source_lang_combo = _make_searchable_lang_combo(_SOURCE_LANGUAGE_OPTIONS)
+        self._source_lang_combo = _lang_combo(_SOURCE_LANGUAGE_OPTIONS)
         lang_form.addRow("Nguồn (source):", self._source_lang_combo)
-        self._target_lang_combo = _make_searchable_lang_combo(_LANGUAGE_OPTIONS)
+        self._target_lang_combo = _lang_combo(_LANGUAGE_OPTIONS)
         lang_form.addRow("Đích (target):", self._target_lang_combo)
         layout.addLayout(lang_form)
 
@@ -562,7 +525,8 @@ class SettingsWindow(QWidget):
         self._preset_prompt_input = QPlainTextEdit()
         self._preset_prompt_input.setMinimumHeight(120)
         self._preset_prompt_input.setPlaceholderText(
-            "System prompt cho LLM — vd: 'You are translating game dialogue. Keep skill names in English.'"
+            "System prompt cho LLM — vd: 'You are translating game dialogue."
+            " Keep skill names in English.'"
         )
         self._preset_prompt_input.textChanged.connect(self._on_preset_field_changed)
         form.addRow("System prompt:", self._preset_prompt_input)
@@ -610,9 +574,12 @@ class SettingsWindow(QWidget):
         self._hotkey_editors: dict[str, QKeySequenceEdit] = {}
         rows = [
             ("region_translate", "crop", "Region translate", "Snipping-tool style"),
-            ("fullscreen_translate", "fullscreen", "Fullscreen translate", "Dịch toàn màn hình hiện tại"),
-            ("video_subtitle_translate", "subtitles", "Video subtitle", "Auto-translate phụ đề real-time"),
-            ("audio_subtitle_translate", "volume", "Audio subtitle", "Dịch audio video không có phụ đề (cần gói audio)"),
+            ("fullscreen_translate", "fullscreen", "Fullscreen translate",
+             "Dịch toàn màn hình hiện tại"),
+            ("video_subtitle_translate", "subtitles", "Video subtitle",
+             "Auto-translate phụ đề real-time"),
+            ("audio_subtitle_translate", "volume", "Audio subtitle",
+             "Dịch audio video không có phụ đề (cần gói audio)"),
             ("open_settings", "settings", "Mở Settings", "Mở cửa sổ cài đặt từ bàn phím"),
         ]
         for action_id, icon_name, label, desc in rows:
@@ -633,7 +600,9 @@ class SettingsWindow(QWidget):
             self._hotkey_editors[action_id] = editor
             row_layout.addWidget(editor)
             reset_btn = IconButton("refresh", size=24, icon_size=11, tooltip="Reset")
-            reset_btn.clicked.connect(lambda _checked=False, aid=action_id: self._on_reset_hotkey(aid))
+            reset_btn.clicked.connect(
+                lambda _checked=False, aid=action_id: self._on_reset_hotkey(aid)
+            )
             row_layout.addWidget(reset_btn)
             layout.addWidget(row)
 
@@ -678,13 +647,21 @@ class SettingsWindow(QWidget):
         theme_row = QHBoxLayout()
         theme_row.setSpacing(10)
         self._theme_cards: dict[str, ThemeCard] = {}
-        for mode, label in [("dark", "Cobalt Dark"), ("light", "Cobalt Light"), ("auto", "Tự động")]:
+        theme_choices = [("dark", "Cobalt Dark"), ("light", "Cobalt Light"), ("auto", "Tự động")]
+        for mode, label in theme_choices:
             card = ThemeCard(mode, label)
             card.selected.connect(self._on_theme_picked)
             self._theme_cards[mode] = card
             theme_row.addWidget(card)
         theme_row.addStretch(1)
         layout.addLayout(theme_row)
+        self._glass_toggle = ToggleRow(
+            "Hiệu ứng kính (liquid glass)",
+            "Làm mờ nội dung phía sau popup / cửa sổ. Tắt nếu máy yếu hoặc kéo cửa sổ bị giật.",
+        )
+        # Live preview, like the theme cards.
+        self._glass_toggle.toggled.connect(get_theme().set_glass)
+        layout.addWidget(self._glass_toggle)
 
         layout.addWidget(SectionHead("Popup"))
         self._popup_width_slider = Slider(
@@ -714,22 +691,15 @@ class SettingsWindow(QWidget):
         form.addRow("Cỡ chữ phụ đề video:", self._subtitle_font_slider)
         layout.addLayout(form)
 
-        self._click_outside_display = ToggleRow(
-            "Click outside để đóng popup",
-            "Tắt nếu bạn hay click ra ngoài để copy text từ app khác.",
-        )
         self._esc_overlay_toggle = ToggleRow(
             "Esc đóng overlay fullscreen",
             "Bất kỳ click nào trên overlay cũng đóng — phím Esc là tuỳ chọn.",
         )
-        self._pin_persist_toggle = ToggleRow("Pin popup mở lại lần dịch sau")
         self._footer_hint_toggle = ToggleRow(
             "Hiện footer hint trong popup",
             "Ẩn dòng 'Esc · Ctrl+C · click vào từ' để gọn hơn.",
         )
-        layout.addWidget(self._click_outside_display)
         layout.addWidget(self._esc_overlay_toggle)
-        layout.addWidget(self._pin_persist_toggle)
         layout.addWidget(self._footer_hint_toggle)
 
         # Fullscreen overlay has only one rendering style now (opaque box
@@ -763,7 +733,7 @@ class SettingsWindow(QWidget):
             "Giọng đọc Microsoft Edge — stream trực tiếp, không cần cài đặt thêm.",
         ))
 
-        self._voice_combo = _ComboBox()
+        self._voice_combo = SearchCombo(placeholder="Gõ để tìm giọng (vd: ja female, aria)…")
         for group_name, voices in _VOICE_GROUPS:
             for name, voice_id in voices:
                 self._voice_combo.addItem(f"{group_name} · {name}", voice_id)
@@ -828,9 +798,11 @@ class SettingsWindow(QWidget):
         for tier, label in [
             ("tiny", "tiny (~75MB, nhanh nhất, kém chính xác)"),
             ("base", "base (~145MB, nhẹ)"),
-            ("small", "small (~460MB, cân bằng — khuyến nghị)"),
+            ("small", "small (~460MB, cân bằng — khuyến nghị cho CPU)"),
             ("medium", "medium (~1.5GB, chính xác hơn, chậm ~3x — máy mạnh)"),
-            ("large-v3", "large-v3 (~3GB, chính xác nhất — cần GPU NVIDIA)"),
+            ("large-v3-turbo",
+             "large-v3-turbo (~1.6GB, chính xác nhất cho zh/ja — cần GPU NVIDIA)"),
+            ("large-v3", "large-v3 (~3GB, chậm hơn turbo, không chính xác hơn — cần GPU)"),
         ]:
             self._whisper_tier_combo.addItem(label, tier)
         tier_form = QFormLayout()
@@ -848,6 +820,62 @@ class SettingsWindow(QWidget):
         layout.addStretch(1)
         return self._wrap_in_scroll(body)
 
+    def _build_tab_zh(self) -> QWidget:
+        body = QWidget()
+        layout = QVBoxLayout(body)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+        layout.addWidget(SectionHead(
+            "Học tiếng Trung",
+            "Khi câu nguồn là tiếng Trung: mỗi từ hiện pinyin + âm Hán-Việt, kèm âm "
+            "Hán-Việt của cả câu. Bấm vào một từ để mở Thẻ từ (nghĩa, từng chữ, cách "
+            "viết, cách dùng). Lưu từ vào Sổ từ để ôn tập.",
+        ))
+        self._zh_enabled = ToggleRow("Bật chế độ học tiếng Trung")
+        self._zh_pinyin = ToggleRow("Hiện pinyin trên mỗi từ")
+        self._zh_hanviet = ToggleRow("Hiện âm Hán-Việt", "Dưới mỗi từ và cho cả câu.")
+        self._zh_tones = ToggleRow(
+            "Tô màu theo thanh điệu",
+            "Thanh 1 đỏ · thanh 2 xanh lá · thanh 3 xanh dương · thanh 4 tím · thanh nhẹ xám.")
+        self._zh_strokes = ToggleRow(
+            "Cách viết (animation) trong Thẻ từ",
+            "Cần tải dữ liệu nét viết một lần (~30 MB). Tắt để đỡ tốn tài nguyên.")
+        for row in (self._zh_enabled, self._zh_pinyin, self._zh_hanviet, self._zh_tones,
+                    self._zh_strokes):
+            layout.addWidget(row)
+
+        from transsnip.learning.zh import strokes
+        self._zh_stroke_status = QLabel()
+        self._zh_stroke_status.setProperty("hint", True)
+        self._zh_stroke_remove = QPushButton("Xoá dữ liệu cách viết")
+        self._zh_stroke_remove.setProperty("soft", True)
+
+        def refresh_status() -> None:
+            have = strokes.StrokeStore().available()
+            self._zh_stroke_status.setText(
+                "Đã có dữ liệu cách viết." if have else "Chưa tải dữ liệu cách viết.")
+            self._zh_stroke_remove.setVisible(have)
+
+        def remove() -> None:
+            strokes.remove()
+            refresh_status()
+
+        self._zh_stroke_remove.clicked.connect(remove)
+        refresh_status()
+        row = QHBoxLayout()
+        row.addWidget(self._zh_stroke_status, stretch=1)
+        row.addWidget(self._zh_stroke_remove)
+        layout.addLayout(row)
+        credits = QLabel(
+            "Dữ liệu: CVDICT (CC BY-SA 4.0) · âm Hán-Việt theo Thiều Chửu · "
+            "Make Me a Hanzi (LGPL / Arphic PL) · HSK 3.0 (MIT). Chi tiết: "
+            "resources/zh/NOTICE.md.")
+        credits.setWordWrap(True)
+        credits.setProperty("hint", True)
+        layout.addWidget(credits)
+        layout.addStretch(1)
+        return self._wrap_in_scroll(body)
+
     # ── Load / Save ───────────────────────────────────────────────────────
 
     def _load_from_model(self) -> None:
@@ -861,6 +889,7 @@ class SettingsWindow(QWidget):
         if saved_model and self._model_combo.findData(saved_model) < 0:
             self._model_combo.addItem(saved_model, saved_model)
         _select_by_data(self._model_combo, saved_model)
+        self._thinking_toggle.setChecked(s.translate.openrouter_thinking)
         _select_by_data(self._source_lang_combo, s.translate.source_lang or "")
         _select_by_data(self._target_lang_combo, s.translate.target_lang)
         _select_by_data(self._display_mode_combo, s.translate.display_mode)
@@ -898,12 +927,11 @@ class SettingsWindow(QWidget):
 
         # Display
         self._on_theme_picked(s.display.theme_mode)
+        self._glass_toggle.setChecked(s.display.glass_effect)
         self._popup_width_slider.setValue(s.display.popup_default_width)
         self._font_scale_slider.setValue(s.display.popup_font_scale_max)
         self._subtitle_opacity_slider.setValue(s.display.subtitle_bg_opacity)
         self._subtitle_font_slider.setValue(s.display.subtitle_font_pt)
-        self._click_outside_display.setChecked(s.display.click_outside_close)
-        self._pin_persist_toggle.setChecked(s.display.pin_persist)
         self._footer_hint_toggle.setChecked(s.display.show_footer_hint)
         self._esc_overlay_toggle.setChecked(True)
 
@@ -916,6 +944,11 @@ class SettingsWindow(QWidget):
         self._cache_audio_toggle.setChecked(s.voice.cache_audio)
         # Audio
         _select_by_data(self._whisper_tier_combo, s.audio.whisper_tier)
+        self._zh_enabled.setChecked(s.zh.enabled)
+        self._zh_pinyin.setChecked(s.zh.show_pinyin)
+        self._zh_hanviet.setChecked(s.zh.show_hanviet)
+        self._zh_tones.setChecked(s.zh.tone_colors)
+        self._zh_strokes.setChecked(s.zh.stroke_animation)
 
     def _on_save(self) -> None:
         s = self._settings
@@ -924,10 +957,9 @@ class SettingsWindow(QWidget):
         info = PROVIDER_REGISTRY.get(provider_key)
         if info is not None and info.needs_api_key:
             entered = self._api_key_input.text().strip()
-            if entered:
-                if not set_api_key(provider_key, entered):
-                    QMessageBox.warning(self, "TransSnip", "Không lưu được API key.")
-                    return
+            if entered and not set_api_key(provider_key, entered):
+                QMessageBox.warning(self, "TransSnip", "Không lưu được API key.")
+                return
         s.translate.provider = provider_key
         s.translate.target_lang = self._target_lang_combo.currentData() or "vi"
         src_data = self._source_lang_combo.currentData()
@@ -936,6 +968,7 @@ class SettingsWindow(QWidget):
         s.translate.display_mode = self._display_mode_combo.currentData() or "simple"
         if provider_key == "openrouter":
             s.translate.openrouter_model = self._model_combo.currentData()
+            s.translate.openrouter_thinking = self._thinking_toggle.isChecked()
         # Persist the fetched catalog so the dropdown repopulates next launch.
         if self._fetched_models:
             s.translate.openrouter_models = [[d, i] for d, i in self._fetched_models]
@@ -964,10 +997,12 @@ class SettingsWindow(QWidget):
         )
         s.display = DisplaySettings(
             theme_mode=active_mode,
+            glass_effect=self._glass_toggle.isChecked(),
             popup_default_width=int(self._popup_width_slider.value()),
             popup_font_scale_max=self._font_scale_slider.value(),
-            click_outside_close=self._click_outside_display.isChecked(),
-            pin_persist=self._pin_persist_toggle.isChecked(),
+            # Owned by the popup's pin button (saved on toggle) — read it fresh,
+            # this window's copy may predate the last toggle.
+            popup_pinned=load_settings().display.popup_pinned,
             show_footer_hint=self._footer_hint_toggle.isChecked(),
             subtitle_bg_opacity=self._subtitle_opacity_slider.value(),
             subtitle_font_pt=int(self._subtitle_font_slider.value()),
@@ -988,6 +1023,13 @@ class SettingsWindow(QWidget):
             whisper_tier=self._whisper_tier_combo.currentData() or "small",
             compute_type=s.audio.compute_type,
         )
+        s.zh = ZhStudySettings(
+            enabled=self._zh_enabled.isChecked(),
+            show_pinyin=self._zh_pinyin.isChecked(),
+            show_hanviet=self._zh_hanviet.isChecked(),
+            tone_colors=self._zh_tones.isChecked(),
+            stroke_animation=self._zh_strokes.isChecked(),
+        )
 
         save_settings(s)
         self.settings_saved.emit()
@@ -1006,6 +1048,7 @@ class SettingsWindow(QWidget):
         self._model_combo.setVisible(is_openrouter)
         self._model_row_label.setVisible(is_openrouter)
         self._fetch_models_button.setVisible(is_openrouter)
+        self._thinking_toggle.setVisible(is_openrouter)
         if info.needs_api_key:
             self._api_key_input.setEnabled(True)
             has_stored = bool(get_api_key(provider_key))
@@ -1033,6 +1076,7 @@ class SettingsWindow(QWidget):
                 kwargs["api_key"] = candidate_key
             if candidate_model:
                 kwargs["model"] = candidate_model
+                kwargs["thinking"] = self._thinking_toggle.isChecked()
             translator = info.factory(**kwargs)  # type: ignore[call-arg]
         except TypeError:
             translator = info.factory()
@@ -1069,13 +1113,9 @@ class SettingsWindow(QWidget):
             for m in data.get("data", []):
                 mid = m.get("id", "")
                 name = m.get("name") or mid
-                pricing = m.get("pricing", {})
-                is_free = (
-                    str(pricing.get("prompt", "1")) == "0"
-                    and str(pricing.get("completion", "1")) == "0"
-                )
-                tag = " (free)" if is_free else ""
-                models.append((f"{name}{tag}", mid))
+                # Price in the label: search finds the model, the label says
+                # what it costs ($ per 1M input/output tokens).
+                models.append((f"{name}{_price_tag(m.get('pricing', {}))}", mid))
             models.sort(key=lambda x: (not x[0].endswith("(free)"), x[0].lower()))
             self._models_fetched.emit(models)
         except Exception as exc:  # noqa: BLE001
@@ -1245,7 +1285,7 @@ class SettingsWindow(QWidget):
 
 # Helper widget — hotkey row icon
 class _HotkeyIcon(QLabel):
-    def __init__(self, icon_name: str, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, icon_name: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._icon_name = icon_name
         self.setFixedSize(32, 32)
@@ -1256,6 +1296,6 @@ class _HotkeyIcon(QLabel):
         p = get_theme().palette
         self.setPixmap(icons.get_pixmap(self._icon_name, color=p.text_2, size=14))
         self.setStyleSheet(
-            f"background: {p.bg_2}; border-radius: 6px; padding: 0;"
+            f"background: {p.glass_2}; border-radius: 6px; padding: 0;"
         )
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)

@@ -15,10 +15,11 @@ v1 is chunk-based and stateless. A later upgrade is LocalAgreement-2 streaming
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import numpy as np
@@ -26,13 +27,28 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 # Per-tier rough on-disk size (float16 CT2 model.bin; int8 quantizes at load).
-TIER_SIZE_MB = {"tiny": 75, "base": 145, "small": 480, "medium": 1500, "large-v3": 3000}
+# Measured with scripts/asr_bench.py (zh/en/ja dialogue, CPU int8): small is
+# the CPU sweet spot (CER zh 2.3% / ja 1.9% / en 1.2%, RTF ~0.5); base matches
+# it on Chinese but is 2-4x worse on Japanese; large-v3-turbo is best (zh 1.1%,
+# ja 0.9%) but RTF ~2 on CPU — it falls behind live audio, so GPU only.
+TIER_SIZE_MB = {
+    "tiny": 75, "base": 145, "small": 480, "medium": 1500,
+    "large-v3-turbo": 1620, "large-v3": 3000,
+}
 
 # --- Decoding / quality knobs -------------------------------------------------
 # beam_size=5 (not greedy 1): RTF headroom is large (~0.3 measured), so we spend
 # it on accuracy. The three thresholds below are OpenAI Whisper's own silence/
 # gibberish heuristics, applied per-segment to drop hallucinations.
 _BEAM_SIZE = 5
+# ≤4.5 s utterance ≈ ≤40 words / ≤70 CJK chars; cap generation well above that
+# so a runaway (hallucination) decode can't burn seconds.
+_MAX_NEW_TOKENS = 128
+# CTranslate2 defaults to 4 CPU threads. 8 cut `small` from ~1.5 s to ~1.2 s per
+# ~3 s utterance (same CER); 16 gained nothing. Capped by the machine's cores.
+# (beam 1, vad_filter off, without_timestamps: all measured, none faster — the
+# encoder's fixed 30 s window dominates, not decoding.)
+_CPU_THREADS = min(8, os.cpu_count() or 4)
 _NO_SPEECH_MAX = 0.6      # seg.no_speech_prob above this → likely silence
 _LOGPROB_MIN = -1.0       # seg.avg_logprob below this → low-confidence garbage
 _COMPRESSION_MAX = 2.4    # seg.compression_ratio above this → repetition loop
@@ -54,10 +70,58 @@ _HALLUCINATION_PHRASES = frozenset({
 })
 
 
+# Distinctive fragments of the same phantom credits that Whisper also tacks
+# onto the END of real speech when a chunk is short or cut mid-word (measured
+# with scripts/asr_bench.py: "老板说,明天早日请不吝点赞,订阅、转发、打赏支持明镜与点点栏目…",
+# "ありがとう! 本当にご視聴ありがとうございました"). Long + specific enough
+# that genuine dialogue won't contain them; the segment is cut at the marker.
+_HALLUCINATION_MARKERS: tuple[str, ...] = (
+    "请不吝点赞", "請不吝點贊", "订阅、转发", "訂閱 轉發", "打赏支持", "打賞支持",
+    "明镜与点点", "明鏡與點點", "字幕由", "字幕志愿者", "感谢观看", "感謝觀看",
+    "ご視聴ありがとうございました", "チャンネル登録",
+    "thanks for watching", "please subscribe", "like and subscribe",
+)
+
+
 def _is_hallucination(text: str) -> bool:
     """True if `text` is (just) a known Whisper phantom phrase."""
     t = text.strip().lower().rstrip(".!?。！？、，, ").strip()
     return t == "" or t in _HALLUCINATION_PHRASES
+
+
+def _strip_phantom_tail(text: str) -> str:
+    """Cut `text` at the first embedded phantom-credit marker (keep the speech before it)."""
+    low = text.lower()
+    cut = min((i for m in _HALLUCINATION_MARKERS if (i := low.find(m)) >= 0), default=-1)
+    if cut < 0:
+        return text
+    return text[:cut].rstrip(" ,，、.。!！?？…")
+
+
+def _join_segments(texts: list[str]) -> str:
+    """Join segment texts — no space between CJK runs (zh/ja have no word gaps)."""
+    from transsnip.ocr.base import _join_blocks_smart
+    return _join_blocks_smart(texts).strip()
+
+
+def _zh_converter(tag: str | None):
+    """Script normaliser for a pinned Chinese source, or None.
+
+    Whisper's "zh" covers both scripts and flips between them per chunk —
+    9 of 24 Mandarin clips came back (partly) Traditional on `small`. A
+    Settings choice of zh-Hans / zh-Hant says which one the user reads, so
+    normalise to it. Deterministic dictionary conversion instead of an
+    initial_prompt: the prompt also fixed the script but made short / cut
+    chunks hallucinate whole phantom sentences (CER 25% → 39%).
+    """
+    if not tag or tag.lower().split("-")[0] != "zh":
+        return None
+    try:
+        import zhconv
+    except ImportError:
+        return None
+    variant = "zh-tw" if "hant" in tag.lower() or tag.lower() in ("zh-tw", "zh-hk") else "zh-cn"
+    return lambda s: zhconv.convert(s, variant)
 
 
 def _add_cuda_dll_dirs() -> None:
@@ -93,10 +157,8 @@ def _add_cuda_dll_dirs() -> None:
                 if bd in seen:
                     continue
                 seen.add(bd)
-                try:
+                with contextlib.suppress(OSError):
                     os.add_dll_directory(bd)
-                except OSError:
-                    pass
                 # The part that actually works: CTranslate2 loads cublas/cudnn
                 # with plain LoadLibrary, which searches PATH — NOT the
                 # add_dll_directory list. So prepend the bin dir to PATH too.
@@ -121,13 +183,11 @@ def whisper_cache_dir() -> Path:
     bundle in a frozen install, but Whisper models are fetched at runtime and
     must live somewhere writable (mirrors `config.settings._settings_path`).
     """
-    base = os.environ.get("APPDATA") or os.path.expanduser("~/.transsnip")
-    path = Path(base) / "transsnip" / "whisper-models"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
+    from transsnip.utils.paths import app_data_dir
+    return app_data_dir("whisper-models")
 
 
-def is_silent(pcm: "np.ndarray", rms_threshold: float = 0.005) -> bool:
+def is_silent(pcm: np.ndarray, rms_threshold: float = 0.005) -> bool:
     """Pure-numpy VAD gate: True when the chunk's RMS is below `rms_threshold`.
 
     Cheap pre-filter so we don't spend an ASR pass on silence/near-silence.
@@ -146,7 +206,7 @@ class WhisperTranscriber:
         self,
         tier: str = "small",
         compute_type: str = "auto",
-        source_lang: Optional[str] = None,
+        source_lang: str | None = None,
     ) -> None:
         self._tier = tier
         # "auto" → pick per device at load (CUDA→float16, CPU→int8). An explicit
@@ -159,11 +219,12 @@ class WhisperTranscriber:
         # the chunk silently yields nothing. Normalize: strip the region subtag,
         # and treat ""/"auto" as auto-detect.
         self._lang = self._normalize_lang(source_lang)
-        self._locked_lang: Optional[str] = None  # auto-detected lock (per session)
+        self._to_script = _zh_converter(source_lang)
+        self._locked_lang: str | None = None  # auto-detected lock (per session)
         self._model = None
 
     @staticmethod
-    def _normalize_lang(tag: Optional[str]) -> Optional[str]:
+    def _normalize_lang(tag: str | None) -> str | None:
         if not tag or tag.lower() == "auto":
             return None
         return tag.split("-")[0].lower()
@@ -216,11 +277,11 @@ class WhisperTranscriber:
         try:
             model = WhisperModel(
                 self._tier, device=device, compute_type=compute,
-                download_root=str(whisper_cache_dir()),
+                download_root=str(whisper_cache_dir()), cpu_threads=_CPU_THREADS,
             )
             if device != "cpu":
                 self._warmup(model)            # forces cuBLAS/cuDNN load — may raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             if device == "cpu":
                 raise
             log.warning(
@@ -231,7 +292,7 @@ class WhisperTranscriber:
             device, compute = "cpu", "int8"
             model = WhisperModel(
                 self._tier, device=device, compute_type=compute,
-                download_root=str(whisper_cache_dir()),
+                download_root=str(whisper_cache_dir()), cpu_threads=_CPU_THREADS,
             )
         self._model = model
         self._device, self._compute_type = device, compute
@@ -251,7 +312,7 @@ class WhisperTranscriber:
         segments, _info = model.transcribe(tone, vad_filter=False, beam_size=1)
         list(segments)  # consume the lazy generator → triggers the GPU kernels
 
-    def transcribe(self, pcm: "np.ndarray") -> str:
+    def transcribe(self, pcm: np.ndarray) -> str:
         """float32 mono @16 kHz → recognized text ('' if silent/empty).
 
         Drops Whisper's silence/music hallucinations (e.g. "Thank you.", "Bye.")
@@ -270,6 +331,15 @@ class WhisperTranscriber:
             language=lang,
             vad_filter=True,
             beam_size=_BEAM_SIZE,
+            # One decoding pass. faster-whisper's default re-decodes up to 5
+            # more times at rising temperatures when a pass looks like a
+            # repetition loop / low confidence — on music-heavy chunks one
+            # 4.5 s utterance then took ~16 s and audio backed up behind it.
+            # Those passes rarely rescue anything we'd keep: the per-segment
+            # filters below drop loops and low-confidence text anyway.
+            temperature=0.0,
+            condition_on_previous_text=False,
+            max_new_tokens=_MAX_NEW_TOKENS,
         )
         # Lock the language once we're confident (only while still auto-detecting).
         if lang is None and getattr(info, "language_probability", 0.0) >= _LANG_LOCK_PROB:
@@ -285,8 +355,14 @@ class WhisperTranscriber:
                 continue                                   # likely silence
             if seg.compression_ratio > _COMPRESSION_MAX:
                 continue                                   # repetition loop
-            text = seg.text.strip()
+            text = _strip_phantom_tail(seg.text.strip())
             if not text or _is_hallucination(text):
                 continue
             kept.append(text)
-        return " ".join(kept).strip()
+        out = _join_segments(kept)
+        to_script = self._to_script
+        if to_script is None and (lang or info.language) == "zh":
+            # Auto mode: Whisper still flips scripts chunk to chunk — settle
+            # on Simplified (the common case) so subtitles stay consistent.
+            to_script = _zh_converter("zh-Hans")
+        return to_script(out) if to_script and out else out

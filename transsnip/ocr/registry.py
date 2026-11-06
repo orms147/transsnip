@@ -51,23 +51,36 @@ class OCRPipeline:
     def engines(self) -> list[OCREngine]:
         return list(self._engines)
 
+    def _serves(self, engine: OCREngine, lang: str | None) -> bool:
+        if not engine.is_available():
+            return False
+        if not lang:
+            return True
+        supported = engine.supported_languages()
+        # Match BCP-47 by PRIMARY SUBTAG so "en" picks up an "en-US" OCR pack
+        # (and vice-versa). Without this, Windows OCR — which reports installed
+        # packs as "en-US" / "ja-JP" / "vi-VN" — gets filtered out the moment
+        # the user picks "en" in Settings, even though it handles it fine.
+        return not supported or _lang_matches(lang, supported)
+
+    def warm_up(self, lang: str | None = None) -> None:
+        """Warm the engine that will serve `lang` first. Best-effort; blocking —
+        call it off the GUI thread."""
+        for engine in self._engines:
+            if self._serves(engine, lang):
+                try:
+                    engine.warm_up(lang)
+                except Exception as exc:  # noqa: BLE001 — warm-up must never surface
+                    log.debug("OCR warm-up of %s failed: %s", engine.name, exc)
+                return
+
     def recognize(self, image: Image.Image, lang: str | None = None) -> OCRResult:
         last_err: Exception | None = None
         attempted: list[str] = []
         for engine in self._engines:
-            if not engine.is_available():
-                log.debug("Skip unavailable engine: %s", engine.name)
+            if not self._serves(engine, lang):
+                log.debug("Skip engine %s for lang %r (unavailable/unsupported)", engine.name, lang)
                 continue
-            if lang:
-                supported = engine.supported_languages()
-                # Match BCP-47 by PRIMARY SUBTAG so "en" picks up an "en-US"
-                # OCR pack (and vice-versa). Without this, Windows OCR — which
-                # reports installed packs as "en-US" / "ja-JP" / "vi-VN" —
-                # gets filtered out the moment the user picks "en" in
-                # Settings, even though the engine handles it just fine.
-                if supported and not _lang_matches(lang, supported):
-                    log.debug("Engine %s doesn't support '%s'", engine.name, lang)
-                    continue
             attempted.append(engine.name)
             try:
                 result = engine.recognize(image, lang)
@@ -79,20 +92,39 @@ class OCRPipeline:
                 log.info("OCR success via %s (%d blocks)", engine.name, len(result.blocks))
                 return result
             log.debug("Engine %s returned empty — trying next", engine.name)
+        if last_err is None:
+            # Every engine ran fine and simply saw no text — not a failure of
+            # ours, so the popup says so plainly instead of dumping internals.
+            raise OCRError(NO_TEXT_FOUND)
         raise OCRError(
             f"No engine produced text. Tried: {attempted}. Last error: {last_err}"
         )
 
 
-def default_pipeline() -> OCRPipeline:
+NO_TEXT_FOUND = "no text found in the selected region"
+
+PRIMARY_ENGINES = ("rapid", "windows")
+
+
+def default_pipeline(primary: str = "rapid") -> OCRPipeline:
     """Build the standard pipeline for TransSnip.
 
-    Order:
-      1. Windows OCR — built-in, fast (~200ms), but only handles languages whose
-         OCR pack is installed on the host machine.
-      2. RapidOCR — bundled multilingual ONNX models. Slower first call (~3s cold
-         start) but works for every supported language without OS configuration.
+    Default order: RapidOCR (bundled PP-OCRv6) first, Windows OCR as fallback.
+    Measured with scripts/ocr_bench.py on zh/en/ja captures:
+    - RapidOCR: ~0% CER on nearly every case — subtitles of every style, game
+      UI, dark mode, Traditional Chinese, CJK+Latin mixes — at 20-110 ms per
+      region. One multilingual model, so "auto" source language costs nothing
+      extra and reads Chinese correctly.
+    - Windows OCR: 3-5x faster on clean UI text, but 90%+ CER on yellow /
+      shadow-only subtitles, ~17% on game UI, and in auto mode its Japanese pack
+      "wins" Chinese captures with garbage (17-56% CER). Garbage is non-empty,
+      so the pipeline never fell through to RapidOCR while Windows went first.
+    Windows still serves anything RapidOCR can't (missing models, languages it
+    lacks). `primary="windows"` restores the old speed-first order.
 
     Each engine is tried in order; the first one to return non-empty text wins.
     """
-    return OCRPipeline([WindowsOCR(), RapidOCREngine()])
+    engines: list[OCREngine] = [RapidOCREngine(), WindowsOCR()]
+    if primary == "windows":
+        engines.reverse()
+    return OCRPipeline(engines)

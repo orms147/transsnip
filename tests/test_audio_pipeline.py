@@ -8,8 +8,8 @@ import pytest
 
 np = pytest.importorskip("numpy")
 
-from transsnip.asr.whisper import is_silent
-from transsnip.capture.audio import TARGET_SR, to_whisper_pcm
+from transsnip.asr.whisper import is_silent  # noqa: E402 — after importorskip
+from transsnip.capture.audio import TARGET_SR, to_whisper_pcm  # noqa: E402
 
 
 def test_to_whisper_pcm_stereo_48k_to_mono_16k():
@@ -27,7 +27,7 @@ def test_to_whisper_pcm_mono_16k_passthrough_scale():
     out = to_whisper_pcm(mono, native_sr=TARGET_SR, native_channels=1)
     assert out.dtype == np.float32
     assert out.size == 4
-    assert -1.0 <= float(out.min()) and float(out.max()) <= 1.0
+    assert float(out.min()) >= -1.0 and float(out.max()) <= 1.0
     assert abs(out[2]) < 1e-6                        # 0 stays 0
 
 
@@ -84,7 +84,7 @@ def test_take_utterance_waits_while_talking():
 
 
 def test_take_utterance_force_cuts_long_monologue():
-    from transsnip.modes.audio_subtitle import _AudioBuffer, _MAX_UTTERANCE_S
+    from transsnip.modes.audio_subtitle import _MAX_UTTERANCE_S, _AudioBuffer
     buf = _AudioBuffer()
     buf.append(_sine(_MAX_UTTERANCE_S + 1.0))  # non-stop talk past the cap
     utt = buf.take_utterance(16000)

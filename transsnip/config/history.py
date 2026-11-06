@@ -15,10 +15,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+from transsnip.utils.paths import app_data_dir
 
 log = logging.getLogger(__name__)
 
@@ -26,10 +27,7 @@ _MAX_ENTRIES = 200
 
 
 def _history_path() -> Path:
-    base = os.environ.get("APPDATA") or os.path.expanduser("~/.transsnip")
-    path = Path(base) / "transsnip" / "history.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    return path
+    return app_data_dir() / "history.json"
 
 
 class HistoryEntry(BaseModel):

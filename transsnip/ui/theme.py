@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Optional
 
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QPalette
@@ -86,7 +85,8 @@ class Theme(QObject):
         super().__init__()
         self._mode: ThemeMode = ThemeMode.DARK
         self._palette: Palette = DARK
-        self._app: Optional[QApplication] = None
+        self._app: QApplication | None = None
+        self._glass = True
 
     # ── Public API ─────────────────────────────────────────────────────────
 
@@ -98,6 +98,18 @@ class Theme(QObject):
     def palette(self) -> Palette:
         """Current resolved palette (never returns AUTO — always DARK/LIGHT)."""
         return self._palette
+
+    @property
+    def glass(self) -> bool:
+        """Liquid-glass windows (blurred backdrop) on — see ui/glass.py."""
+        return self._glass
+
+    def set_glass(self, on: bool) -> None:
+        if on == self._glass:
+            return
+        self._glass = on
+        # Glass windows re-apply their backdrop on mode_changed.
+        self.mode_changed.emit(self._palette)
 
     def set_mode(self, mode: ThemeMode) -> None:
         """Switch theme. AUTO triggers Windows auto-detection."""
@@ -142,7 +154,7 @@ class Theme(QObject):
         return palette_for(mode)
 
 
-_instance: Optional[Theme] = None
+_instance: Theme | None = None
 
 
 def get_theme() -> Theme:
@@ -154,7 +166,7 @@ def get_theme() -> Theme:
 
 
 # ── Windows auto-detect ────────────────────────────────────────────────────
-def _detect_windows_palette() -> Optional[Palette]:
+def _detect_windows_palette() -> Palette | None:
     """Read Windows's `AppsUseLightTheme` to choose dark/light.
 
     Registry path: HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\
@@ -233,16 +245,18 @@ QMessageBox QLabel, QInputDialog QLabel {{
 
 QPushButton {{
     color: {p.text_1};
-    background: {p.bg_2};
+    background: {p.glass_2};
     border: 1px solid {p.border_2};
     border-radius: {p.r_btn}px;
     padding: 6px 12px;
     font-size: 12px;
     font-weight: 500;
 }}
-QPushButton:hover {{ background: {p.bg_3}; border-color: {p.border_strong}; }}
-QPushButton:pressed {{ background: {p.bg_1}; }}
-QPushButton:disabled {{ color: {p.text_mute}; background: {p.bg_1}; border-color: {p.border_1}; }}
+QPushButton:hover {{ background: {p.glass_3}; border-color: {p.border_strong}; }}
+QPushButton:pressed {{ background: {p.glass_1}; }}
+QPushButton:disabled {{
+    color: {p.text_mute}; background: {p.glass_1}; border-color: {p.border_1};
+}}
 
 QPushButton[primary="true"] {{
     background: {p.accent};
@@ -250,7 +264,9 @@ QPushButton[primary="true"] {{
     border-color: {p.accent};
     font-weight: 600;
 }}
-QPushButton[primary="true"]:hover {{ background: {p.accent_hover}; border-color: {p.accent_hover}; }}
+QPushButton[primary="true"]:hover {{
+    background: {p.accent_hover}; border-color: {p.accent_hover};
+}}
 
 QPushButton[ghost="true"] {{
     background: transparent;
@@ -258,10 +274,10 @@ QPushButton[ghost="true"] {{
     color: {p.text_2};
     padding: 6px 10px;
 }}
-QPushButton[ghost="true"]:hover {{ background: {p.bg_2}; color: {p.text_1}; }}
+QPushButton[ghost="true"]:hover {{ background: {p.glass_2}; color: {p.text_1}; }}
 
 QPushButton[soft="true"] {{
-    background: {p.bg_2};
+    background: {p.glass_1};
     border-color: {p.border_1};
     color: {p.text_2};
     font-size: 11.5px;
@@ -271,7 +287,7 @@ QPushButton[soft="true"]:hover {{ color: {p.text_1}; border-color: {p.border_2};
 
 QLineEdit, QPlainTextEdit, QTextEdit {{
     color: {p.text_1};
-    background: {p.bg_2};
+    background: {p.glass_2};
     border: 1px solid {p.border_2};
     border-radius: {p.r_input}px;
     padding: 7px 10px;
@@ -281,11 +297,11 @@ QLineEdit, QPlainTextEdit, QTextEdit {{
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus {{
     border-color: {p.accent};
 }}
-QLineEdit:disabled {{ color: {p.text_mute}; background: {p.bg_1}; }}
+QLineEdit:disabled {{ color: {p.text_mute}; background: {p.glass_1}; }}
 
 QComboBox {{
     color: {p.text_1};
-    background: {p.bg_2};
+    background: {p.glass_2};
     border: 1px solid {p.border_2};
     border-radius: {p.r_input}px;
     padding: 6px 10px;
@@ -293,6 +309,7 @@ QComboBox {{
 }}
 QComboBox:hover {{ border-color: {p.border_strong}; }}
 QComboBox:focus {{ border-color: {p.accent}; }}
+QComboBox[nomatch="true"] {{ border-color: {p.danger}; }}
 QComboBox::drop-down {{
     /* Reserve the right gutter; the chevron is painted by _ComboBox.paintEvent
        (QSS ::down-arrow image rendering is unreliable, esp. for editable
@@ -302,7 +319,7 @@ QComboBox::drop-down {{
     width: 26px;
     border-left: 1px solid {p.border_2};
 }}
-QComboBox::drop-down:hover {{ background: {p.bg_3}; }}
+QComboBox::drop-down:hover {{ background: {p.glass_3}; }}
 QComboBox::down-arrow {{ image: none; width: 0; height: 0; }}
 QComboBox QAbstractItemView {{
     background: {p.bg_2};
@@ -364,7 +381,7 @@ QCheckBox::indicator {{
     width: 16px; height: 16px;
     border: 1.5px solid {p.border_strong};
     border-radius: 4px;
-    background: {p.bg_2};
+    background: {p.glass_2};
 }}
 QCheckBox::indicator:hover {{ border-color: {p.accent}; }}
 QCheckBox::indicator:checked {{
@@ -407,7 +424,7 @@ QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
 QTabWidget::pane {{
     border: 1px solid {p.border_1};
     border-radius: {p.r_card}px;
-    background: {p.bg_1};
+    background: {p.glass_1};
     top: -1px;
 }}
 QTabBar::tab {{
@@ -446,7 +463,7 @@ QGroupBox::title {{
 QFrame[separator="true"] {{ background: {p.border_1}; }}
 
 QListWidget {{
-    background: {p.bg_1};
+    background: {p.glass_1};
     border: 1px solid {p.border_1};
     border-radius: {p.r_card}px;
     padding: 4px;
@@ -456,18 +473,18 @@ QListWidget::item {{
     border-radius: 4px;
     color: {p.text_1};
 }}
-QListWidget::item:hover {{ background: {p.bg_2}; }}
+QListWidget::item:hover {{ background: {p.glass_2}; }}
 QListWidget::item:selected {{ background: {p.accent_soft}; color: {p.text_1}; }}
 
 QTableWidget {{
-    background: {p.bg_1};
+    background: {p.glass_1};
     border: 1px solid {p.border_1};
     border-radius: {p.r_card}px;
     gridline-color: {p.border_1};
     color: {p.text_1};
 }}
 QHeaderView::section {{
-    background: {p.bg_2};
+    background: {p.glass_2};
     color: {p.text_2};
     padding: 6px 8px;
     border: none;

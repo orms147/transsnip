@@ -41,20 +41,33 @@ TransSnip lives in the system tray and stays out of your way until you call it.
 - **Multi-provider translation** — switch freely in Settings:
   - **Google Translate** (free, no API key) — fastest, great default.
   - **Google Gemini** (free tier ~1500/day) · **Anthropic Claude** (premium) · **OpenRouter** (300+ models, free tier) — context-aware LLM translation.
-- **Offline-capable OCR** — Windows OCR (uses installed language packs) with a bundled **PP-OCRv5 / RapidOCR** fallback that reads Chinese, Japanese, Korean, English and Latin scripts with no internet.
+- **Offline-capable OCR** — Windows OCR (uses installed language packs) with a bundled **PP-OCRv6 / RapidOCR** fallback: one multilingual model reads Chinese, Japanese, English and Latin scripts (plus a PP-OCRv5 Korean model) with no internet.
 - **Context presets** — per-domain system prompts + glossary (Gaming, Programming, Medical…) so the LLM keeps proper nouns and uses the right tone.
 - **Three display modes** (Settings → Translation):
   - **Simple** — translation only.
   - **Standard** — adds 🔊 buttons to hear the source and the translation.
   - **Learning** — per-word **IPA** + meaning under the English source, click any word to hear it.
 - **Text-to-speech** — Microsoft Edge neural voices (free, online) with an offline Windows SAPI fallback; voice / speed / volume configurable.
+- **Học tiếng Trung (Chinese study mode)** — opt-in (Settings → Tiếng Trung). When the source is Chinese, every word shows
+  **pinyin** (tone-coloured) and its **Hán-Việt** reading, plus the whole sentence in Hán-Việt
+  (chosen per pronunciation in context: 董事**长** → trưởng, **长**城 → trường). Click a word for the
+  **word card**: Vietnamese meaning, HSK level, each character's Hán-Việt / radical / components,
+  **stroke-order animation** (optional ~30 MB download), and **AI usage notes** with example
+  sentences (on demand, cached). Save words to the **vocabulary notebook** and review them with
+  spaced repetition (Anki-style), or export to Anki. Offline dictionary — see
+  `resources/zh/NOTICE.md` for data sources and licences.
+- **Compact reading view** — long passages in study mode (Chinese or English IPA) flow like normal
+  text; hover a word for its reading and meaning, click it for the word card / pronunciation.
 - **Translation cache** — repeated text is returned instantly and for free.
 - **Translation history** — browse, copy and replay recent translations from the tray.
-- **Light / dark / auto theme** (follows Windows).
+- **Glass UI** — popup and windows blur what's behind them (toggle in Settings → Display);
+  **light / dark / auto theme** (follows Windows).
+- **Pin the popup** to keep it open while you work; unpinned, it closes on any click outside.
+  The pin is remembered until you turn it off.
 
 ## Install (end users)
 
-Download **`TransSnip-Setup.exe`** from the [Releases](../../releases) page and run it.
+Download **`TransSnip-Setup-0.4.1.exe`** from the [latest release](../../releases/latest) and run it.
 
 - Per-user install (`%LOCALAPPDATA%\Programs\TransSnip`) — **no administrator rights needed**.
 - Bundles everything (Python runtime + OCR models). No separate downloads.
@@ -67,17 +80,18 @@ After installing, launch TransSnip, open **Settings** (`Ctrl+Alt+S` or double-cl
 Requires **Python 3.11+** on **Windows**.
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/orms147/transsnip.git
 cd transsnip
 
 python -m venv .venv
 .venv\Scripts\activate
 
 # Install the app with the feature extras you want
-pip install -e ".[dev,ocr,translate,tts,learning]"
+pip install -e ".[dev,ocr,translate,tts,learning,zh]"
 
-# Fetch the OCR models once (gitignored — they're large binary blobs)
+# Fetch the OCR models + build the Chinese dictionary once (gitignored binaries)
 python scripts/fetch_models.py
+python scripts/fetch_zh_data.py
 
 # Run
 python -m transsnip
@@ -89,8 +103,9 @@ API keys are read from Windows Credential Manager (via `keyring`) — set them i
 
 ```bash
 python scripts/fetch_models.py                  # ensure models are present
+python scripts/fetch_zh_data.py                 # ensure the Chinese dictionary is built
 pyinstaller --noconfirm --clean TransSnip.spec  # → dist\TransSnip\ (onedir)
-"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer.iss  # → dist\installer\TransSnip-Setup.exe
+"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer.iss  # → dist\installer\TransSnip-Setup-<version>.exe
 ```
 
 The spec bundles the OCR models into `resources/models/` and the wordninja wordlist; if the `.exe` is missing OCR data, re-run `scripts/fetch_models.py` before building.
@@ -118,7 +133,7 @@ Everything heavy (OCR, network) runs off the Qt UI thread so the interface never
 transsnip/
 ├─ app.py              # AppController — wires hotkeys → modes → display
 ├─ capture/            # screen capture (mss) + region selector overlay
-├─ ocr/                # Windows OCR + RapidOCR (PP-OCRv5), segmentation, model paths
+├─ ocr/                # Windows OCR + RapidOCR (PP-OCRv6), segmentation, model paths
 ├─ translate/          # provider clients (google_free / gemini / claude / openrouter) + cache + registry
 ├─ linguistic/         # IPA generation + per-word breakdown
 ├─ tts/                # Edge TTS + Windows SAPI fallback
@@ -137,7 +152,7 @@ installer.iss          # Inno Setup script
 
 ## Tech stack
 
-Python 3.11+ · PySide6 (Qt6) · mss · winsdk / RapidOCR (ONNX Runtime) · edge-tts · pydantic · keyring · PyInstaller + Inno Setup.
+Python 3.11+ · PySide6 (Qt6) · mss · Windows OCR (pywinrt) / RapidOCR (ONNX Runtime) · edge-tts · pydantic · keyring · PyInstaller + Inno Setup.
 
 ## License
 
