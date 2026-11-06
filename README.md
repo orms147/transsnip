@@ -105,7 +105,7 @@ API keys are read from Windows Credential Manager (via `keyring`) — set them i
 python scripts/fetch_models.py                  # ensure models are present
 python scripts/fetch_zh_data.py                 # ensure the Chinese dictionary is built
 pyinstaller --noconfirm --clean TransSnip.spec  # → dist\TransSnip\ (onedir)
-"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer.iss  # → dist\installer\TransSnip-Setup.exe
+"%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe" installer.iss  # → dist\installer\TransSnip-Setup-<version>.exe
 ```
 
 The spec bundles the OCR models into `resources/models/` and the wordninja wordlist; if the `.exe` is missing OCR data, re-run `scripts/fetch_models.py` before building.
