@@ -64,7 +64,12 @@ class ScreenService : AccessibilityService() {
     private val recapture = Runnable { if (session == null) start(delay = 0) }
     private var awaitingScroll = false
     private var live = false          // translations are on (✕ shows) — survives refreshes
-    private var lookup = false        // still frame: screen frozen behind the boxes, overlay takes touches
+    private var lookupField = false
+    @set:JvmName("setLookupField")
+    private var lookup: Boolean
+        get() = lookupField
+        set(v) { if (BuildConfig.DEBUG && v != lookupField) android.util.Log.d("TransSnipMode", "lookup=$v", Throwable()); lookupField = v }
+    // ↑ lookup: still frame: screen frozen behind the boxes, overlay takes touches
     private var startedLive = true    // still frame entered from live mode (tap empty → back to live)
     private var livePkg: String? = null
 
