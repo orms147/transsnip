@@ -66,6 +66,7 @@ class TranslateActivity : Activity() {
         copyBtn.setOnClickListener { copy() }
         retryBtn.setOnClickListener { start() }
         speakBtn.setOnClickListener { speak() }
+        speakBtn.setOnLongClickListener { speak(translationToo = true); true }
         header.setOnClickListener { showLanguageMenu() }
         findViewById<View>(R.id.settings).setOnClickListener {
             startActivity(Intent(this, MainActivity::class.java))
@@ -174,7 +175,8 @@ class TranslateActivity : Activity() {
 
     /** Copy / listen / retry only mean something once there is a translation. */
     private fun setActions(enabled: Boolean) {
-        for (b in listOf(copyBtn, speakBtn, retryBtn)) {
+        // 🔊 reads the original, so it works before the translation arrives.
+        for (b in listOf(copyBtn, retryBtn)) {
             b.isEnabled = enabled
             b.alpha = if (enabled) 1f else 0.35f
         }
@@ -247,14 +249,22 @@ class TranslateActivity : Activity() {
     }
 
     /** Read the translation aloud in the target language (system TTS). */
-    private fun speak() {
-        if (translation.isEmpty()) return
-        val locale = when (settings.targetLang) {
+    /**
+     * 🔊 reads the ORIGINAL in its own language — hearing how the Chinese (or
+     * English…) is pronounced is the point; the translation is already
+     * readable. Long-press 🔊 reads the translation instead.
+     */
+    private fun speak(translationToo: Boolean = false) {
+        val (say, lang) = if (translationToo) translation to settings.targetLang
+        else text to (LangDetect.detect(text) ?: "en")
+        if (say.isEmpty()) return
+        val locale = when (lang.substringBefore('-')) {
             "vi" -> java.util.Locale("vi", "VN")
-            "en" -> java.util.Locale.US
-            else -> java.util.Locale.SIMPLIFIED_CHINESE
+            "zh" -> java.util.Locale.SIMPLIFIED_CHINESE
+            "ja" -> java.util.Locale.JAPAN
+            "ko" -> java.util.Locale.KOREA
+            else -> java.util.Locale.US
         }
-        val say = translation
         val engine = tts
         if (engine != null) {
             sayWith(engine, locale, say)
