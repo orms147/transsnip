@@ -61,6 +61,15 @@ object Prompts {
     fun batchSingleSystem(target: String, source: String?, minimal: Boolean): String =
         if (minimal) minimalSystemPrompt(target, source) else systemPrompt(target, source)
 
+    /**
+     * A screen line's translation, not a chat answer: one line, and not wildly
+     * longer than the source (Vietnamese runs ~3x the characters of Chinese).
+     */
+    fun plausibleTranslation(source: String, answer: String): Boolean {
+        if (answer.isBlank() || answer.lines().count { it.isNotBlank() } > maxOf(2, source.lines().size + 1)) return false
+        return answer.length <= maxOf(40, source.length * 5)
+    }
+
     fun batchUserTurn(lines: List<String>, target: String): String =
         "Translate into ${langName(target)}:\n\n" +
             lines.mapIndexed { i, s -> "[${i + 1}] $s" }.joinToString("\n")

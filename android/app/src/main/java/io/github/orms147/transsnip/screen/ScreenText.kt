@@ -33,20 +33,33 @@ object ScreenText {
         }.ifEmpty { listOfNotNull(service.rootInActiveWindow) }
 
         val out = ArrayList<ScreenItem>()
-        for (root in roots) walk(root, own, screen, out, 0)
+        for (root in roots) walk(root, own, screen, Rect(screen), out, 0)
         return dedupe(out)
     }
 
-    private fun walk(node: AccessibilityNodeInfo, own: String, screen: Rect, out: MutableList<ScreenItem>, depth: Int) {
+    /**
+     * [clip]: the part of the screen this node can actually show — narrowed by
+     * every scrolling container above it. Lists (and web pages) keep reporting
+     * items scrolled out of their viewport as "visible", at their real
+     * position above or below the list; clipping drops them.
+     */
+    private fun walk(node: AccessibilityNodeInfo, own: String, screen: Rect, clip: Rect,
+                     out: MutableList<ScreenItem>, depth: Int) {
         if (depth > 80 || !node.isVisibleToUser) return
         if (node.packageName?.toString() == own) return
+        val r = Rect()
+        node.getBoundsInScreen(r)
+        val inner = Rect(clip)
+        if (node.isScrollable || node.collectionInfo != null) {
+            if (!inner.intersect(r)) return   // a scroll container entirely out of view
+        }
         // Children first: a container can carry text of its own that isn't
         // what's drawn — a WebView reports the page <title> over the whole
         // page. Its own text counts only when nothing inside has any.
         val before = out.size
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
-            walk(child, own, screen, out, depth + 1)
+            walk(child, own, screen, inner, out, depth + 1)
         }
         if (out.size > before) return
         val raw = node.text?.toString()?.trim()
@@ -54,13 +67,16 @@ object ScreenText {
         // Text on an image node is a description (or Chrome's "this image
         // isn't labeled" hint), not something drawn on screen.
         if (node.className?.toString()?.contains("Image") == true) return
-        val r = Rect()
-        node.getBoundsInScreen(r)
-        if (!r.intersect(screen) || r.width() <= 6 || r.height() <= 6) return
+        if (r.width() <= 6 || r.height() <= 6) return
+        val full = r.width().toLong() * r.height()
+        val visible = Rect(r)
+        if (!visible.intersect(clip)) return
+        // Mostly scrolled out of its list: what's left is a sliver at the edge.
+        if (visible.width().toLong() * visible.height() * 2 < full) return
         // A "text" covering most of the screen is a title/label, not text drawn there.
-        if (r.width().toLong() * r.height() > screen.width().toLong() * screen.height() / 2 && raw.length < 60) return
-        val (tight, font) = glyphBox(node, raw, r)
-        out += ScreenItem(clean(raw), tight ?: r, font)
+        if (visible.width().toLong() * visible.height() > screen.width().toLong() * screen.height() / 2 && raw.length < 60) return
+        val (tight, font) = glyphBox(node, raw, visible)
+        out += ScreenItem(clean(raw), tight ?: visible, font)
     }
 
     /**

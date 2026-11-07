@@ -90,8 +90,11 @@ class BatchTranslator(private val completer: Completer, private val minimalFirst
             pool.submit {
                 val item = items[i]
                 val t = runCatching {
-                    completer.complete(Prompts.minimalSystemPrompt(target, LangDetect.detect(item)), Prompts.userTurn(item, target)).trim()
-                }.getOrNull()
+                    // The strict prompt ("output ONLY the translation"): the bare
+                    // one lets chatty models answer "Here are a few options…".
+                    completer.complete(Prompts.batchSingleSystem(target, LangDetect.detect(item), minimalFirst),
+                        Prompts.userTurn(item, target)).trim()
+                }.getOrNull()?.takeIf { Prompts.plausibleTranslation(item, it) }
                 val use = when {
                     t.isNullOrEmpty() -> provisional[i]
                     Prompts.looksUntranslated(t, target) -> provisional[i] ?: t

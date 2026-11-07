@@ -22,11 +22,12 @@ object Ocr {
      * Blocking — call off the main thread. One item per text block (a paragraph/caption).
      * [pad]: OCR boxes hug the glyphs; grow them so the cover hides anti-aliased edges too.
      */
-    class Result(val blocks: List<ScreenItem>, val lines: List<Rect>)
+    class Line(val box: Rect, val text: String)
+    class Result(val blocks: List<ScreenItem>, val lines: List<Line>)
 
     fun recognize(bitmap: Bitmap, pad: Int = 0): Result {
         val result = Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)), 15, TimeUnit.SECONDS)
-        val lineBoxes = result.textBlocks.flatMap { b -> b.lines.mapNotNull { it.boundingBox } }
+        val lineBoxes = result.textBlocks.flatMap { b -> b.lines.mapNotNull { l -> l.boundingBox?.let { Line(it, l.text) } } }
         val blocks = result.textBlocks.mapNotNull { block ->
             val box = block.boundingBox ?: return@mapNotNull null
             val lines = block.lines.map { it.text.trim() }.filter { it.isNotEmpty() }

@@ -162,6 +162,13 @@ class ScreenOverlay(
         place(i)
     }
 
+    /** Drop box [i] for good (its text turned out to be hidden under something else). */
+    fun remove(i: Int) {
+        val box = boxes.remove(i) ?: return
+        root.removeView(box.view)
+        boxes.keys.forEach(::place)   // neighbours may grow into the space
+    }
+
     /** Better geometry learned later (OCR): where the glyphs really are, and their size. */
     fun refine(i: Int, glyphs: Rect, fontPx: Float) {
         val box = boxes[i] ?: return

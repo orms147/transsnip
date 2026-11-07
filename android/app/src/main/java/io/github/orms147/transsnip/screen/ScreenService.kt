@@ -190,13 +190,17 @@ class ScreenService : AccessibilityService() {
                 val ocr = found.getOrNull()
                 // Apps that draw their own text (Douyin…) give no font size and
                 // loose bounds: the OCR lines inside an item show both.
-                if (ocr != null) s.refineFrom(ocr.lines)
+                s.shotForCheck = shot
+                val hidden = if (ocr != null) s.dropOccluded(ocr.lines) else emptySet()
+                s.shotForCheck = null
+                if (ocr != null) s.refineFrom(ocr.lines.map { it.box })
+                val visible = exposed.filter { e -> e !in hidden }
                 // The status bar (clock, icons) is in the screenshot too — never translate it.
                 val statusBar = resources.getIdentifier("status_bar_height", "dimen", "android")
                     .takeIf { it != 0 }?.let { resources.getDimensionPixelSize(it) } ?: 0
                 val extra = ocr?.blocks.orEmpty().filter { item ->
                     item.bounds.centerY() > statusBar &&
-                        Prompts.needsTranslation(item.text, target) && exposed.none { overlap(item.bounds, it) > 0.3 }
+                        Prompts.needsTranslation(item.text, target) && visible.none { overlap(item.bounds, it) > 0.3 }
                 }
                 val range = s.add(extra)
                 s.showBoxes(range)
@@ -402,6 +406,88 @@ class ScreenService : AccessibilityService() {
                 shown += i
                 refresh(i)
             }
+        }
+
+        /**
+         * Web pages report text under an overlay (the page behind a comment
+         * sheet) as visible, in an order that says nothing about what's on
+         * top. The screenshot does: where OCR reads something clearly
+         * different from an item's text, that item is covered — drop its box;
+         * the OCR text there then gets translated instead.
+         * Returns the dropped items' bounds.
+         */
+        /** The boxes share at least 15% of the smaller one's area. */
+        private fun touches(a: Rect, b: Rect): Boolean {
+            val r = Rect()
+            if (!r.setIntersect(a, b)) return false
+            val small = minOf(a.width().toLong() * a.height(), b.width().toLong() * b.height())
+            return small > 0 && r.width().toLong() * r.height() * 100 >= small * 15
+        }
+
+        /** Screenshot kept until the OCR check is done (pixel test in [flat]). */
+        var shotForCheck: Bitmap? = null
+
+        /** Nearly one colour across the box: no glyphs there. */
+        private fun flat(shot: Bitmap?, r: Rect): Boolean {
+            if (shot == null || shot.isRecycled) return false
+            val x0 = r.left.coerceIn(0, shot.width - 1); val x1 = r.right.coerceIn(x0 + 1, shot.width)
+            val y0 = r.top.coerceIn(0, shot.height - 1); val y1 = r.bottom.coerceIn(y0 + 1, shot.height)
+            var lo = 255; var hi = 0
+            val stepX = maxOf(1, (x1 - x0) / 40); val stepY = maxOf(1, (y1 - y0) / 12)
+            var y = y0
+            while (y < y1) {
+                var x = x0
+                while (x < x1) {
+                    val c = shot.getPixel(x, y)
+                    val l = (android.graphics.Color.red(c) * 3 + android.graphics.Color.green(c) * 6 + android.graphics.Color.blue(c)) / 10
+                    if (l < lo) lo = l
+                    if (l > hi) hi = l
+                    x += stepX
+                }
+                y += stepY
+            }
+            return hi - lo < 24
+        }
+
+        fun dropOccluded(ocrLines: List<Ocr.Line>): Set<Rect> {
+            val dropped = HashSet<Rect>()
+            for (i in shown.toList()) {
+                val item = items[i]
+                // An OCR line mostly inside the item, or the item mostly inside a
+                // longer OCR line (a date next to "回复" reads as one line).
+                // Any OCR line touching the item's area is evidence of what's
+                // really drawn there.
+                val seen = ocrLines.filter { touches(it.box, item.bounds) }
+                val seenText = seen.joinToString("") { it.text }
+                val letters = item.text.count { it.isLetter() }
+                val keep = when {
+                    // OCR read nothing there. Text always leaves contrast on
+                    // screen; a flat patch means nothing is drawn at that spot.
+                    seen.isEmpty() -> !flat(shotForCheck, item.bounds)
+                    similarity(item.text, seenText) >= 0.3 -> true
+                    // Very short labels ("回复") are where OCR misreads most
+                    // ("凹是"): drop only against clearly different, longer text.
+                    letters < 3 -> seenText.count { it.isLetter() } < 4
+                    else -> false
+                }
+                if (BuildConfig.DEBUG) android.util.Log.v("TransSnipOcc", "${item.bounds.toShortString()} '${item.text.take(16).replace('\n', '|')}' " +
+                    "seen=${seen.map { it.text.take(16) }} keep=$keep")
+                if (keep) continue
+                overlay.remove(i)
+                shown -= i
+                dropped += item.bounds
+            }
+            return dropped
+        }
+
+        /**
+         * Share of [text]'s letters that also appear in [ocr] (OCR misreads a
+         * few). Digits don't count — every date and timestamp shares them.
+         */
+        private fun similarity(text: String, ocr: String): Double {
+            val chars = text.filter { it.isLetter() }
+            if (chars.isEmpty()) return 1.0
+            return chars.count { it in ocr }.toDouble() / chars.length
         }
 
         fun refineFrom(ocrLines: List<Rect>) {
