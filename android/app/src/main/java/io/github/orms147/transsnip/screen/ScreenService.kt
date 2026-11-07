@@ -419,9 +419,130 @@ class ScreenService : AccessibilityService() {
                 val range = s.add(extra)
                 s.showBoxes(range)
                 s.shot = null   // kept as s.frame (still-frame background), not recycled
+                s.ocrIdx += range
+                s.exposedVisible = visible
                 if (range.isEmpty()) s.waveDone(found.exceptionOrNull()) else translate(s, key, range)
+                schedulePoll()
             }
         }
+    }
+
+    // ── Video / image text that changes by itself ─────────────────────────
+    //
+    // Subtitles in a video, a game's dialogue, a slideshow: the picture
+    // changes but the app sends no accessibility event, so nothing would ever
+    // tell us. While following the screen, look again every second — OCR of
+    // the app's own window(s) only (Android 14+), so our translation boxes
+    // aren't in the picture covering the new text — and swap the boxes whose
+    // text changed. Lines seen before come from the cache.
+
+    private val pollRunnable = Runnable { poll() }
+
+    private fun schedulePoll() {
+        main.removeCallbacks(pollRunnable)
+        val s = session ?: return
+        if (Build.VERSION.SDK_INT >= 34 && live && !lookup && s.ocrIdx.isNotEmpty()) main.postDelayed(pollRunnable, POLL_MS)
+    }
+
+    private fun poll() {
+        val s = session ?: return
+        val key = settings.apiKey ?: return
+        if (Build.VERSION.SDK_INT < 34 || !live || lookup) return
+        val screen = screenRect()
+        appShot(screen) { shot ->
+            if (shot == null || s.gen != generation) return@appShot schedulePoll()
+            val pad = (4 * resources.displayMetrics.density).toInt()
+            pool.execute {
+                val ocr = runCatching { Ocr.recognize(shot, pad) }.getOrNull()
+                post(s) {
+                    if (ocr != null && live && !lookup) applyPoll(s, key, ocr, shot)
+                    schedulePoll()
+                }
+            }
+        }
+    }
+
+    private fun applyPoll(s: Session, key: String, ocr: Ocr.Result, shot: Bitmap) {
+        val target = settings.targetLang
+        val top = statusBarHeight()
+        val now = ocr.blocks.filter { b ->
+            b.bounds.centerY() > top && Prompts.needsTranslation(b.text, target) &&
+                s.exposedVisible.none { overlap(b.bounds, it) > 0.3 }
+        }
+        // Same text at the same place (OCR wobbles a little frame to frame) → keep.
+        val kept = HashSet<Int>()
+        val fresh = ArrayList<ScreenItem>()
+        for (b in now) {
+            val same = s.ocrIdx.firstOrNull { i ->
+                i !in kept && s.isShown(i) && (overlap(b.bounds, s.items[i].bounds) > 0.4 || overlap(s.items[i].bounds, b.bounds) > 0.4) &&
+                    sameText(b.text, s.items[i].text)
+            }
+            if (same != null) kept += same else fresh += b
+        }
+        val gone = s.ocrIdx.filter { it !in kept && s.isShown(it) }
+        if (gone.isEmpty() && fresh.isEmpty()) return
+        if (BuildConfig.DEBUG) android.util.Log.d("TransSnip", "poll: ${gone.size} gone, ${fresh.size} new " +
+            fresh.joinToString { it.text.take(12) })
+        gone.forEach { s.drop(it) }
+        if (fresh.isEmpty()) return
+        s.shot = shot
+        val range = s.add(fresh)
+        s.ocrIdx += range
+        s.showBoxes(range)
+        s.shot = null
+        translate(s, key, range, report = false)
+    }
+
+    /** Most letters in common — OCR of the same caption differs by a character or two. */
+    private fun sameText(a: String, b: String): Boolean {
+        val x = a.filter { it.isLetterOrDigit() }
+        val y = b.filter { it.isLetterOrDigit() }
+        if (x.isEmpty() || y.isEmpty()) return x == y
+        val (short, long) = if (x.length <= y.length) x to y else y to x
+        if (long.length > short.length * 1.5 + 2) return false
+        return short.count { it in long }.toDouble() / short.length >= 0.75
+    }
+
+    /**
+     * The screen as the app draws it, without TransSnip's own windows:
+     * every app window shot separately (Android 14+) and laid out at its
+     * place on a screen-sized bitmap, bottom window first.
+     */
+    private fun appShot(screen: Rect, done: (Bitmap?) -> Unit) {
+        if (Build.VERSION.SDK_INT < 34) return done(null)
+        val wins = runCatching {
+            windows.filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }.reversed()
+        }.getOrNull().orEmpty()
+        if (wins.isEmpty()) return done(null)
+        val out = Bitmap.createBitmap(screen.width(), screen.height(), Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(out)
+        var any = false
+        fun next(k: Int) {
+            if (k >= wins.size) return done(if (any) out else null)
+            val w = wins[k]
+            val at = Rect().also { w.getBoundsInScreen(it) }
+            try {
+                takeScreenshotOfWindow(w.id, mainExecutor, object : TakeScreenshotCallback {
+                    override fun onSuccess(result: ScreenshotResult) {
+                        runCatching {
+                            Bitmap.wrapHardwareBuffer(result.hardwareBuffer, result.colorSpace)
+                                ?.copy(Bitmap.Config.ARGB_8888, false)
+                        }.getOrNull()?.let {
+                            canvas.drawBitmap(it, at.left.toFloat(), at.top.toFloat(), null)
+                            it.recycle()
+                            any = true
+                        }
+                        result.hardwareBuffer.close()
+                        next(k + 1)
+                    }
+
+                    override fun onFailure(errorCode: Int) = next(k + 1)
+                })
+            } catch (_: Exception) {
+                next(k + 1)
+            }
+        }
+        next(0)
     }
 
     /** Share of [a]'s area covered by [b]. */
@@ -431,7 +552,8 @@ class ScreenService : AccessibilityService() {
         return r.width().toDouble() * r.height() / (a.width().toDouble() * a.height())
     }
 
-    private fun translate(s: Session, key: String, range: IntRange) {
+    /** [report]: count as a wave (status chip). Updates from [poll] don't. */
+    private fun translate(s: Session, key: String, range: IntRange, report: Boolean = true) {
         val target = settings.targetLang
         val model = settings.model
         val lines = s.linesToTranslate(range, target)
@@ -458,7 +580,7 @@ class ScreenService : AccessibilityService() {
                     "request→first line ${if (first > 0) first - sent else -1} ms, total ${now - sent} ms, " +
                     "since tap ${now - s.started} ms, error=${error?.message}")
             }
-            post(s) { s.waveDone(error) }
+            if (report) post(s) { s.waveDone(error) }
         }
     }
 
@@ -483,6 +605,7 @@ class ScreenService : AccessibilityService() {
 
     private fun dismiss(showBubble: Boolean = true) {
         generation++
+        main.removeCallbacks(pollRunnable)
         live = false
         lookup = false
         main.removeCallbacks(liveRecapture)
@@ -568,6 +691,7 @@ class ScreenService : AccessibilityService() {
         private const val LIVE_QUIET_MS = 400L
         private const val PAD_OCR = 6
         private const val SLOW_MS = 3000L
+        private const val POLL_MS = 1000L
         private const val GESTURE_DELAY_MS = 120L
     }
 
@@ -621,6 +745,20 @@ class ScreenService : AccessibilityService() {
                 lines += item.text.split('\n').map(String::trim).filter(String::isNotEmpty)
             }
             return from until items.size
+        }
+
+        /** Items that came from OCR (pixels) — the ones [poll] keeps up to date. */
+        val ocrIdx = LinkedHashSet<Int>()
+        /** Accessibility text on screen: OCR text over it is the same text, not new. */
+        var exposedVisible: List<Rect> = emptyList()
+
+        fun isShown(i: Int) = i in shown
+
+        /** Its text left the screen (a subtitle changed): drop the box. */
+        fun drop(i: Int) {
+            overlay.remove(i)
+            shown -= i
+            ocrIdx -= i
         }
 
         fun linesToTranslate(range: IntRange, target: String) =
