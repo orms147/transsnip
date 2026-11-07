@@ -154,6 +154,7 @@ class MainActivity : Activity() {
         // Hidden from the bubble's menu while this screen was open: show the
         // real state, and put "show it again" where it's easy to find.
         findViewById<Switch>(R.id.bubble).isChecked = settings.bubble
+        findViewById<Switch>(R.id.frozen_default).isChecked = settings.frozenDefault
         val hidden = screenOn && !settings.bubble
         findViewById<View>(R.id.bubble_show).visibility = if (hidden) View.VISIBLE else View.GONE
         findViewById<View>(R.id.bubble_hidden_note).visibility = if (hidden) View.VISIBLE else View.GONE

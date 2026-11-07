@@ -169,8 +169,13 @@ class ScreenService : AccessibilityService() {
         menu.show(b.bounds(), screenRect(), listOf(
             BubbleMenu.Item(getString(R.string.menu_select)) { startSelect() },
             // The mode a tap doesn't start.
-            if (settings.frozenDefault) BubbleMenu.Item(getString(R.string.menu_follow)) { begin(frozen = false) }
-            else BubbleMenu.Item(getString(R.string.menu_frozen)) { begin(frozen = true) },
+            // Switches the mode from now on (the other one is offered next time), and translates in it.
+            BubbleMenu.Item(getString(if (settings.frozenDefault) R.string.menu_follow else R.string.menu_frozen)) {
+                val frozen = !settings.frozenDefault
+                settings.frozenDefault = frozen
+                Toast.makeText(this, if (frozen) R.string.mode_frozen_set else R.string.mode_follow_set, Toast.LENGTH_SHORT).show()
+                begin(frozen)
+            },
             BubbleMenu.Item(getString(R.string.menu_hide)) { onBubbleDropped() },
             BubbleMenu.Item(getString(R.string.menu_settings)) {
                 startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))

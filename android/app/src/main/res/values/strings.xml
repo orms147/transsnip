@@ -63,7 +63,9 @@
     <string name="lookup_off">Dịch theo màn hình — tự cập nhật khi màn hình đổi</string>
     <string name="frozen_hint">Khung hình tĩnh — không tự đổi · chạm ô: chi tiết · vuốt: cuộn rồi dịch lại · chạm chỗ trống / ✕: tắt</string>
     <string name="menu_frozen">Dịch khung hình tĩnh</string>
-    <string name="menu_follow">Dịch theo màn hình</string>
+    <string name="menu_follow">Dịch khung hình động</string>
+    <string name="mode_frozen_set">Từ giờ: khung hình tĩnh (giữ bong bóng để đổi)</string>
+    <string name="mode_follow_set">Từ giờ: khung hình động — tự dịch lại khi màn hình đổi</string>
     <string name="frozen_default">Chạm bong bóng = dịch khung hình tĩnh (không tự cập nhật — hợp xem livestream, bình luận chạy liên tục)</string>
     <string name="menu_select">Chọn chữ (sao chép)</string>
     <string name="select_hint">Chạm hoặc kéo qua chữ</string>

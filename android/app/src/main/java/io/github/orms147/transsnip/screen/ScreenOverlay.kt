@@ -298,8 +298,8 @@ class ScreenOverlay(
         else (bottomLimit - b.top).coerceIn(b.height(), maxOf(oneMore, (b.height() * 1.5f).toInt()))
         val h = wantH.coerceIn(b.height(), maxH)
 
-        // Never below a readable size: what doesn't fit ends in "…" (tap → full text).
-        val minPx = if (singleLine) maxOf(box.estPx * 0.6f, minOf(9 * dp, box.estPx)) else minOf(10 * dp, box.estPx)
+        // Shrink to fit the whole translation; "…" only below a tiny floor (tap → full text).
+        val minPx = minOf(MIN_FONT_DP * dp, box.estPx)
         if (box.estPx > minPx + 1) {
             v.setAutoSizeTextTypeUniformWithConfiguration(minPx.toInt(), box.estPx.toInt(), 1, TypedValue.COMPLEX_UNIT_PX)
         }
@@ -369,5 +369,10 @@ class ScreenOverlay(
                 }
             }
         }
+    }
+
+    private companion object {
+        /** Smallest text a box shrinks to before it cuts the translation with "…". */
+        const val MIN_FONT_DP = 7f
     }
 }
