@@ -69,12 +69,27 @@
                 style="@style/Hint"
                 android:text="@string/screen_how" />
 
-            <Button
-                android:id="@+id/screen_settings"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="@string/screen_open_settings" />
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/screen_settings"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/screen_open_settings" />
+
+                <Button
+                    android:id="@+id/screen_off"
+                    style="?android:attr/borderlessButtonStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="@string/screen_turn_off"
+                    android:textColor="#E5484D" />
+            </LinearLayout>
 
             <TextView
                 android:id="@+id/screen_restricted"

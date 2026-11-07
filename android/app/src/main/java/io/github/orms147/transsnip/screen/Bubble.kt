@@ -197,6 +197,9 @@ class Bubble(
         view.visibility = View.VISIBLE
     }
 
+    /** Where the bubble is on screen (to open the menu beside it). */
+    fun bounds(): Rect = Rect(lp.x, lp.y, lp.x + size, lp.y + size)
+
     fun remove() {
         main.removeCallbacks(fade)
         hideTarget()

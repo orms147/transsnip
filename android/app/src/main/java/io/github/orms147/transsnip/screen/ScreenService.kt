@@ -73,6 +73,11 @@ class ScreenService : AccessibilityService() {
         syncBubble()
         warmUp()
         pool.execute { Ocr.warmUp() }
+        // First run: say how to reach the menu (hide / turn off) — holding isn't discoverable.
+        if (settings.bubble && !settings.menuHintShown) {
+            settings.menuHintShown = true
+            Toast.makeText(this, R.string.bubble_first_hint, Toast.LENGTH_LONG).show()
+        }
     }
 
     /**
@@ -139,8 +144,32 @@ class ScreenService : AccessibilityService() {
         if (!on) liveRefresh()   // the page may have changed while in look-up mode
     }
 
+    private val menu by lazy { BubbleMenu(this, wm) }
+
+    /**
+     * Hold the bubble: while translating, toggle look-up mode; otherwise open
+     * the menu — translate in look-up mode, hide the bubble, turn TransSnip
+     * off, settings.
+     */
     private fun onBubbleLongPress() {
-        if (live) setLookup(!lookup) else { lookup = true; start() }
+        if (live) return setLookup(!lookup)
+        val b = bubble ?: return
+        menu.show(b.bounds(), screenRect(), listOf(
+            BubbleMenu.Item(getString(R.string.menu_lookup)) { lookup = true; start() },
+            BubbleMenu.Item(getString(R.string.menu_hide)) { onBubbleDropped() },
+            BubbleMenu.Item(getString(R.string.menu_off)) { turnOff() },
+            BubbleMenu.Item(getString(R.string.menu_settings)) {
+                startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            },
+        ))
+    }
+
+    /** Off for real: the accessibility service disables itself (Android 7+). */
+    fun turnOff() {
+        dismiss(showBubble = false)
+        menu.dismiss()
+        Toast.makeText(this, R.string.turned_off, Toast.LENGTH_LONG).show()
+        disableSelf()
     }
 
     private fun onOverlayTapEmpty() {
@@ -182,6 +211,7 @@ class ScreenService : AccessibilityService() {
     }
 
     private fun onBubbleTap() {
+        if (menu.isShown) return menu.dismiss()
         if (live) dismiss() else { lookup = false; start() }
     }
 

@@ -40,6 +40,10 @@ class AppSettings(context: Context) {
         get() = prefs.getInt("bubble_y", -1)
         set(value) = prefs.edit().putInt("bubble_y", value).apply()
 
+    var menuHintShown: Boolean
+        get() = prefs.getBoolean("menu_hint", false)
+        set(value) = prefs.edit().putBoolean("menu_hint", value).apply()
+
     var hintsShown: Int
         get() = prefs.getInt("hints_live", 0)
         set(value) = prefs.edit().putInt("hints_live", value).apply()

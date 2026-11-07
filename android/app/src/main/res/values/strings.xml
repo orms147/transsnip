@@ -56,6 +56,13 @@
     <string name="screen_hint">Vuốt, chạm như bình thường — bản dịch tự cập nhật · Giữ ✕: chạm ô để tra từ · Chạm ✕: tắt</string>
     <string name="lookup_on">Chế độ tra: chạm ô để xem pinyin, thẻ từ · giữ ô: chữ gốc · chạm chỗ trống để quay lại</string>
     <string name="lookup_off">Đã quay lại — vuốt, chạm như bình thường</string>
+    <string name="menu_lookup">🔍  Dịch &amp; tra từ</string>
+    <string name="menu_hide">🙈  Ẩn bong bóng</string>
+    <string name="menu_off">⛔  Tắt TransSnip</string>
+    <string name="menu_settings">⚙  Cài đặt</string>
+    <string name="turned_off">Đã tắt TransSnip. Bật lại: mở app TransSnip → Bật.</string>
+    <string name="bubble_first_hint">Chạm 译 để dịch màn hình. Giữ 译 để mở menu (ẩn / tắt).</string>
+    <string name="screen_turn_off">Tắt dịch màn hình</string>
     <string name="bubble_desc">TransSnip — dịch màn hình</string>
     <string name="tile_label">Dịch màn hình</string>
 </resources>

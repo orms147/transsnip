@@ -70,6 +70,11 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.save).setOnClickListener { saveKey() }
         findViewById<Button>(R.id.test).setOnClickListener { test() }
         findViewById<Button>(R.id.screen_settings).setOnClickListener { openAccessibility() }
+        findViewById<Button>(R.id.screen_off).setOnClickListener {
+            val service = ScreenService.instance
+            if (service != null) service.turnOff() else openAccessibility()
+            findViewById<View>(R.id.screen_off).postDelayed({ refreshSteps() }, 500)
+        }
     }
 
     override fun onResume() {
@@ -92,6 +97,7 @@ class MainActivity : Activity() {
         findViewById<View>(R.id.key_help).visibility = if (hasKey) View.GONE else View.VISIBLE
         findViewById<Button>(R.id.screen_settings).setText(if (screenOn) R.string.screen_open_settings else R.string.screen_enable)
         findViewById<View>(R.id.screen_restricted).visibility = if (screenOn) View.GONE else View.VISIBLE
+        findViewById<View>(R.id.screen_off).visibility = if (screenOn) View.VISIBLE else View.GONE
     }
 
     private fun mark(id: Int, label: Int, done: Boolean) {
