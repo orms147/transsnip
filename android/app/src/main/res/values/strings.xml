@@ -48,7 +48,7 @@
     <string name="screen_off">Trợ năng: chưa bật</string>
     <string name="screen_open_settings">Mở Trợ năng</string>
     <string name="bubble_switch">Hiện bong bóng</string>
-    <string name="bubble_hidden">Đã ẩn bong bóng. Hiện lại: mở app TransSnip → \"Hiện lại bong bóng\".</string>
+    <string name="bubble_hidden">Đã tắt TransSnip. Bật lại: ô \"TransSnip\" trong Cài đặt nhanh, hoặc mở app.</string>
     <string name="screen_working">Đang dịch…</string>
     <string name="screen_ocr">Đang nhận dạng chữ…</string>
     <string name="screen_no_text">Không thấy chữ nào cần dịch trên màn hình.</string>
@@ -58,14 +58,16 @@
     <string name="lookup_on">Chế độ tra: chạm ô để xem pinyin, thẻ từ · giữ ô: chữ gốc · chạm chỗ trống để quay lại</string>
     <string name="lookup_off">Đã quay lại — vuốt, chạm như bình thường</string>
     <string name="menu_lookup">Dịch &amp; tra từ</string>
-    <string name="menu_hide">Ẩn bong bóng</string>
-    <string name="menu_off">Tắt TransSnip</string>
+    <string name="menu_hide">Tắt (bật lại bằng 1 chạm)</string>
+    <string name="tile_on">Đang bật</string>
+    <string name="tile_off">Đã tắt · chạm để bật</string>
+    <string name="turned_on">Đã bật TransSnip</string>
     <string name="menu_settings">Cài đặt</string>
-    <string name="bubble_show_again">Hiện lại bong bóng</string>
-    <string name="bubble_is_hidden">Bong bóng đang ẩn — vẫn dịch được bằng ô \"Dịch màn hình\" trong Cài đặt nhanh.</string>
-    <string name="turned_off">Đã tắt TransSnip. Bật lại: mở app TransSnip → Bật.</string>
-    <string name="bubble_first_hint">Chạm bong bóng để dịch màn hình. Giữ bong bóng để mở menu (ẩn / tắt).</string>
-    <string name="screen_turn_off">Tắt dịch màn hình</string>
+    <string name="bubble_show_again">Bật lại TransSnip</string>
+    <string name="bubble_is_hidden">TransSnip đang tạm tắt (dịch vụ vẫn bật, không đọc màn hình).</string>
+    <string name="turned_off">Đã tắt hẳn dịch vụ. Bật lại phải vào Trợ năng — để tạm tắt, dùng ô TransSnip trong Cài đặt nhanh.</string>
+    <string name="bubble_first_hint">Chạm bong bóng để dịch màn hình. Giữ bong bóng để mở menu (tắt). Thêm ô \"TransSnip\" vào Cài đặt nhanh để bật/tắt nhanh.</string>
+    <string name="screen_turn_off">Tắt hẳn dịch vụ</string>
     <string name="bubble_desc">TransSnip — dịch màn hình</string>
-    <string name="tile_label">Dịch màn hình</string>
+    <string name="tile_label">TransSnip</string>
 </resources>

@@ -54,7 +54,7 @@ class ScreenService : AccessibilityService() {
     // Held in a field: SharedPreferences keeps only a weak reference.
     private val prefListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
         when (key) {
-            AppSettings.KEY_BUBBLE -> syncBubble()
+            AppSettings.KEY_BUBBLE -> { syncBubble(); ScreenTile.refresh(this) }
             "api_key" -> warmUp()
         }
     }
@@ -74,6 +74,7 @@ class ScreenService : AccessibilityService() {
         warmUp()
         pool.execute { Ocr.warmUp() }
         // First run: say how to reach the menu (hide / turn off) — holding isn't discoverable.
+        ScreenTile.refresh(this)
         if (settings.bubble && !settings.menuHintShown) {
             settings.menuHintShown = true
             Toast.makeText(this, R.string.bubble_first_hint, Toast.LENGTH_LONG).show()
@@ -157,7 +158,6 @@ class ScreenService : AccessibilityService() {
         menu.show(b.bounds(), screenRect(), listOf(
             BubbleMenu.Item(getString(R.string.menu_lookup)) { lookup = true; start() },
             BubbleMenu.Item(getString(R.string.menu_hide)) { onBubbleDropped() },
-            BubbleMenu.Item(getString(R.string.menu_off)) { turnOff() },
             BubbleMenu.Item(getString(R.string.menu_settings)) {
                 startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             },
