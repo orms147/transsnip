@@ -111,6 +111,13 @@
                 style="@style/Hint"
                 android:text="@string/screen_restricted" />
 
+            <Button
+                android:id="@+id/app_info"
+                style="?android:attr/borderlessButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/open_app_info" />
+
             <TextView
                 android:id="@+id/step_try"
                 style="@style/Step"

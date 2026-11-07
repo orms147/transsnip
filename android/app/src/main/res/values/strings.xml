@@ -42,7 +42,8 @@
     <string name="step_done">%1$s  ✓</string>
     <string name="screen_enable">Bật</string>
     <string name="tile_setup">Chạm để cài đặt</string>
-    <string name="screen_restricted">Công tắc bị mờ? (APK cài ngoài Play) Mở Thông tin ứng dụng → ⋮ → \"Cho phép cài đặt bị hạn chế\", rồi bật lại. Máy Xiaomi: đặt Pin → Không giới hạn để bong bóng không tự tắt.</string>
+    <string name="screen_restricted">Báo \"Ứng dụng đã bị từ chối cấp quyền\"? Đó là Android chặn app cài từ file APK. Bấm Đóng, rồi bấm nút dưới đây → ⋮ (góc trên phải) → \"Cho phép chế độ cài đặt hạn chế\" → quay lại bật TransSnip. Máy Xiaomi: đặt Tiết kiệm pin → Không giới hạn để bong bóng không tự tắt.</string>
+    <string name="open_app_info">Mở thông tin ứng dụng</string>
     <string name="screen_on">Trợ năng: đã bật ✓</string>
     <string name="screen_off">Trợ năng: chưa bật</string>
     <string name="screen_open_settings">Mở Trợ năng</string>
