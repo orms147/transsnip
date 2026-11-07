@@ -3,6 +3,8 @@
     <color name="accent">#4F59E6</color>
     <color name="ic_bg">#4F59E6</color>
     <color name="card">#F2F3F8</color>
+    <color name="popup">#FFFFFF</color>
+    <color name="chip">#EDEEFC</color>
     <color name="demo">#FFFFFF</color>
     <color name="ok">#30A46C</color>
     <color name="todo">#E5484D</color>

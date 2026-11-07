@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <color name="card">#1E1F25</color>
+    <color name="popup">#1B1C21</color>
+    <color name="chip">#2A2C45</color>
     <color name="demo">#2A2B33</color>
 </resources>

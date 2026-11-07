@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Popup window: a rounded card, inset so the system dialog shadow shows. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android" android:inset="8dp">
+    <shape android:shape="rectangle">
+        <corners android:radius="22dp" />
+        <solid android:color="@color/popup" />
+    </shape>
+</inset>

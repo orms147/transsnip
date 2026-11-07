@@ -3,21 +3,55 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="20dp">
+    android:paddingStart="20dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="12dp"
+    android:paddingBottom="10dp">
 
-    <TextView
-        android:id="@+id/header"
+    <!-- Header: language chip (tap → change target/model) + close. -->
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textAllCaps="true"
-        android:textColor="@color/accent"
-        android:textSize="12sp"
-        android:textStyle="bold" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/header"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:background="@drawable/bg_chip"
+            android:paddingStart="12dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="10dp"
+            android:paddingBottom="6dp"
+            android:textColor="@color/accent"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
+
+        <TextView
+            android:id="@+id/settings"
+            style="@style/IconButton"
+            android:contentDescription="@string/settings"
+            android:text="⚙" />
+
+        <TextView
+            android:id="@+id/close"
+            style="@style/IconButton"
+            android:contentDescription="@string/close"
+            android:text="✕" />
+    </LinearLayout>
 
     <ScrollView
+        android:id="@+id/scroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp"
         android:fadeScrollbars="false">
 
         <LinearLayout
@@ -29,9 +63,9 @@
                 android:id="@+id/source"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:alpha="0.7"
-                android:maxLines="6"
+                android:alpha="0.65"
                 android:ellipsize="end"
+                android:maxLines="6"
                 android:textIsSelectable="true"
                 android:textSize="15sp" />
 
@@ -45,7 +79,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="1dp"
                 android:layout_marginVertical="12dp"
-                android:alpha="0.15"
+                android:alpha="0.12"
                 android:background="?android:attr/textColorPrimary" />
 
             <ProgressBar
@@ -59,10 +93,19 @@
                 android:id="@+id/result"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:lineSpacingMultiplier="1.15"
+                android:lineSpacingMultiplier="1.2"
+                android:textColor="?android:attr/textColorPrimary"
                 android:textIsSelectable="true"
-                android:textSize="18sp"
+                android:textSize="19sp"
                 android:visibility="gone" />
+
+            <TextView
+                android:id="@+id/meta"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:alpha="0.45"
+                android:textSize="12sp" />
 
             <TextView
                 android:id="@+id/error"
@@ -74,45 +117,32 @@
         </LinearLayout>
     </ScrollView>
 
+    <!-- Actions + which model answered, how fast. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:gravity="end"
+        android:layout_marginTop="10dp"
+        android:gravity="center_vertical"
         android:orientation="horizontal">
-
-        <Button
-            android:id="@+id/settings"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/settings" />
 
         <View
             android:layout_width="0dp"
             android:layout_height="0dp"
             android:layout_weight="1" />
 
-        <Button
+        <TextView
             android:id="@+id/retry"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/retry"
-            android:visibility="gone" />
+            style="@style/ActionButton"
+            android:text="@string/retry_icon" />
 
-        <Button
+        <TextView
+            android:id="@+id/speak"
+            style="@style/ActionButton"
+            android:text="@string/speak_icon" />
+
+        <TextView
             android:id="@+id/copy"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/copy" />
-
-        <Button
-            android:id="@+id/close"
-            style="?android:attr/borderlessButtonStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/close" />
+            style="@style/ActionButton"
+            android:text="@string/copy_icon" />
     </LinearLayout>
 </LinearLayout>

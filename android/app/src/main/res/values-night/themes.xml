@@ -6,6 +6,9 @@
     </style>
     <style name="Theme.TransSnip.Popup" parent="android:Theme.Material.Dialog.NoActionBar">
         <item name="android:colorAccent">@color/accent</item>
+        <item name="android:windowBackground">@drawable/bg_popup</item>
+        <item name="android:windowElevation">12dp</item>
+        <item name="android:backgroundDimAmount">0.32</item>
         <item name="android:windowCloseOnTouchOutside">true</item>
     </style>
 </resources>

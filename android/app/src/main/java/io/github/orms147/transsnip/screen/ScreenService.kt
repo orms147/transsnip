@@ -59,7 +59,6 @@ class ScreenService : AccessibilityService() {
         }
     }
 
-    private var ownUi = 0                  // TransSnip popups open: keep the bubble off them
     private val recapture = Runnable { if (session == null) start(delay = 0) }
     private var awaitingScroll = false
 
@@ -121,9 +120,7 @@ class ScreenService : AccessibilityService() {
         if (session != null) dismiss() else start()
     }
 
-    /** TransSnip's own popup came up / went away. */
-    fun ownUi(visible: Boolean) {
-        ownUi = (ownUi + if (visible) 1 else -1).coerceAtLeast(0)
+    private fun onOwnUiChanged() {
         if (ownUi > 0) bubble?.hide() else if (session == null) bubble?.show()
     }
 
@@ -326,6 +323,18 @@ class ScreenService : AccessibilityService() {
         @Volatile
         var instance: ScreenService? = null
             private set
+
+        /**
+         * TransSnip popups currently open — the bubble stays off them. Kept
+         * here, not in the service, so a popup opened while the service is
+         * (re)starting still counts once it connects.
+         */
+        private var ownUi = 0
+
+        fun ownUi(visible: Boolean) {
+            ownUi = (ownUi + if (visible) 1 else -1).coerceAtLeast(0)
+            instance?.onOwnUiChanged()
+        }
 
         private const val SCROLL_START_MS = 450L   // no scroll event at all → content didn't move much
         private const val SCROLL_QUIET_MS = 250L

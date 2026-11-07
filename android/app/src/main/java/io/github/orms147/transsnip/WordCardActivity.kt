@@ -59,8 +59,9 @@ class WordCardActivity : Activity() {
             setPadding(dp(22), dp(18), dp(22), dp(18))
         }
         setContentView(ScrollView(this).apply { addView(body) })
+        // Height follows the content (the dialog window still stops at the screen).
         window.setLayout((resources.displayMetrics.widthPixels * 0.94).toInt(),
-            (resources.displayMetrics.heightPixels * 0.8).toInt())
+            ViewGroup.LayoutParams.WRAP_CONTENT)
         body.addView(ProgressBar(this))
         tts = TextToSpeech(this) { status ->
             ttsReady = status == TextToSpeech.SUCCESS &&
@@ -80,11 +81,11 @@ class WordCardActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        io.github.orms147.transsnip.screen.ScreenService.instance?.ownUi(true)
+        io.github.orms147.transsnip.screen.ScreenService.ownUi(true)
     }
 
     override fun onStop() {
-        io.github.orms147.transsnip.screen.ScreenService.instance?.ownUi(false)
+        io.github.orms147.transsnip.screen.ScreenService.ownUi(false)
         super.onStop()
     }
 
@@ -108,8 +109,9 @@ class WordCardActivity : Activity() {
         col.addView(text(label("Hán-Việt: ", d.hanviet.uppercase(Locale("vi"))), 15f))
         head.addView(col, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         val side = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.END }
-        side.addView(Button(this, null, android.R.attr.borderlessButtonStyle).apply {
+        side.addView(TextView(this, null, 0, R.style.ActionButton).apply {
             text = "🔊 Nghe"
+            minHeight = dp(40)
             setOnClickListener { speak() }
         })
         d.hsk?.let { side.addView(text(if (it >= 7) "HSK 7-9" else "HSK $it", 13f).apply {
@@ -145,7 +147,11 @@ class WordCardActivity : Activity() {
 
         section("Cách dùng (AI)")
         val usageBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val btn = Button(this).apply { text = "✨ Giải thích cách dùng + câu ví dụ" }
+        val btn = TextView(this, null, 0, R.style.ActionButton).apply {
+            text = "✨ Giải thích cách dùng + câu ví dụ"
+            background = getDrawable(R.drawable.bg_chip)
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+        }
         btn.setOnClickListener { explain(usageBox, btn) }
         usageBox.addView(btn)
         body.addView(usageBox)
@@ -177,7 +183,7 @@ class WordCardActivity : Activity() {
         return row
     }
 
-    private fun explain(box: LinearLayout, btn: Button) {
+    private fun explain(box: LinearLayout, btn: TextView) {
         val settings = AppSettings(this)
         val key = settings.apiKey
         if (key.isNullOrBlank()) {

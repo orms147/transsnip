@@ -7,7 +7,8 @@ import android.content.Intent
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
+import android.speech.tts.TextToSpeech
+import android.widget.PopupMenu
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -37,8 +38,12 @@ class TranslateActivity : Activity() {
     private lateinit var progress: ProgressBar
     private lateinit var resultView: TextView
     private lateinit var errorView: TextView
-    private lateinit var copyBtn: Button
-    private lateinit var retryBtn: Button
+    private lateinit var copyBtn: TextView
+    private lateinit var retryBtn: TextView
+    private lateinit var speakBtn: TextView
+    private lateinit var meta: TextView
+    private var tts: TextToSpeech? = null
+    private var started = 0L
     private var text = ""
     private var translation = ""
 
@@ -55,12 +60,16 @@ class TranslateActivity : Activity() {
         errorView = findViewById(R.id.error)
         copyBtn = findViewById(R.id.copy)
         retryBtn = findViewById(R.id.retry)
+        speakBtn = findViewById(R.id.speak)
+        meta = findViewById(R.id.meta)
         copyBtn.setOnClickListener { copy() }
         retryBtn.setOnClickListener { start() }
-        findViewById<Button>(R.id.settings).setOnClickListener {
+        speakBtn.setOnClickListener { speak() }
+        header.setOnClickListener { showLanguageMenu() }
+        findViewById<View>(R.id.settings).setOnClickListener {
             startActivity(Intent(this, MainActivity::class.java))
         }
-        findViewById<Button>(R.id.close).setOnClickListener { finish() }
+        findViewById<View>(R.id.close).setOnClickListener { finish() }
 
         text = selectedText(intent)
         sourceView.text = text
@@ -76,17 +85,18 @@ class TranslateActivity : Activity() {
 
     override fun onStart() {
         super.onStart()
-        io.github.orms147.transsnip.screen.ScreenService.instance?.ownUi(true)
+        io.github.orms147.transsnip.screen.ScreenService.ownUi(true)
     }
 
     override fun onStop() {
-        io.github.orms147.transsnip.screen.ScreenService.instance?.ownUi(false)
+        io.github.orms147.transsnip.screen.ScreenService.ownUi(false)
         super.onStop()
     }
 
     override fun onDestroy() {
         worker.shutdownNow()
         zhWorker.shutdownNow()
+        tts?.shutdown()
         super.onDestroy()
     }
 
@@ -131,10 +141,11 @@ class TranslateActivity : Activity() {
     private fun start() {
         val key = settings.apiKey
         val target = settings.targetLang
-        header.text = getString(R.string.header_lang, "…", target.uppercase())
+        header.text = getString(R.string.header_lang, "…", Prompts.langName(target).let(::vnName)) + "  ▾"
         if (text.isEmpty()) return showError(getString(R.string.err_no_text))
         if (key.isNullOrBlank()) return showError(getString(R.string.err_no_key))
         showLoading()
+        started = System.currentTimeMillis()
         val model = settings.model
         worker.execute {
             // Streamed: the first words show up while the rest is still being generated.
@@ -154,8 +165,16 @@ class TranslateActivity : Activity() {
         progress.visibility = View.VISIBLE
         resultView.visibility = View.GONE
         errorView.visibility = View.GONE
-        retryBtn.visibility = View.GONE
-        copyBtn.isEnabled = false
+        meta.text = ""
+        setActions(false)
+    }
+
+    /** Copy / listen / retry only mean something once there is a translation. */
+    private fun setActions(enabled: Boolean) {
+        for (b in listOf(copyBtn, speakBtn, retryBtn)) {
+            b.isEnabled = enabled
+            b.alpha = if (enabled) 1f else 0.35f
+        }
     }
 
     private fun showPartial(partial: String) {
@@ -167,12 +186,15 @@ class TranslateActivity : Activity() {
 
     private fun showResult(r: TranslationResult) {
         translation = r.translation
-        val src = r.sourceLang?.let { Prompts.langName(it) } ?: "?"
-        header.text = getString(R.string.header_lang, src, Prompts.langName(r.targetLang))
+        val src = r.sourceLang?.let { vnName(Prompts.langName(it)) } ?: "?"
+        header.text = getString(R.string.header_lang, src, vnName(Prompts.langName(r.targetLang))) + "  ▾"
         progress.visibility = View.GONE
         resultView.text = r.translation
         resultView.visibility = View.VISIBLE
-        copyBtn.isEnabled = true
+        setActions(true)
+        val model = AppSettings.MODELS.firstOrNull { it.second == settings.model }?.first
+            ?.substringBefore(" —")?.substringBefore(" (") ?: settings.model.substringAfter('/')
+        meta.text = if (started > 0) getString(R.string.meta, model, (System.currentTimeMillis() - started) / 1000.0) else model
     }
 
     private fun showError(message: String) {
@@ -180,12 +202,76 @@ class TranslateActivity : Activity() {
         resultView.visibility = View.GONE
         errorView.text = message
         errorView.visibility = View.VISIBLE
-        retryBtn.visibility = View.VISIBLE
-        copyBtn.isEnabled = false
+        setActions(false)
+        retryBtn.isEnabled = true
+        retryBtn.alpha = 1f
     }
 
     companion object {
         const val EXTRA_TRANSLATION = "io.github.orms147.transsnip.TRANSLATION"
+    }
+
+    /** Change target language or model right here — and translate again. */
+    private fun showLanguageMenu() {
+        val menu = PopupMenu(this, header)
+        menu.menu.add(0, 0, 0, getString(R.string.menu_target)).isEnabled = false
+        AppSettings.TARGETS.forEachIndexed { i, (label, code) ->
+            menu.menu.add(1, 100 + i, 1 + i, (if (code == settings.targetLang) "✓  " else "     ") + label)
+        }
+        menu.menu.add(2, 1, 50, getString(R.string.menu_model)).isEnabled = false
+        AppSettings.MODELS.forEachIndexed { i, (label, id) ->
+            menu.menu.add(3, 200 + i, 51 + i, (if (id == settings.model) "✓  " else "     ") + label)
+        }
+        menu.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                in 100 until 200 -> settings.targetLang = AppSettings.TARGETS[item.itemId - 100].second
+                in 200 until 300 -> settings.model = AppSettings.MODELS[item.itemId - 200].second
+                else -> return@setOnMenuItemClickListener false
+            }
+            start()
+            true
+        }
+        menu.show()
+    }
+
+    /** Read the translation aloud in the target language (system TTS). */
+    private fun speak() {
+        if (translation.isEmpty()) return
+        val locale = when (settings.targetLang) {
+            "vi" -> java.util.Locale("vi", "VN")
+            "en" -> java.util.Locale.US
+            else -> java.util.Locale.SIMPLIFIED_CHINESE
+        }
+        val say = translation
+        val engine = tts
+        if (engine != null) {
+            sayWith(engine, locale, say)
+            return
+        }
+        tts = TextToSpeech(this) { status ->
+            val t = tts ?: return@TextToSpeech
+            if (status == TextToSpeech.SUCCESS) sayWith(t, locale, say)
+            else Toast.makeText(this, R.string.no_tts, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun sayWith(engine: TextToSpeech, locale: java.util.Locale, text: String) {
+        val ok = engine.setLanguage(locale)
+        if (ok == TextToSpeech.LANG_MISSING_DATA || ok == TextToSpeech.LANG_NOT_SUPPORTED) {
+            Toast.makeText(this, R.string.no_tts, Toast.LENGTH_LONG).show()
+            return
+        }
+        engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, "transsnip")
+    }
+
+    private fun vnName(english: String) = when (english) {
+        "Vietnamese" -> "Việt"
+        "English" -> "Anh"
+        "Simplified Chinese" -> "Trung"
+        "Traditional Chinese" -> "Trung (phồn)"
+        "Japanese" -> "Nhật"
+        "Korean" -> "Hàn"
+        else -> english
     }
 
     private fun copy() {

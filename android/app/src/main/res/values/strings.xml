@@ -3,6 +3,13 @@
     <string name="app_name">TransSnip</string>
     <string name="header_lang">%1$s → %2$s</string>
     <string name="copy">Sao chép</string>
+    <string name="copy_icon">⧉ Sao chép</string>
+    <string name="speak_icon">🔊 Nghe</string>
+    <string name="retry_icon">↻ Dịch lại</string>
+    <string name="menu_target">Dịch sang</string>
+    <string name="menu_model">Model</string>
+    <string name="meta">%1$s · %2$.1f s</string>
+    <string name="no_tts">Máy chưa có giọng đọc cho ngôn ngữ này (Cài đặt → Hệ thống → Đọc văn bản).</string>
     <string name="retry">Thử lại</string>
     <string name="settings">Cài đặt</string>
     <string name="close">Đóng</string>
