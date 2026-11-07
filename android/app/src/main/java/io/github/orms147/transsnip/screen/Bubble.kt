@@ -161,7 +161,8 @@ class Bubble(
     }
 
     private fun paint() {
-        view.text = if (active) "✕" else "译"
+        view.text = if (active) "✕" else ""
+        view.foreground = if (active) null else view.context.getDrawable(R.drawable.ic_bubble)
         view.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
             // Look-up mode: the ✕ turns accent-coloured — touches go to the boxes now.
