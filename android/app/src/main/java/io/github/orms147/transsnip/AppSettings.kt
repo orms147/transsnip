@@ -27,6 +27,25 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("zh_study", true)
         set(value) = prefs.edit().putBoolean("zh_study", value).apply()
 
+    /** Floating bubble (screen translation) while the accessibility service is on. */
+    var bubble: Boolean
+        get() = prefs.getBoolean(KEY_BUBBLE, true)
+        set(value) = prefs.edit().putBoolean(KEY_BUBBLE, value).apply()
+
+    var bubbleX: Int
+        get() = prefs.getInt("bubble_x", -1)
+        set(value) = prefs.edit().putInt("bubble_x", value).apply()
+
+    var bubbleY: Int
+        get() = prefs.getInt("bubble_y", -1)
+        set(value) = prefs.edit().putInt("bubble_y", value).apply()
+
+    fun onChange(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener) =
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+
+    fun offChange(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener) =
+        prefs.unregisterOnSharedPreferenceChangeListener(listener)
+
     /** AES-GCM with a non-exportable key in the Android Keystore. */
     var apiKey: String?
         get() {
@@ -70,6 +89,7 @@ class AppSettings(context: Context) {
     }
 
     companion object {
+        const val KEY_BUBBLE = "bubble"
         const val DEFAULT_MODEL = "tencent/hy-mt2-30b-a3b"
         private const val KEY_ALIAS = "transsnip_api_key"
         private const val TRANSFORM = "AES/GCM/NoPadding"

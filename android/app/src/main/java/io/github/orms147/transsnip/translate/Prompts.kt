@@ -49,6 +49,40 @@ object Prompts {
     fun userTurn(text: String, target: String): String =
         "Translate into ${langName(target)}:\n\n$text"
 
+    /** Screen text: many separate short lines in one request, numbered so each answer maps back. */
+    fun batchSystemPrompt(target: String, source: String?, minimal: Boolean): String =
+        (if (minimal) minimalSystemPrompt(target, source) else systemPrompt(target, source)) + "\n" +
+            "The text comes from a phone screen as numbered lines \"[n] text\": separate comments, " +
+            "names, buttons, labels and captions. Translate every line on its own and reply with " +
+            "exactly one line per input line in the same \"[n] translation\" format, keeping each " +
+            "number. Do not merge, split or skip lines."
+
+    fun batchUserTurn(lines: List<String>, target: String): String =
+        "Translate into ${langName(target)}:\n\n" +
+            lines.mapIndexed { i, s -> "[${i + 1}] $s" }.joinToString("\n")
+
+    /**
+     * Worth sending to the model? Not for numbers, times, emoji, or text that
+     * is already in the target language (Vietnamese is told from English by
+     * its diacritics; both are "Latin" to [LangDetect]).
+     */
+    fun needsTranslation(text: String, target: String): Boolean {
+        val t = text.trim()
+        if (t.count { it.isLetter() } < 2 && t.none { it in '㐀'..'鿿' }) return false
+        val hasHan = t.any { it in '㐀'..'鿿' }
+        // URLs, handles, file names: one Latin token with . / _ @ :
+        if (!hasHan && t.none { it.isWhitespace() } && t.any { it in "./_@:" }) return false
+        val lang = LangDetect.detect(t) ?: return false
+        return when (target.substringBefore('-')) {
+            "vi" -> !(lang == "en" && t.any { it.lowercaseChar() in VIET })
+            "en" -> lang != "en"
+            "zh" -> lang != "zh-Hans"
+            else -> true
+        }
+    }
+
+    private const val VIET = "ăâđêôơưàảãáạằẳẵắặầẩẫấậèẻẽéẹềểễếệìỉĩíịòỏõóọồổỗốộờởỡớợùủũúụừửữứựỳỷỹýỵ"
+
     private fun contextLines(source: String?): List<String> =
         if (source.isNullOrEmpty()) emptyList() else listOf("The source is ${langName(source)}.")
 

@@ -1,6 +1,9 @@
 package io.github.orms147.transsnip
 
 import android.app.Activity
+import android.content.ComponentName
+import android.content.Intent
+import android.provider.Settings
 import android.os.Bundle
 import android.widget.ArrayAdapter
 import android.widget.Button
@@ -8,6 +11,7 @@ import android.widget.EditText
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
+import io.github.orms147.transsnip.screen.ScreenService
 import io.github.orms147.transsnip.translate.OpenRouterClient
 import io.github.orms147.transsnip.translate.Translator
 import java.util.concurrent.Executors
@@ -34,6 +38,13 @@ class MainActivity : Activity() {
         zhSwitch = findViewById(R.id.zh_study)
         zhSwitch.isChecked = settings.zhStudy
         zhSwitch.setOnCheckedChangeListener { _, on -> settings.zhStudy = on }
+        findViewById<Switch>(R.id.bubble).apply {
+            isChecked = settings.bubble
+            setOnCheckedChangeListener { _, on -> settings.bubble = on }
+        }
+        findViewById<Button>(R.id.screen_settings).setOnClickListener {
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        }
 
         // Debug builds only: a key piped into files/debug_api_key (adb exec-in
         // run-as … — stdin, so it never shows up on a command line or in
@@ -54,6 +65,18 @@ class MainActivity : Activity() {
 
         findViewById<Button>(R.id.save).setOnClickListener { save() }
         findViewById<Button>(R.id.test).setOnClickListener { test() }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        findViewById<TextView>(R.id.screen_state).setText(
+            if (screenServiceOn()) R.string.screen_on else R.string.screen_off)
+    }
+
+    private fun screenServiceOn(): Boolean {
+        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES).orEmpty()
+        val me = ComponentName(this, ScreenService::class.java)
+        return enabled.split(':').any { ComponentName.unflattenFromString(it) == me }
     }
 
     override fun onDestroy() {
@@ -87,7 +110,7 @@ class MainActivity : Activity() {
         val target = settings.targetLang
         val started = System.currentTimeMillis()
         worker.execute {
-            val outcome = runCatching { Translator(OpenRouterClient(key, model)).translate(SAMPLE, target) }
+            val outcome = runCatching { Translator.forModel(OpenRouterClient(key, model), model).translate(SAMPLE, target) }
             val ms = System.currentTimeMillis() - started
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread

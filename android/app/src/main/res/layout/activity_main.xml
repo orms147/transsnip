@@ -53,6 +53,46 @@
             android:layout_marginTop="18dp"
             android:text="@string/zh_study" />
 
+        <TextView
+            style="@style/Label"
+            android:layout_marginTop="26dp"
+            android:text="@string/screen_section" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/screen_how"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/screen_state"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/screen_settings"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/screen_open_settings" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:alpha="0.7"
+            android:text="@string/screen_restricted"
+            android:textSize="12sp" />
+
+        <Switch
+            android:id="@+id/bubble"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="@string/bubble_switch" />
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

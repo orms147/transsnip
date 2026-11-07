@@ -65,7 +65,13 @@ class TranslateActivity : Activity() {
         text = selectedText(intent)
         sourceView.text = text
         if (settings.zhStudy && LangDetect.detect(text) == "zh-Hans") showChinese()
-        start()
+        // Opened from the screen overlay: that line is already translated.
+        val ready = intent.getStringExtra(EXTRA_TRANSLATION).orEmpty()
+        if (ready.isNotBlank()) {
+            showResult(TranslationResult(text, LangDetect.detect(text), settings.targetLang, ready))
+        } else {
+            start()
+        }
     }
 
     override fun onDestroy() {
@@ -121,7 +127,12 @@ class TranslateActivity : Activity() {
         showLoading()
         val model = settings.model
         worker.execute {
-            val outcome = runCatching { Translator(OpenRouterClient(key, model)).translate(text, target) }
+            // Streamed: the first words show up while the rest is still being generated.
+            val outcome = runCatching {
+                Translator.forModel(OpenRouterClient(key, model), model).translate(text, target) { partial ->
+                    runOnUiThread { if (!isDestroyed) showPartial(partial) }
+                }
+            }
             runOnUiThread {
                 if (isDestroyed) return@runOnUiThread
                 outcome.fold(::showResult) { showError(it.message ?: it.toString()) }
@@ -135,6 +146,13 @@ class TranslateActivity : Activity() {
         errorView.visibility = View.GONE
         retryBtn.visibility = View.GONE
         copyBtn.isEnabled = false
+    }
+
+    private fun showPartial(partial: String) {
+        if (partial.isEmpty()) return
+        progress.visibility = View.GONE
+        resultView.text = partial
+        resultView.visibility = View.VISIBLE
     }
 
     private fun showResult(r: TranslationResult) {
@@ -154,6 +172,10 @@ class TranslateActivity : Activity() {
         errorView.visibility = View.VISIBLE
         retryBtn.visibility = View.VISIBLE
         copyBtn.isEnabled = false
+    }
+
+    companion object {
+        const val EXTRA_TRANSLATION = "io.github.orms147.transsnip.TRANSLATION"
     }
 
     private fun copy() {
