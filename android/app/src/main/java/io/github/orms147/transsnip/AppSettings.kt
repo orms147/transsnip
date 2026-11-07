@@ -22,6 +22,11 @@ class AppSettings(context: Context) {
         get() = prefs.getString("target", "vi") ?: "vi"
         set(value) = prefs.edit().putString("target", value).apply()
 
+    /** Chinese study aids in the popup: pinyin, Hán-Việt, tap a word → word card. */
+    var zhStudy: Boolean
+        get() = prefs.getBoolean("zh_study", true)
+        set(value) = prefs.edit().putBoolean("zh_study", value).apply()
+
     /** AES-GCM with a non-exportable key in the Android Keystore. */
     var apiKey: String?
         get() {

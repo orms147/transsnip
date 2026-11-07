@@ -11,10 +11,15 @@ import android.widget.Button
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
+import android.widget.FrameLayout
+import io.github.orms147.transsnip.translate.LangDetect
 import io.github.orms147.transsnip.translate.OpenRouterClient
 import io.github.orms147.transsnip.translate.Prompts
 import io.github.orms147.transsnip.translate.TranslationResult
 import io.github.orms147.transsnip.translate.Translator
+import io.github.orms147.transsnip.zh.ChineseText
+import io.github.orms147.transsnip.zh.ChineseView
+import io.github.orms147.transsnip.zh.ZhDict
 import java.util.concurrent.Executors
 
 /**
@@ -25,6 +30,7 @@ import java.util.concurrent.Executors
 class TranslateActivity : Activity() {
 
     private val worker = Executors.newSingleThreadExecutor()
+    private val zhWorker = Executors.newSingleThreadExecutor()   // dictionary work runs beside the API call
     private lateinit var settings: AppSettings
     private lateinit var header: TextView
     private lateinit var sourceView: TextView
@@ -58,12 +64,48 @@ class TranslateActivity : Activity() {
 
         text = selectedText(intent)
         sourceView.text = text
+        if (settings.zhStudy && LangDetect.detect(text) == "zh-Hans") showChinese()
         start()
     }
 
     override fun onDestroy() {
         worker.shutdownNow()
+        zhWorker.shutdownNow()
         super.onDestroy()
+    }
+
+    /** Pinyin + Hán-Việt for each word in place of the plain source line. */
+    private fun showChinese() {
+        val src = text
+        zhWorker.execute {
+            val dict = ZhDict.get(this) ?: return@execute
+            val tokens = dict.tokenize(src)
+            val data = ChineseText(src, tokens, tokens.map { if (it.isWord) dict.tokenHanviet(it) else "" },
+                dict.sentenceHanviet(tokens))
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                val view = ChineseView(this).apply {
+                    bind(data)
+                    onWord = { w, a, b -> openWord(w, a, b) }
+                }
+                findViewById<FrameLayout>(R.id.zh_container).apply {
+                    removeAllViews()
+                    addView(view)
+                    visibility = View.VISIBLE
+                }
+                sourceView.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun openWord(word: String, start: Int, end: Int) {
+        val sentence = ZhDict.sentenceAt(text, start, end)
+        startActivity(Intent(this, WordCardActivity::class.java)
+            .putExtra(WordCardActivity.EXTRA_WORD, word)
+            .putExtra(WordCardActivity.EXTRA_SENTENCE, sentence)
+            // The translation belongs to the whole text; only show it when the
+            // text IS that one sentence.
+            .putExtra(WordCardActivity.EXTRA_TRANSLATION, if (sentence == text.trim()) translation else ""))
     }
 
     private fun selectedText(intent: Intent): String =

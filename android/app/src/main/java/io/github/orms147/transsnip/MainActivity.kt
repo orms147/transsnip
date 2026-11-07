@@ -6,6 +6,7 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.TextView
 import io.github.orms147.transsnip.translate.OpenRouterClient
 import io.github.orms147.transsnip.translate.Translator
@@ -20,6 +21,7 @@ class MainActivity : Activity() {
     private lateinit var modelSpinner: Spinner
     private lateinit var targetSpinner: Spinner
     private lateinit var status: TextView
+    private lateinit var zhSwitch: Switch
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -29,6 +31,9 @@ class MainActivity : Activity() {
         modelSpinner = findViewById(R.id.model)
         targetSpinner = findViewById(R.id.target)
         status = findViewById(R.id.status)
+        zhSwitch = findViewById(R.id.zh_study)
+        zhSwitch.isChecked = settings.zhStudy
+        zhSwitch.setOnCheckedChangeListener { _, on -> settings.zhStudy = on }
 
         // Debug builds only: a key piped into files/debug_api_key (adb exec-in
         // run-as … — stdin, so it never shows up on a command line or in

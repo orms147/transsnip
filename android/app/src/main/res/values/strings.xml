@@ -15,6 +15,7 @@
     <string name="key_saved_hint">Đã lưu key (nhập để thay)</string>
     <string name="model_label">Model dịch</string>
     <string name="target_label">Dịch sang</string>
+    <string name="zh_study">Học tiếng Trung: pinyin, Hán-Việt, chạm từ để mở thẻ từ</string>
     <string name="save">Lưu</string>
     <string name="test">Dịch thử</string>
     <string name="saved">Đã lưu.</string>
