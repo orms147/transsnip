@@ -39,7 +39,11 @@ class ScreenTile : TileService() {
     }
 
     override fun onClick() {
-        if (ScreenService.instance == null) return openSetup()
+        if (ScreenService.instance == null) {
+            // Killed by the system (swiped away): restart it in place if we may.
+            if (Revive.now(this)) Toast.makeText(this, R.string.reviving, Toast.LENGTH_SHORT).show() else openSetup()
+            return
+        }
         val settings = AppSettings(this)
         settings.bubble = !settings.bubble
         Toast.makeText(this, if (settings.bubble) R.string.turned_on else R.string.bubble_hidden, Toast.LENGTH_SHORT).show()

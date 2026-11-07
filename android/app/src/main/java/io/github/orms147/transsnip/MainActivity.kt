@@ -15,6 +15,7 @@ import android.widget.EditText
 import android.widget.Spinner
 import android.widget.Switch
 import android.widget.TextView
+import io.github.orms147.transsnip.screen.Revive
 import io.github.orms147.transsnip.screen.ScreenService
 import io.github.orms147.transsnip.translate.OpenRouterClient
 import io.github.orms147.transsnip.translate.Translator
@@ -109,6 +110,9 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        // Swiped away and killed by the system: bring it back without a trip
+        // to the accessibility settings (needs the one-time adb grant).
+        if (Revive.now(this)) Toast.makeText(this, R.string.reviving, Toast.LENGTH_SHORT).show()
         refreshSteps()
         // Right after the app was killed, the system takes a moment to start
         // the service again: look again before calling it stopped.
@@ -165,6 +169,10 @@ class MainActivity : Activity() {
 
     /** Straight to TransSnip's own switch where the system allows it (Android 12+). */
     private fun openAccessibility() {
+        if (Revive.now(this, evenIfOff = true)) {
+            Toast.makeText(this, R.string.reviving, Toast.LENGTH_SHORT).show()
+            return
+        }
         val me = ComponentName(this, ScreenService::class.java).flattenToString()
         val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
             .putExtra(Intent.EXTRA_COMPONENT_NAME, me)

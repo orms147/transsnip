@@ -45,6 +45,7 @@
     <string name="screen_restricted">Báo \"Ứng dụng đã bị từ chối cấp quyền\"? Đó là Android chặn app cài từ file APK. Bấm Đóng, rồi bấm nút dưới đây → ⋮ (góc trên phải) → \"Cho phép chế độ cài đặt hạn chế\" → quay lại bật TransSnip. Máy Xiaomi: đặt Tiết kiệm pin → Không giới hạn để bong bóng không tự tắt.</string>
     <string name="screen_stalled">⚠ Dịch vụ đã bị hệ thống dừng (thường do vuốt tắt app trên Xiaomi/Oppo/Vivo) nên bong bóng không hiện. Bật lại: Mở Trợ năng → tắt rồi bật lại TransSnip.
 Để không bị lại: Thông tin ứng dụng → bật Tự khởi chạy, Tiết kiệm pin → Không giới hạn.</string>
+    <string name="reviving">Đang bật lại TransSnip…</string>
     <string name="screen_reenable">Mở Trợ năng</string>
     <string name="open_app_info">Mở thông tin ứng dụng</string>
     <string name="screen_on">Trợ năng: đã bật ✓</string>
