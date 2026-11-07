@@ -57,6 +57,14 @@
     <string name="screen_hint">Vuốt, chạm như bình thường — bản dịch tự cập nhật · Giữ ✕: chạm ô để tra từ · Chạm ✕: tắt</string>
     <string name="lookup_on">Chế độ tra: chạm ô để xem pinyin, thẻ từ · giữ ô: chữ gốc · chạm chỗ trống để quay lại</string>
     <string name="lookup_off">Đã quay lại — vuốt, chạm như bình thường</string>
+    <string name="menu_select">Chọn chữ (sao chép)</string>
+    <string name="select_hint">Chạm hoặc kéo qua chữ</string>
+    <string name="select_reading">Đang đọc chữ trong ảnh…</string>
+    <string name="select_none">Không thấy chữ nào</string>
+    <string name="select_copy">Sao chép</string>
+    <string name="select_translate">Dịch</string>
+    <string name="select_copy_all">Chép hết</string>
+    <string name="text_copied">Đã sao chép</string>
     <string name="menu_lookup">Dịch &amp; tra từ</string>
     <string name="menu_hide">Tắt (bật lại bằng 1 chạm)</string>
     <string name="tile_on">Đang bật</string>
@@ -66,7 +74,7 @@
     <string name="bubble_show_again">Bật lại TransSnip</string>
     <string name="bubble_is_hidden">TransSnip đang tạm tắt (dịch vụ vẫn bật, không đọc màn hình).</string>
     <string name="turned_off">Đã tắt hẳn dịch vụ. Bật lại phải vào Trợ năng — để tạm tắt, dùng ô TransSnip trong Cài đặt nhanh.</string>
-    <string name="bubble_first_hint">Chạm bong bóng để dịch màn hình. Giữ bong bóng để mở menu (tắt). Thêm ô \"TransSnip\" vào Cài đặt nhanh để bật/tắt nhanh.</string>
+    <string name="bubble_first_hint">Chạm bong bóng để dịch màn hình. Giữ bong bóng để mở menu (chọn chữ để sao chép, tắt). Thêm ô \"TransSnip\" vào Cài đặt nhanh để bật/tắt nhanh.</string>
     <string name="screen_turn_off">Tắt hẳn dịch vụ</string>
     <string name="bubble_desc">TransSnip — dịch màn hình</string>
     <string name="tile_label">TransSnip</string>

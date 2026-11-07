@@ -23,7 +23,12 @@ object Ocr {
      * [pad]: OCR boxes hug the glyphs; grow them so the cover hides anti-aliased edges too.
      */
     class Line(val box: Rect, val text: String)
-    class Result(val blocks: List<ScreenItem>, val lines: List<Line>)
+    class Result(val blocks: List<ScreenItem>, val lines: List<Line>, val raw: List<Block> = emptyList())
+
+    /** Full structure, for selecting text: blocks → lines → words, each with its box. */
+    class Word(val box: Rect, val text: String)
+    class WordLine(val box: Rect, val words: List<Word>)
+    class Block(val box: Rect, val lines: List<WordLine>)
 
     fun recognize(bitmap: Bitmap, pad: Int = 0): Result {
         val result = Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)), 15, TimeUnit.SECONDS)
@@ -36,7 +41,16 @@ object Ocr {
             if (lines.isEmpty()) null
             else ScreenItem(joinLines(lines), box, heights.getOrNull(heights.size / 2)?.let { it / GLYPH_TO_FONT })
         }
-        return Result(blocks, lineBoxes)
+        val raw = result.textBlocks.mapNotNull { b ->
+            val lines = b.lines.mapNotNull { l ->
+                val box = l.boundingBox ?: return@mapNotNull null
+                val words = l.elements.mapNotNull { e -> e.boundingBox?.let { Word(it, e.text) } }
+                    .ifEmpty { listOf(Word(box, l.text)) }
+                WordLine(box, words)
+            }
+            b.boundingBox?.takeIf { lines.isNotEmpty() }?.let { Block(it, lines) }
+        }
+        return Result(blocks, lineBoxes, raw)
     }
 
     /** An OCR line box is about this many times the font size tall. */

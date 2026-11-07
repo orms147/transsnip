@@ -12,7 +12,8 @@ import android.view.accessibility.AccessibilityWindowInfo
  * A piece of text on screen and where it is, in screen pixels.
  * [fontPx]: the original text size when the app told us (null → estimate).
  */
-data class ScreenItem(val text: String, val bounds: Rect, val fontPx: Float? = null)
+data class ScreenItem(val text: String, val bounds: Rect, val fontPx: Float? = null,
+                      val chars: List<Rect>? = null)
 
 /**
  * Reads the text other apps already expose to accessibility services: exact
@@ -62,7 +63,8 @@ object ScreenText {
             walk(child, own, screen, inner, out, depth + 1)
         }
         if (out.size > before) return
-        val raw = node.text?.toString()?.trim()
+        val nodeText = node.text?.toString()
+        val raw = nodeText?.trim()
         if (raw.isNullOrEmpty() || node.isPassword) return
         // Text on an image node is a description (or Chrome's "this image
         // isn't labeled" hint), not something drawn on screen.
@@ -75,8 +77,10 @@ object ScreenText {
         if (visible.width().toLong() * visible.height() * 2 < full) return
         // A "text" covering most of the screen is a title/label, not text drawn there.
         if (visible.width().toLong() * visible.height() > screen.width().toLong() * screen.height() / 2 && raw.length < 60) return
-        val (tight, font) = glyphBox(node, raw, visible)
-        out += ScreenItem(clean(raw), tight ?: visible, font)
+        val lead = nodeText!!.length - nodeText.trimStart().length
+        val g = glyphBox(node, lead, raw, visible)
+        val text = clean(raw)
+        out += ScreenItem(text, g.box ?: visible, g.font, g.chars?.take(text.length))
     }
 
     /**
@@ -88,33 +92,41 @@ object ScreenText {
      * characters cut off at a screen edge report only their visible part.
      * Only the visible part counts — a scrolled TextView reports every char.
      */
-    private fun glyphBox(node: AccessibilityNodeInfo, text: String, view: Rect): Pair<Rect?, Float?> {
+    private class Glyphs(val box: Rect?, val font: Float?, val chars: List<Rect>?)
+    private val none = Glyphs(null, null, null)
+
+    /** [start]: where [text] begins in the node's text (leading spaces trimmed). */
+    private fun glyphBox(node: AccessibilityNodeInfo, start: Int, text: String, view: Rect): Glyphs {
         val key = AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_KEY
-        if (key !in node.availableExtraData) return null to null
+        if (key !in node.availableExtraData) return none
         return try {
             val n = minOf(text.length, MAX_CHARS)
             val args = Bundle().apply {
-                putInt(AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_START_INDEX, 0)
+                putInt(AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_START_INDEX, start)
                 putInt(AccessibilityNodeInfo.EXTRA_DATA_TEXT_CHARACTER_LOCATION_ARG_LENGTH, n)
             }
-            if (!node.refreshWithExtraData(key, args)) return null to null
+            if (!node.refreshWithExtraData(key, args)) return none
             val boxes = if (Build.VERSION.SDK_INT >= 33) {
                 node.extras.getParcelableArray(key, RectF::class.java)
             } else {
                 @Suppress("DEPRECATION")
                 node.extras.getParcelableArray(key)?.filterIsInstance<RectF>()?.toTypedArray()
-            } ?: return null to null
-            val visible = boxes.filterNotNull().filter { it.width() > 0 && it.height() > 0 }
-                .map { Rect(it.left.toInt(), it.top.toInt(), it.right.toInt(), it.bottom.toInt()) }
-                .filter { Rect.intersects(it, view) }
-            if (visible.isEmpty()) return null to null
+            } ?: return none
+            // One box per character, in text order; empty where it isn't on screen.
+            val chars = boxes.map { f ->
+                if (f == null || f.width() <= 0 || f.height() <= 0) Rect()
+                else Rect(f.left.toInt(), f.top.toInt(), f.right.toInt(), f.bottom.toInt())
+                    .takeIf { Rect.intersects(it, view) } ?: Rect()
+            }
+            val visible = chars.filter { !it.isEmpty }
+            if (visible.isEmpty()) return none
             val box = Rect(visible[0])
             visible.forEach { box.union(it) }
             box.intersect(view)
             box.inset(-PAD, -PAD)
-            box to visible.maxOf { it.height() } / LINE_TO_FONT
+            Glyphs(box, visible.maxOf { it.height() } / LINE_TO_FONT, chars)
         } catch (_: Exception) {
-            null to null
+            none
         }
     }
 

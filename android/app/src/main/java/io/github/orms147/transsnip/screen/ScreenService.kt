@@ -4,6 +4,8 @@ import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
 import android.graphics.Path
 import android.graphics.PointF
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
@@ -156,6 +158,7 @@ class ScreenService : AccessibilityService() {
         if (live) return setLookup(!lookup)
         val b = bubble ?: return
         menu.show(b.bounds(), screenRect(), listOf(
+            BubbleMenu.Item(getString(R.string.menu_select)) { startSelect() },
             BubbleMenu.Item(getString(R.string.menu_lookup)) { lookup = true; start() },
             BubbleMenu.Item(getString(R.string.menu_hide)) { onBubbleDropped() },
             BubbleMenu.Item(getString(R.string.menu_settings)) {
@@ -164,8 +167,93 @@ class ScreenService : AccessibilityService() {
         ))
     }
 
+    private var select: SelectOverlay? = null
+
+    /**
+     * "Select text": freeze the screen, make its text selectable, copy or
+     * translate the selection. Accessibility text is there at once; OCR adds
+     * what only exists as pixels a moment later. Nothing leaves the phone
+     * unless the user taps "Translate".
+     */
+    private fun startSelect() {
+        dismiss(showBubble = false)
+        bubble?.hide()
+        val gen = generation
+        main.postDelayed({
+            if (gen != generation) return@postDelayed
+            val screen = screenRect()
+            val items = ScreenText.collect(this, screen)
+            takeScreenshot { shot ->
+                if (gen != generation) { shot?.recycle(); return@takeScreenshot }
+                val overlay = SelectOverlay(this, wm, screen, shot, statusBarHeight(), navBarHeight(),
+                    onCopy = { text -> copy(text); closeSelect() },
+                    onTranslate = { text -> closeSelect(); openTranslate(text, "") },
+                    onClose = ::closeSelect)
+                select = overlay
+                val a11y = items.mapIndexed { i, item -> SelectOverlay.linesOf(item, i) }
+                overlay.setLines(a11y.flatten())
+                overlay.attach()
+                if (shot == null) {
+                    if (items.isEmpty()) overlay.setHint(getString(R.string.select_none))
+                    return@takeScreenshot
+                }
+                overlay.setHint(getString(R.string.select_reading))
+                pool.execute {
+                    val ocr = runCatching { Ocr.recognize(shot) }.getOrNull()
+                    main.post {
+                        if (select !== overlay) return@post
+                        val lines = ocr?.lines.orEmpty()
+                        // Web pages report text hidden under a sheet as visible: where
+                        // the screenshot shows clearly different text, trust the pixels.
+                        val keep = items.indices.filter { i -> !contradicted(items[i], lines) }
+                        val kept = keep.map { items[it].bounds }
+                        val top = statusBarHeight()
+                        val extra = ocr?.raw.orEmpty().withIndex().filter { (_, b) ->
+                            b.box.centerY() > top && kept.none { overlap(b.box, it) > 0.3 }
+                        }.flatMap { (k, b) -> SelectOverlay.linesOf(b, items.size + k) }
+                        overlay.setLines(keep.flatMap { a11y[it] } + extra)
+                        overlay.setHint(getString(if (overlay.hasText) R.string.select_hint else R.string.select_none))
+                    }
+                }
+            }
+        }, 50)
+    }
+
+    /** OCR read something clearly different where this item claims to be. */
+    private fun contradicted(item: ScreenItem, lines: List<Ocr.Line>): Boolean {
+        val letters = item.text.filter { it.isLetter() }
+        if (letters.length < 3) return false
+        val seen = lines.filter { overlap(it.box, item.bounds) > 0.15 || overlap(item.bounds, it.box) > 0.15 }
+        if (seen.isEmpty()) return false
+        val ocr = seen.joinToString("") { it.text }
+        return letters.count { it in ocr }.toDouble() / letters.length < 0.3
+    }
+
+    private fun closeSelect() {
+        val s = select ?: return
+        select = null
+        s.detach()
+        generation++
+        if (session == null && ownUi == 0) bubble?.show()
+    }
+
+    private fun copy(text: String) {
+        getSystemService(ClipboardManager::class.java)?.setPrimaryClip(ClipData.newPlainText("TransSnip", text))
+        // Android 13+ shows its own "copied" note only for apps in front, not for this service.
+        Toast.makeText(this, R.string.text_copied, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun navBarHeight(): Int =
+        resources.getIdentifier("navigation_bar_height", "dimen", "android")
+            .takeIf { it != 0 }?.let { resources.getDimensionPixelSize(it) } ?: 0
+
+    private fun statusBarHeight(): Int =
+        resources.getIdentifier("status_bar_height", "dimen", "android")
+            .takeIf { it != 0 }?.let { resources.getDimensionPixelSize(it) } ?: 0
+
     /** Off for real: the accessibility service disables itself (Android 7+). */
     fun turnOff() {
+        closeSelect()
         dismiss(showBubble = false)
         menu.dismiss()
         Toast.makeText(this, R.string.turned_off, Toast.LENGTH_LONG).show()
@@ -181,6 +269,8 @@ class ScreenService : AccessibilityService() {
     override fun onDestroy() {
         if (instance === this) instance = null
         if (::settings.isInitialized) {
+            select?.detach()
+            select = null
             dismiss(showBubble = false)
             bubble?.remove()
             settings.offChange(prefListener)
@@ -193,7 +283,7 @@ class ScreenService : AccessibilityService() {
         if (settings.bubble) {
             val b = bubble ?: Bubble(this, wm, settings, ::screenRect, ::onBubbleTap, ::onBubbleDropped, ::onBubbleLongPress)
                 .also { bubble = it }
-            if (session == null && ownUi == 0) b.show()
+            if (session == null && select == null && ownUi == 0) b.show()
         } else {
             bubble?.remove()
             bubble = null
@@ -216,7 +306,7 @@ class ScreenService : AccessibilityService() {
     }
 
     private fun onOwnUiChanged() {
-        if (ownUi > 0) bubble?.hide() else if (session == null) bubble?.show()
+        if (ownUi > 0) bubble?.hide() else if (session == null && select == null) bubble?.show()
     }
 
     /** Quick Settings tile: close the shade first — it must not be in the screenshot. */
@@ -353,11 +443,15 @@ class ScreenService : AccessibilityService() {
         val item = s.items.getOrNull(i) ?: return
         val translation = if (s.isTranslated(i)) s.composed(i) else ""
         dismiss()
+        openTranslate(item.text, translation)
+    }
+
+    private fun openTranslate(text: String, translation: String) {
         startActivity(
             Intent(this, TranslateActivity::class.java)
                 .setAction(Intent.ACTION_SEND)
                 .setType("text/plain")
-                .putExtra(Intent.EXTRA_TEXT, item.text)
+                .putExtra(Intent.EXTRA_TEXT, text)
                 .putExtra(TranslateActivity.EXTRA_TRANSLATION, translation)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         )
