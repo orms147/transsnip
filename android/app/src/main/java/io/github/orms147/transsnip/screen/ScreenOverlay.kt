@@ -29,11 +29,12 @@ import kotlin.math.hypot
  * per piece of text, at the text's own position, painted in the colour that
  * was behind it and filled with the translation as it streams in.
  *
- * Touch:
+ * Touch: by default the layer lets every touch through to the app (live
+ * mode — scroll and tap as usual; the service refreshes the translations).
+ * In look-up mode ([setInteractive]) it takes touches:
  *  - tap a box → details popup;   hold a box → peek at the original;
- *  - swipe anywhere → [onSwipe] (the service replays it on the app below,
- *    so the page scrolls, then translates the new screen);
- *  - tap empty space → close.
+ *  - swipe → [onSwipe] (replayed on the app below);
+ *  - tap empty space → [onDismiss] (back to live mode).
  */
 class ScreenOverlay(
     private val context: Context,
@@ -55,6 +56,7 @@ class ScreenOverlay(
     private val status = TextView(context)
     private val offset = IntArray(2)
     private var attached = false
+    private var lp: WindowManager.LayoutParams? = null
     private val accent = context.getColor(R.color.accent)
 
     init {
@@ -80,6 +82,7 @@ class ScreenOverlay(
             screen.width(), screen.height(),
             WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
                 WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
             PixelFormat.TRANSLUCENT,
@@ -92,6 +95,7 @@ class ScreenOverlay(
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
         }
+        this.lp = lp
         root.alpha = 0f
         wm.addView(root, lp)
         attached = true
@@ -103,6 +107,20 @@ class ScreenOverlay(
             root.getLocationOnScreen(offset)
             boxes.keys.forEach(::place)
         }
+    }
+
+    /** Look-up mode: the layer takes touches (tap a box). Otherwise touches go to the app. */
+    fun setInteractive(on: Boolean) {
+        val p = lp ?: return
+        val flag = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+        p.flags = if (on) p.flags and flag.inv() else p.flags or flag
+        if (attached) runCatching { wm.updateViewLayout(root, p) }
+    }
+
+    /** The page moved under the translations: get them out of the way at once. */
+    fun fadeOut() {
+        root.animate().cancel()
+        root.animate().alpha(0f).setDuration(80).start()
     }
 
     fun detach() {

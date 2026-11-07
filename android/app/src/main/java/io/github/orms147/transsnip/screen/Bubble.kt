@@ -36,6 +36,7 @@ class Bubble(
     private val screen: () -> Rect,
     private val onTap: () -> Unit,
     private val onDropOnClose: () -> Unit,
+    private val onLongPress: () -> Unit,
 ) {
     private val dp = context.resources.displayMetrics.density
     private val size = (48 * dp).toInt()
@@ -73,6 +74,13 @@ class Bubble(
 
     private var shown = false
     private var active = false
+    private var lookup = false
+    private var longFired = false
+    private val longPress = Runnable {
+        longFired = true
+        view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        onLongPress()
+    }
 
     init {
         paint()
@@ -89,12 +97,15 @@ class Bubble(
                     downX = e.rawX; downY = e.rawY
                     startX = lp.x; startY = lp.y
                     dragging = false
+                    longFired = false
+                    main.postDelayed(longPress, ViewConfiguration.getLongPressTimeout().toLong())
                 }
                 MotionEvent.ACTION_MOVE -> {
                     val dx = e.rawX - downX
                     val dy = e.rawY - downY
                     if (!dragging && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
                         dragging = true
+                        main.removeCallbacks(longPress)
                         showTarget()
                     }
                     if (dragging) {
@@ -111,7 +122,10 @@ class Bubble(
                     }
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                    if (dragging) {
+                    main.removeCallbacks(longPress)
+                    if (longFired) {
+                        // handled when the press became long
+                    } else if (dragging) {
                         hideTarget()
                         if (overTarget) {
                             overTarget = false
@@ -138,8 +152,9 @@ class Bubble(
     ).apply { gravity = Gravity.TOP or Gravity.START }
 
     /** Translations on screen: the bubble becomes their close button. */
-    fun setActive(on: Boolean) {
+    fun setActive(on: Boolean, lookUp: Boolean = false) {
         active = on
+        lookup = on && lookUp
         paint()
         wake()
         sleepLater()
@@ -149,7 +164,8 @@ class Bubble(
         view.text = if (active) "✕" else "译"
         view.background = GradientDrawable().apply {
             shape = GradientDrawable.OVAL
-            setColor(if (active) 0xF0202124.toInt() else accent)
+            // Look-up mode: the ✕ turns accent-coloured — touches go to the boxes now.
+            setColor(if (active && !lookup) 0xF0202124.toInt() else accent)
             setStroke((2 * dp).toInt(), 0x66FFFFFF)
         }
     }

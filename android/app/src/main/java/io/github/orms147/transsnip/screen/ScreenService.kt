@@ -61,6 +61,9 @@ class ScreenService : AccessibilityService() {
 
     private val recapture = Runnable { if (session == null) start(delay = 0) }
     private var awaitingScroll = false
+    private var live = false          // translations are on (✕ shows) — survives refreshes
+    private var lookup = false        // look-up mode: overlay takes touches
+    private var livePkg: String? = null
 
     override fun onServiceConnected() {
         instance = this
@@ -77,9 +80,71 @@ class ScreenService : AccessibilityService() {
      * fling) to stop: every scroll event pushes the re-translation back a bit.
      */
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        if (!awaitingScroll || event?.eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED) return
-        main.removeCallbacks(recapture)
-        main.postDelayed(recapture, SCROLL_QUIET_MS)
+        val e = event ?: return
+        val pkg = e.packageName?.toString()
+        if (pkg == packageName) return
+        if (awaitingScroll && e.eventType == AccessibilityEvent.TYPE_VIEW_SCROLLED) {
+            main.removeCallbacks(recapture)
+            main.postDelayed(recapture, SCROLL_QUIET_MS)
+            return
+        }
+        if (!live || lookup) return
+        when (e.eventType) {
+            AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED -> {
+                // Another app (or home) came up: translations of the old one are
+                // meaningless. A keyboard or toast also sends this, from its own
+                // package — so check which app is actually in front once it settles.
+                if (pkg != null && pkg != livePkg) {
+                    main.postDelayed({
+                        if (!live) return@postDelayed
+                        val front = rootInActiveWindow?.packageName?.toString()
+                        if (front != null && front != livePkg && front != packageName) dismiss() else liveRefresh()
+                    }, 300)
+                    return
+                }
+                liveRefresh()
+            }
+            AccessibilityEvent.TYPE_VIEW_SCROLLED, AccessibilityEvent.TYPE_VIEW_CLICKED -> liveRefresh()
+        }
+    }
+
+    /**
+     * Live mode: touches go straight to the app. When it scrolls (or the user
+     * taps something), the boxes are stale — fade them now, translate again
+     * once the screen has been still for a moment (seen lines are cached).
+     */
+    private fun liveRefresh() {
+        session?.overlay?.fadeOut()
+        main.removeCallbacks(liveRecapture)
+        main.postDelayed(liveRecapture, LIVE_QUIET_MS)
+    }
+
+    private val liveRecapture = Runnable {
+        if (!live || lookup) return@Runnable
+        val key = settings.apiKey ?: return@Runnable
+        generation++
+        session?.overlay?.detach()
+        session = null
+        val gen = ++generation
+        main.postDelayed({ if (gen == generation) capture(gen, key, quiet = true) }, 16)
+    }
+
+    /** Hold ✕: look-up mode (tap boxes) ↔ live mode (touches go to the app). */
+    private fun setLookup(on: Boolean) {
+        lookup = on
+        bubble?.setActive(live, on)
+        val s = session ?: return
+        s.overlay.setInteractive(on)
+        s.overlay.setStatus(getString(if (on) R.string.lookup_on else R.string.lookup_off), autoHideMs = 2500)
+        if (!on) liveRefresh()   // the page may have changed while in look-up mode
+    }
+
+    private fun onBubbleLongPress() {
+        if (live) setLookup(!lookup) else { lookup = true; start() }
+    }
+
+    private fun onOverlayTapEmpty() {
+        if (lookup) setLookup(false) else dismiss()
     }
 
     override fun onInterrupt() {}
@@ -97,7 +162,7 @@ class ScreenService : AccessibilityService() {
 
     private fun syncBubble() {
         if (settings.bubble) {
-            val b = bubble ?: Bubble(this, wm, settings, ::screenRect, ::onBubbleTap, ::onBubbleDropped)
+            val b = bubble ?: Bubble(this, wm, settings, ::screenRect, ::onBubbleTap, ::onBubbleDropped, ::onBubbleLongPress)
                 .also { bubble = it }
             if (session == null && ownUi == 0) b.show()
         } else {
@@ -117,7 +182,7 @@ class ScreenService : AccessibilityService() {
     }
 
     private fun onBubbleTap() {
-        if (session != null) dismiss() else start()
+        if (live) dismiss() else { lookup = false; start() }
     }
 
     private fun onOwnUiChanged() {
@@ -146,8 +211,11 @@ class ScreenService : AccessibilityService() {
         main.postDelayed({ if (gen == generation) capture(gen, key) }, delay.coerceAtLeast(16))
     }
 
-    private fun capture(gen: Int, key: String) {
+    /** [quiet]: a live refresh — no "translating…" chip flashing on every scroll. */
+    private fun capture(gen: Int, key: String, quiet: Boolean = false) {
         val started = SystemClock.uptimeMillis()
+        live = true
+        if (!quiet) livePkg = rootInActiveWindow?.packageName?.toString()
         val screen = screenRect()
         val target = settings.targetLang
         val exposed = ScreenText.collect(this, screen)
@@ -155,10 +223,10 @@ class ScreenService : AccessibilityService() {
         if (BuildConfig.DEBUG) exposed.forEach {
             android.util.Log.v("TransSnipItems", "${it.bounds.toShortString()} font=${it.fontPx} ${it.text.take(40).replace('\n', '|')}")
         }
-        val overlay = ScreenOverlay(this, wm, screen, ::openBox, { dismiss() }, ::onSwipe)
-        val s = Session(gen, overlay, started)
+        val overlay = ScreenOverlay(this, wm, screen, ::openBox, ::onOverlayTapEmpty, ::onSwipe)
+        val s = Session(gen, overlay, started, quiet)
         session = s
-        overlay.setStatus(getString(R.string.screen_working))
+        if (!quiet) overlay.setStatus(getString(R.string.screen_working))
         // Two waves: the exposed text goes out right now; OCR of the
         // screenshot then adds what only exists as pixels (video, images).
         s.waves = if (items.isNotEmpty()) 2 else 1
@@ -166,7 +234,8 @@ class ScreenService : AccessibilityService() {
         takeScreenshot { shot ->
             if (gen != generation) return@takeScreenshot
             overlay.attach()
-            bubble?.setActive(true)
+            overlay.setInteractive(lookup)
+            bubble?.setActive(true, lookup)
             if (ownUi == 0) bubble?.bringToFront()   // the ✕ sits above the overlay
             s.shot = shot
             s.showBoxes(s.items.indices)
@@ -266,6 +335,9 @@ class ScreenService : AccessibilityService() {
 
     private fun dismiss(showBubble: Boolean = true) {
         generation++
+        live = false
+        lookup = false
+        main.removeCallbacks(liveRecapture)
         awaitingScroll = false
         main.removeCallbacks(recapture)
         session?.overlay?.detach()
@@ -342,6 +414,7 @@ class ScreenService : AccessibilityService() {
 
         private const val SCROLL_START_MS = 450L   // no scroll event at all → content didn't move much
         private const val SCROLL_QUIET_MS = 250L
+        private const val LIVE_QUIET_MS = 400L
         private const val PAD_OCR = 6
         private const val SLOW_MS = 3000L
         private const val GESTURE_DELAY_MS = 120L
@@ -378,7 +451,7 @@ class ScreenService : AccessibilityService() {
         }
 
     /** One tap of the bubble: the items found, their lines, translations so far. Main thread only. */
-    private inner class Session(val gen: Int, val overlay: ScreenOverlay, val started: Long) {
+    private inner class Session(val gen: Int, val overlay: ScreenOverlay, val started: Long, val quiet: Boolean = false) {
         val items = ArrayList<ScreenItem>()
         private val lines = ArrayList<List<String>>()
         private val translated = HashMap<String, String>()
@@ -531,6 +604,7 @@ class ScreenService : AccessibilityService() {
             // a caption seconds later only updates the count, not the clock.
             val ms = doneMs.takeIf { it > 0 } ?: (SystemClock.uptimeMillis() - started)
             if (translated.isNotEmpty() && doneMs == 0L) doneMs = ms
+            if (quiet && error == null) return   // live refresh: no chip unless something went wrong
             when {
                 translated.isEmpty() && !last -> overlay.setStatus(getString(R.string.screen_ocr))
                 items.isEmpty() -> overlay.setStatus(getString(R.string.screen_no_text), autoHideMs = 2500)

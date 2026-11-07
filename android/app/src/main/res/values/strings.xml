@@ -53,7 +53,9 @@
     <string name="screen_no_text">Không thấy chữ nào cần dịch trên màn hình.</string>
     <string name="screen_done">Đã dịch %1$d đoạn · %2$.1f s</string>
     <string name="screen_slow"> (dòng đầu sau %1$.1f s)</string>
-    <string name="screen_hint">Chạm ô: chi tiết · Giữ ô: xem chữ gốc · Vuốt: cuộn trang · Chạm chỗ trống hoặc ✕: đóng</string>
+    <string name="screen_hint">Vuốt, chạm như bình thường — bản dịch tự cập nhật · Giữ ✕: chạm ô để tra từ · Chạm ✕: tắt</string>
+    <string name="lookup_on">Chế độ tra: chạm ô để xem pinyin, thẻ từ · giữ ô: chữ gốc · chạm chỗ trống để quay lại</string>
+    <string name="lookup_off">Đã quay lại — vuốt, chạm như bình thường</string>
     <string name="bubble_desc">TransSnip — dịch màn hình</string>
     <string name="tile_label">Dịch màn hình</string>
 </resources>
