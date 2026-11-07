@@ -106,6 +106,15 @@
                 android:text="@string/bubble_show_again"
                 android:visibility="gone" />
 
+            <!-- Enabled in settings but not running: the system killed it. -->
+            <TextView
+                android:id="@+id/screen_stalled"
+                style="@style/Hint"
+                android:layout_marginTop="10dp"
+                android:text="@string/screen_stalled"
+                android:textColor="@color/todo"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/screen_restricted"
                 style="@style/Hint"

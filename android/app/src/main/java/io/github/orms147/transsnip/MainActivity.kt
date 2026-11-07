@@ -85,9 +85,34 @@ class MainActivity : Activity() {
         }
     }
 
+    // Held in a field: SharedPreferences keeps only a weak reference.
+    private val prefListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> refreshSteps() }
+    private val recheck = Runnable { refreshSteps() }
+
+    /**
+     * Live while visible: hiding / showing the bubble from its menu or the
+     * Quick Settings tile, or the service starting / stopping, shows here at
+     * once — no need to leave and come back.
+     */
+    override fun onStart() {
+        super.onStart()
+        settings.onChange(prefListener)
+        ScreenService.stateListener = { refreshSteps() }
+    }
+
+    override fun onStop() {
+        settings.offChange(prefListener)
+        ScreenService.stateListener = null
+        status.removeCallbacks(recheck)
+        super.onStop()
+    }
+
     override fun onResume() {
         super.onResume()
         refreshSteps()
+        // Right after the app was killed, the system takes a moment to start
+        // the service again: look again before calling it stopped.
+        status.postDelayed(recheck, 1500)
     }
 
     override fun onDestroy() {
@@ -97,14 +122,25 @@ class MainActivity : Activity() {
 
     /** Each step shows ✓ once done; hints for a finished step get out of the way. */
     private fun refreshSteps() {
+        if (isDestroyed) return
         val hasKey = !settings.apiKey.isNullOrBlank()
-        val screenOn = screenServiceOn()
+        val enabled = screenServiceOn()
+        val running = ScreenService.instance != null
+        // Switched on in settings but not running: killed by the system
+        // (Xiaomi & co. on "swipe away"). Only toggling it off/on restarts it.
+        val stalled = enabled && !running
+        val screenOn = enabled && running
         mark(R.id.step_key, R.string.step_key, hasKey)
         mark(R.id.step_screen, R.string.step_screen, screenOn)
+        findViewById<View>(R.id.screen_stalled).visibility = if (stalled) View.VISIBLE else View.GONE
         keyInput.hint = getString(if (hasKey) R.string.key_saved_hint else R.string.api_key_hint)
         findViewById<View>(R.id.key_help).visibility = if (hasKey) View.GONE else View.VISIBLE
-        findViewById<Button>(R.id.screen_settings).setText(if (screenOn) R.string.screen_open_settings else R.string.screen_enable)
-        findViewById<View>(R.id.screen_restricted).visibility = if (screenOn) View.GONE else View.VISIBLE
+        findViewById<Button>(R.id.screen_settings).setText(when {
+            screenOn -> R.string.screen_open_settings
+            stalled -> R.string.screen_reenable
+            else -> R.string.screen_enable
+        })
+        findViewById<View>(R.id.screen_restricted).visibility = if (enabled) View.GONE else View.VISIBLE
         findViewById<View>(R.id.app_info).visibility = if (screenOn) View.GONE else View.VISIBLE
         findViewById<View>(R.id.screen_off).visibility = if (screenOn) View.VISIBLE else View.GONE
         // Hidden from the bubble's menu while this screen was open: show the

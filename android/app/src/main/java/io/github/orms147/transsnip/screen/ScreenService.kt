@@ -70,6 +70,7 @@ class ScreenService : AccessibilityService() {
     override fun onServiceConnected() {
         instance = this
         settings = AppSettings(this)
+        main.post { stateListener?.invoke() }
         wm = getSystemService(WindowManager::class.java)
         settings.onChange(prefListener)
         syncBubble()
@@ -268,6 +269,7 @@ class ScreenService : AccessibilityService() {
 
     override fun onDestroy() {
         if (instance === this) instance = null
+        main.post { stateListener?.invoke() }
         if (::settings.isInitialized) {
             select?.detach()
             select = null
@@ -530,6 +532,9 @@ class ScreenService : AccessibilityService() {
          * (re)starting still counts once it connects.
          */
         private var ownUi = 0
+
+        /** TransSnip's main screen, to show the live state (service started / stopped). Main thread. */
+        var stateListener: (() -> Unit)? = null
 
         fun ownUi(visible: Boolean) {
             ownUi = (ownUi + if (visible) 1 else -1).coerceAtLeast(0)
