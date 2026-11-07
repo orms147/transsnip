@@ -40,20 +40,27 @@ object ScreenText {
     private fun walk(node: AccessibilityNodeInfo, own: String, screen: Rect, out: MutableList<ScreenItem>, depth: Int) {
         if (depth > 80 || !node.isVisibleToUser) return
         if (node.packageName?.toString() == own) return
-        val raw = node.text?.toString()?.trim()
-        if (!raw.isNullOrEmpty() && !node.isPassword) {
-            val r = Rect()
-            node.getBoundsInScreen(r)
-            if (r.intersect(screen) && r.width() > 6 && r.height() > 6) {
-                val (tight, font) = glyphBox(node, raw, r)
-                out += ScreenItem(clean(raw), tight ?: r, font)
-                return   // a TextView's children (if any) repeat its text
-            }
-        }
+        // Children first: a container can carry text of its own that isn't
+        // what's drawn — a WebView reports the page <title> over the whole
+        // page. Its own text counts only when nothing inside has any.
+        val before = out.size
         for (i in 0 until node.childCount) {
             val child = node.getChild(i) ?: continue
             walk(child, own, screen, out, depth + 1)
         }
+        if (out.size > before) return
+        val raw = node.text?.toString()?.trim()
+        if (raw.isNullOrEmpty() || node.isPassword) return
+        // Text on an image node is a description (or Chrome's "this image
+        // isn't labeled" hint), not something drawn on screen.
+        if (node.className?.toString()?.contains("Image") == true) return
+        val r = Rect()
+        node.getBoundsInScreen(r)
+        if (!r.intersect(screen) || r.width() <= 6 || r.height() <= 6) return
+        // A "text" covering most of the screen is a title/label, not text drawn there.
+        if (r.width().toLong() * r.height() > screen.width().toLong() * screen.height() / 2 && raw.length < 60) return
+        val (tight, font) = glyphBox(node, raw, r)
+        out += ScreenItem(clean(raw), tight ?: r, font)
     }
 
     /**
@@ -102,10 +109,26 @@ object ScreenText {
         return t.trimEnd(',', '，', ' ')
     }
 
-    /** The same text at the same place reported by two windows/nodes → once. */
+    /**
+     * The same text at the same place reported twice → once. And where two
+     * pieces of text overlap, only the later one is really visible: views and
+     * web elements come in drawing order, so the later one is on top (a
+     * comment sheet over the page it opened from, which still reports itself
+     * as "visible").
+     */
     private fun dedupe(items: List<ScreenItem>): List<ScreenItem> {
         val seen = HashSet<String>()
-        return items.filter { seen.add("${it.text}@${it.bounds.flattenToString()}") }
+        val unique = items.filter { seen.add("${it.text}@${it.bounds.flattenToString()}") }
+        return unique.filterIndexed { i, a ->
+            (i + 1 until unique.size).none { j -> covers(unique[j].bounds, a.bounds) }
+        }
+    }
+
+    /** [top] hides at least half of [under]. */
+    private fun covers(top: Rect, under: Rect): Boolean {
+        val r = Rect()
+        if (!r.setIntersect(top, under)) return false
+        return r.width().toLong() * r.height() * 2 >= under.width().toLong() * under.height()
     }
 
     private const val MAX_CHARS = 400

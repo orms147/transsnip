@@ -44,6 +44,7 @@ class TranslateActivity : Activity() {
     private lateinit var meta: TextView
     private var tts: TextToSpeech? = null
     private var started = 0L
+    @Volatile private var lastClient: OpenRouterClient? = null
     private var text = ""
     private var translation = ""
 
@@ -149,8 +150,10 @@ class TranslateActivity : Activity() {
         val model = settings.model
         worker.execute {
             // Streamed: the first words show up while the rest is still being generated.
+            val client = OpenRouterClient(key, model)
+            lastClient = client
             val outcome = runCatching {
-                Translator.forModel(OpenRouterClient(key, model), model).translate(text, target) { partial ->
+                Translator.forModel(client, model).translate(text, target) { partial ->
                     runOnUiThread { if (!isDestroyed) showPartial(partial) }
                 }
             }
@@ -194,7 +197,15 @@ class TranslateActivity : Activity() {
         setActions(true)
         val model = AppSettings.MODELS.firstOrNull { it.second == settings.model }?.first
             ?.substringBefore(" —")?.substringBefore(" (") ?: settings.model.substringAfter('/')
-        meta.text = if (started > 0) getString(R.string.meta, model, (System.currentTimeMillis() - started) / 1000.0) else model
+        val total = System.currentTimeMillis() - started
+        meta.text = when {
+            started == 0L -> model
+            // Slow: show which part — network/queue before the model even
+            // answered, or the model writing — so it's clear what to change.
+            total > SLOW_MS -> getString(R.string.meta_slow, model, total / 1000.0,
+                (lastClient?.lastFirstTokenMs ?: 0) / 1000.0, (total - (lastClient?.lastFirstTokenMs ?: 0)) / 1000.0)
+            else -> getString(R.string.meta, model, total / 1000.0)
+        }
     }
 
     private fun showError(message: String) {
@@ -209,6 +220,7 @@ class TranslateActivity : Activity() {
 
     companion object {
         const val EXTRA_TRANSLATION = "io.github.orms147.transsnip.TRANSLATION"
+        private const val SLOW_MS = 3000L
     }
 
     /** Change target language or model right here — and translate again. */

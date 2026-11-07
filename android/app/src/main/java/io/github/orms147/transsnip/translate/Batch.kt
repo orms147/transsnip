@@ -7,7 +7,8 @@ import java.util.concurrent.TimeUnit
  * Translates many short lines (everything readable on a screen) in ONE request:
  * lines go out numbered "[n] text", come back "[n] translation", and each one
  * is handed to [translate]'s callback as soon as its line finishes streaming.
- * Lines the model dropped or left untranslated are retried one by one.
+ * Lines the model dropped or left untranslated get one more try each, in
+ * parallel, without holding up the rest.
  */
 class BatchTranslator(private val completer: Completer, private val minimalFirst: Boolean = false) {
 
@@ -42,28 +43,33 @@ class BatchTranslator(private val completer: Completer, private val minimalFirst
 
     private fun translateChunk(lines: List<String>, target: String, onLine: (Int, String) -> Unit) {
         val items = lines.map { it.replace('\n', ' ').trim() }
-        val single = Translator(completer, minimalFirst)
-        if (items.size == 1) {
-            onLine(0, single.translate(items[0], target).translation)
-            return
-        }
         val done = HashSet<Int>()
+        // Model kept the source script (often a name it won't translate):
+        // keep its answer as a fallback, but try that line once more on its own.
+        val provisional = HashMap<Int, String>()
         fun accept(parsed: Map<Int, String>) {
             for ((i, t) in parsed) {
                 if (i in done || i !in items.indices || t.isBlank()) continue
-                if (Prompts.looksUntranslated(t, target) && Prompts.needsTranslation(items[i], target)) continue
+                if (Prompts.looksUntranslated(t, target) && Prompts.needsTranslation(items[i], target)) {
+                    provisional[i] = t
+                    continue
+                }
                 done += i
                 onLine(i, t)
             }
         }
 
         val source = LangDetect.detect(items.joinToString("\n"))
-        val user = Prompts.batchUserTurn(items, target)
         var failure: Exception? = null
         try {
-            val raw = completer.stream(Prompts.batchSystemPrompt(target, source, minimalFirst), user) { text ->
-                val end = text.lastIndexOf('\n')
-                if (end > 0) accept(parse(text.substring(0, end)))   // only lines that are complete
+            val raw = if (items.size == 1) {
+                completer.stream(Prompts.batchSingleSystem(target, source, minimalFirst), Prompts.userTurn(items[0], target)) {}
+                    .let { "[1] " + it.trim().replace('\n', ' ') }
+            } else {
+                completer.stream(Prompts.batchSystemPrompt(target, source, minimalFirst), Prompts.batchUserTurn(items, target)) { text ->
+                    val end = text.lastIndexOf('\n')
+                    if (end > 0) accept(parse(text.substring(0, end)))   // only lines that are complete
+                }
             }
             accept(parse(raw))
         } catch (e: Exception) {
@@ -74,26 +80,39 @@ class BatchTranslator(private val completer: Completer, private val minimalFirst
         if (missing.isEmpty()) return
         // Nothing usable at all and the request itself failed: report that
         // error rather than firing N more requests that will fail the same way.
-        if (missing.size == items.size && failure != null) {
+        if (missing.size == items.size && failure != null && provisional.isEmpty()) {
             throw failure as? TranslationException ?: TranslationException(failure.message ?: "", failure)
         }
+        // One plain request per missing line, all at once. Whatever isn't back
+        // within STRAGGLER_MS is delivered later — it doesn't hold up the screen.
         val pool = Executors.newFixedThreadPool(minOf(4, missing.size))
-        try {
-            missing.map { i ->
-                pool.submit {
-                    runCatching { single.translate(items[i], target).translation }
-                        .onSuccess { t -> synchronized(this) { onLine(i, t) } }
+        val jobs = missing.map { i ->
+            pool.submit {
+                val item = items[i]
+                val t = runCatching {
+                    completer.complete(Prompts.minimalSystemPrompt(target, LangDetect.detect(item)), Prompts.userTurn(item, target)).trim()
+                }.getOrNull()
+                val use = when {
+                    t.isNullOrEmpty() -> provisional[i]
+                    Prompts.looksUntranslated(t, target) -> provisional[i] ?: t
+                    else -> t
                 }
-            }.forEach { it.get() }
-        } finally {
-            pool.shutdown()
-            pool.awaitTermination(1, TimeUnit.SECONDS)
+                if (use != null) synchronized(this) { onLine(i, use) }
+            }
+        }
+        pool.shutdown()
+        val deadline = System.currentTimeMillis() + STRAGGLER_MS
+        for (j in jobs) {
+            val left = deadline - System.currentTimeMillis()
+            if (left <= 0) break
+            runCatching { j.get(left, TimeUnit.MILLISECONDS) }
         }
     }
 
     companion object {
         private const val CHUNK = 4          // lines per request before splitting
         private const val MAX_PARALLEL = 5
+        private const val STRAGGLER_MS = 1500L
         private val LINE = Regex("""^\s*[\[【(]?(\d{1,3})(?:[\]】)][.:：]?|[.:：])\s?(.*)$""")
 
         /** "[n] text" lines → 0-based index → text. Unnumbered lines are ignored. */

@@ -339,6 +339,7 @@ class ScreenService : AccessibilityService() {
         private const val SCROLL_START_MS = 450L   // no scroll event at all → content didn't move much
         private const val SCROLL_QUIET_MS = 250L
         private const val PAD_OCR = 6
+        private const val SLOW_MS = 3000L
         private const val GESTURE_DELAY_MS = 120L
     }
 
@@ -417,7 +418,11 @@ class ScreenService : AccessibilityService() {
             }
         }
 
+        private var firstAt = 0L
+        private var doneMs = 0L
+
         fun deliver(line: String, translation: String) {
+            if (firstAt == 0L) firstAt = SystemClock.uptimeMillis()
             translated[line] = translation
             for (i in shown) if (line in lines[i]) refresh(i)
         }
@@ -436,7 +441,10 @@ class ScreenService : AccessibilityService() {
         fun waveDone(e: Throwable?) {
             if (e != null) error = e
             val last = --waves <= 0
-            val ms = SystemClock.uptimeMillis() - started
+            // The time that matters is when the main text was done; OCR adding
+            // a caption seconds later only updates the count, not the clock.
+            val ms = doneMs.takeIf { it > 0 } ?: (SystemClock.uptimeMillis() - started)
+            if (translated.isNotEmpty() && doneMs == 0L) doneMs = ms
             when {
                 translated.isEmpty() && !last -> overlay.setStatus(getString(R.string.screen_ocr))
                 items.isEmpty() -> overlay.setStatus(getString(R.string.screen_no_text), autoHideMs = 2500)
@@ -446,7 +454,9 @@ class ScreenService : AccessibilityService() {
                     getString(R.string.screen_done, shown.count { isTranslated(it) }, ms / 1000.0) + "\n" +
                         getString(R.string.screen_hint), autoHideMs = 5000)
                 else -> {
-                    val done = getString(R.string.screen_done, shown.count { isTranslated(it) }, ms / 1000.0)
+                    var done = getString(R.string.screen_done, shown.count { isTranslated(it) }, ms / 1000.0)
+                    // Slow: was it the wait for the first answer, or the tail?
+                    if (ms > SLOW_MS && firstAt > 0) done += getString(R.string.screen_slow, (firstAt - started) / 1000.0)
                     // The gestures aren't discoverable: spell them out the first few times.
                     if (settings.hintsShown < 3) {
                         settings.hintsShown += 1

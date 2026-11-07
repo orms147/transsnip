@@ -57,6 +57,10 @@ object Prompts {
             "exactly one line per input line in the same \"[n] translation\" format, keeping each " +
             "number. Do not merge, split or skip lines."
 
+    /** A one-line "batch": the plain prompt, no numbering to keep track of. */
+    fun batchSingleSystem(target: String, source: String?, minimal: Boolean): String =
+        if (minimal) minimalSystemPrompt(target, source) else systemPrompt(target, source)
+
     fun batchUserTurn(lines: List<String>, target: String): String =
         "Translate into ${langName(target)}:\n\n" +
             lines.mapIndexed { i, s -> "[${i + 1}] $s" }.joinToString("\n")

@@ -19,7 +19,15 @@ class OpenRouterClient(private val apiKey: String, private val model: String) : 
     // Cheap models often "think" by default — seconds of hidden, billed output
     // a translation doesn't need. Models that REQUIRE reasoning reject "none":
     // then retry without it and stop sending it.
-    private var reasoningOff = true
+    private val reasoningOff get() = model !in reasoningRefused
+
+    /** Last request: until the response headers (network + queue), until the first token, total. */
+    @Volatile var lastHeadersMs = 0L
+        private set
+    @Volatile var lastFirstTokenMs = 0L
+        private set
+    @Volatile var lastTotalMs = 0L
+        private set
 
     override fun complete(system: String, user: String): String =
         withReasoningRetry { request(system, user, null) }
@@ -31,7 +39,7 @@ class OpenRouterClient(private val apiKey: String, private val model: String) : 
         block()
     } catch (e: TranslationException) {
         if (!reasoningOff || e.message?.contains("reasoning", ignoreCase = true) != true) throw e
-        reasoningOff = false
+        reasoningRefused += model   // remembered for the whole process, not just this call
         block()
     }
 
@@ -48,6 +56,10 @@ class OpenRouterClient(private val apiKey: String, private val model: String) : 
             .put("temperature", 0.1)
         if (reasoningOff) body.put("reasoning", JSONObject().put("effort", "none"))
         if (onText != null) body.put("stream", true)
+        // Several providers serve most models: take the quickest to answer.
+        body.put("provider", JSONObject().put("sort", "latency"))
+        val t0 = System.nanoTime()
+        lastFirstTokenMs = 0
 
         val conn = open(ENDPOINT, apiKey).apply {
             requestMethod = "POST"
@@ -57,11 +69,18 @@ class OpenRouterClient(private val apiKey: String, private val model: String) : 
         try {
             conn.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
             val code = conn.responseCode
+            lastHeadersMs = (System.nanoTime() - t0) / 1_000_000
             if (code !in 200..299) {
                 val text = conn.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
                 throw TranslationException("OpenRouter $code: ${errorMessage(text)}")
             }
-            return if (onText == null) parseFull(conn.inputStream) else readStream(conn.inputStream, onText)
+            val out = if (onText == null) parseFull(conn.inputStream) else readStream(conn.inputStream) {
+                if (lastFirstTokenMs == 0L) lastFirstTokenMs = (System.nanoTime() - t0) / 1_000_000
+                onText(it)
+            }
+            lastTotalMs = (System.nanoTime() - t0) / 1_000_000
+            if (lastFirstTokenMs == 0L) lastFirstTokenMs = lastTotalMs
+            return out
         } catch (e: Exception) {
             conn.disconnect()   // only on failure — success keeps the pooled connection
             throw if (e is TranslationException) e else TranslationException(e.message ?: e.javaClass.simpleName, e)
@@ -104,6 +123,9 @@ class OpenRouterClient(private val apiKey: String, private val model: String) : 
     }
 
     companion object {
+        /** Models that rejected reasoning: none — don't pay that round trip again. */
+        private val reasoningRefused: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
         private const val ENDPOINT = "https://openrouter.ai/api/v1/chat/completions"
         private const val KEY_INFO = "https://openrouter.ai/api/v1/key"
 
