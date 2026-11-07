@@ -1,8 +1,17 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+// Release signing key lives outside the repo (~/.transsnip/keystore.properties:
+// storeFile, storePassword, keyAlias, keyPassword). Without it, release builds
+// come out unsigned — nothing secret is ever in git.
+val releaseKey = Properties().apply {
+    val f = File(System.getProperty("user.home"), ".transsnip/keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
 }
 
 android {
@@ -23,9 +32,21 @@ android {
         buildConfig = true
     }
 
+    signingConfigs {
+        if (releaseKey.isNotEmpty()) create("release") {
+            storeFile = file(releaseKey.getProperty("storeFile"))
+            storePassword = releaseKey.getProperty("storePassword")
+            keyAlias = releaseKey.getProperty("keyAlias")
+            keyPassword = releaseKey.getProperty("keyPassword")
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
