@@ -91,6 +91,21 @@
                     android:textColor="#E5484D" />
             </LinearLayout>
 
+            <!-- Only while the service is on but the bubble was hidden. -->
+            <TextView
+                android:id="@+id/bubble_hidden_note"
+                style="@style/Hint"
+                android:layout_marginTop="10dp"
+                android:text="@string/bubble_is_hidden"
+                android:visibility="gone" />
+
+            <Button
+                android:id="@+id/bubble_show"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/bubble_show_again"
+                android:visibility="gone" />
+
             <TextView
                 android:id="@+id/screen_restricted"
                 style="@style/Hint"

@@ -55,9 +55,13 @@ class MainActivity : Activity() {
             isChecked = settings.zhStudy
             setOnCheckedChangeListener { _, on -> settings.zhStudy = on }
         }
-        findViewById<Switch>(R.id.bubble).apply {
-            isChecked = settings.bubble
-            setOnCheckedChangeListener { _, on -> settings.bubble = on }
+        findViewById<Switch>(R.id.bubble).setOnCheckedChangeListener { _, on ->
+            settings.bubble = on
+            refreshSteps()
+        }
+        findViewById<Button>(R.id.bubble_show).setOnClickListener {
+            settings.bubble = true
+            refreshSteps()
         }
         // Spinners save as soon as something is picked — no Save button to forget.
         modelSpinner.adapter = adapter(AppSettings.MODELS.map { it.first })
@@ -98,6 +102,12 @@ class MainActivity : Activity() {
         findViewById<Button>(R.id.screen_settings).setText(if (screenOn) R.string.screen_open_settings else R.string.screen_enable)
         findViewById<View>(R.id.screen_restricted).visibility = if (screenOn) View.GONE else View.VISIBLE
         findViewById<View>(R.id.screen_off).visibility = if (screenOn) View.VISIBLE else View.GONE
+        // Hidden from the bubble's menu while this screen was open: show the
+        // real state, and put "show it again" where it's easy to find.
+        findViewById<Switch>(R.id.bubble).isChecked = settings.bubble
+        val hidden = screenOn && !settings.bubble
+        findViewById<View>(R.id.bubble_show).visibility = if (hidden) View.VISIBLE else View.GONE
+        findViewById<View>(R.id.bubble_hidden_note).visibility = if (hidden) View.VISIBLE else View.GONE
     }
 
     private fun mark(id: Int, label: Int, done: Boolean) {
