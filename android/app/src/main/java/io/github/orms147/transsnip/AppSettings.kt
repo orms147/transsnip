@@ -40,6 +40,10 @@ class AppSettings(context: Context) {
         get() = prefs.getInt("bubble_y", -1)
         set(value) = prefs.edit().putInt("bubble_y", value).apply()
 
+    var hintsShown: Int
+        get() = prefs.getInt("hints_shown", 0)
+        set(value) = prefs.edit().putInt("hints_shown", value).apply()
+
     fun onChange(listener: android.content.SharedPreferences.OnSharedPreferenceChangeListener) =
         prefs.registerOnSharedPreferenceChangeListener(listener)
 

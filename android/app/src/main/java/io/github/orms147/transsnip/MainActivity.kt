@@ -1,6 +1,10 @@
 package io.github.orms147.transsnip
 
 import android.app.Activity
+import android.os.Build
+import android.view.View
+import android.widget.AdapterView
+import android.widget.Toast
 import android.content.ComponentName
 import android.content.Intent
 import android.provider.Settings
@@ -25,26 +29,16 @@ class MainActivity : Activity() {
     private lateinit var modelSpinner: Spinner
     private lateinit var targetSpinner: Spinner
     private lateinit var status: TextView
-    private lateinit var zhSwitch: Switch
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         settings = AppSettings(this)
         keyInput = findViewById(R.id.api_key)
+        keyInput.typeface = android.graphics.Typeface.DEFAULT   // password fields default to monospace
         modelSpinner = findViewById(R.id.model)
         targetSpinner = findViewById(R.id.target)
         status = findViewById(R.id.status)
-        zhSwitch = findViewById(R.id.zh_study)
-        zhSwitch.isChecked = settings.zhStudy
-        zhSwitch.setOnCheckedChangeListener { _, on -> settings.zhStudy = on }
-        findViewById<Switch>(R.id.bubble).apply {
-            isChecked = settings.bubble
-            setOnCheckedChangeListener { _, on -> settings.bubble = on }
-        }
-        findViewById<Button>(R.id.screen_settings).setOnClickListener {
-            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-        }
 
         // Debug builds only: a key piped into files/debug_api_key (adb exec-in
         // run-as … — stdin, so it never shows up on a command line or in
@@ -57,20 +51,68 @@ class MainActivity : Activity() {
             }
         }
 
+        findViewById<Switch>(R.id.zh_study).apply {
+            isChecked = settings.zhStudy
+            setOnCheckedChangeListener { _, on -> settings.zhStudy = on }
+        }
+        findViewById<Switch>(R.id.bubble).apply {
+            isChecked = settings.bubble
+            setOnCheckedChangeListener { _, on -> settings.bubble = on }
+        }
+        // Spinners save as soon as something is picked — no Save button to forget.
         modelSpinner.adapter = adapter(AppSettings.MODELS.map { it.first })
         modelSpinner.setSelection(AppSettings.MODELS.indexOfFirst { it.second == settings.model }.coerceAtLeast(0))
+        modelSpinner.onItemSelectedListener = onPick { settings.model = AppSettings.MODELS[it].second }
         targetSpinner.adapter = adapter(AppSettings.TARGETS.map { it.first })
         targetSpinner.setSelection(AppSettings.TARGETS.indexOfFirst { it.second == settings.targetLang }.coerceAtLeast(0))
-        if (!settings.apiKey.isNullOrBlank()) keyInput.hint = getString(R.string.key_saved_hint)
+        targetSpinner.onItemSelectedListener = onPick { settings.targetLang = AppSettings.TARGETS[it].second }
 
-        findViewById<Button>(R.id.save).setOnClickListener { save() }
+        findViewById<Button>(R.id.save).setOnClickListener { saveKey() }
         findViewById<Button>(R.id.test).setOnClickListener { test() }
+        findViewById<Button>(R.id.screen_settings).setOnClickListener { openAccessibility() }
     }
 
     override fun onResume() {
         super.onResume()
-        findViewById<TextView>(R.id.screen_state).setText(
-            if (screenServiceOn()) R.string.screen_on else R.string.screen_off)
+        refreshSteps()
+    }
+
+    override fun onDestroy() {
+        worker.shutdownNow()
+        super.onDestroy()
+    }
+
+    /** Each step shows ✓ once done; hints for a finished step get out of the way. */
+    private fun refreshSteps() {
+        val hasKey = !settings.apiKey.isNullOrBlank()
+        val screenOn = screenServiceOn()
+        mark(R.id.step_key, R.string.step_key, hasKey)
+        mark(R.id.step_screen, R.string.step_screen, screenOn)
+        keyInput.hint = getString(if (hasKey) R.string.key_saved_hint else R.string.api_key_hint)
+        findViewById<View>(R.id.key_help).visibility = if (hasKey) View.GONE else View.VISIBLE
+        findViewById<Button>(R.id.screen_settings).setText(if (screenOn) R.string.screen_open_settings else R.string.screen_enable)
+        findViewById<View>(R.id.screen_restricted).visibility = if (screenOn) View.GONE else View.VISIBLE
+    }
+
+    private fun mark(id: Int, label: Int, done: Boolean) {
+        findViewById<TextView>(id).apply {
+            text = if (done) getString(R.string.step_done, getString(label)) else getString(label)
+            setTextColor(if (done) getColor(R.color.ok) else currentTextColorDefault())
+        }
+    }
+
+    private fun TextView.currentTextColorDefault(): Int {
+        val a = obtainStyledAttributes(intArrayOf(android.R.attr.textColorPrimary))
+        return a.getColor(0, currentTextColor).also { a.recycle() }
+    }
+
+    /** Straight to TransSnip's own switch where the system allows it (Android 12+). */
+    private fun openAccessibility() {
+        val me = ComponentName(this, ScreenService::class.java).flattenToString()
+        val details = Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+            .putExtra(Intent.EXTRA_COMPONENT_NAME, me)
+        val opened = Build.VERSION.SDK_INT >= 31 && runCatching { startActivity(details) }.isSuccess
+        if (!opened) startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
     }
 
     private fun screenServiceOn(): Boolean {
@@ -79,27 +121,24 @@ class MainActivity : Activity() {
         return enabled.split(':').any { ComponentName.unflattenFromString(it) == me }
     }
 
-    override fun onDestroy() {
-        worker.shutdownNow()
-        super.onDestroy()
-    }
-
     private fun adapter(items: List<String>) =
         ArrayAdapter(this, android.R.layout.simple_spinner_item, items).apply {
             setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         }
 
-    private fun save() {
+    private fun onPick(save: (Int) -> Unit) = object : AdapterView.OnItemSelectedListener {
+        override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) = save(position)
+        override fun onNothingSelected(parent: AdapterView<*>?) {}
+    }
+
+    private fun saveKey() {
         keyInput.text.toString().takeIf { it.isNotBlank() }?.let { settings.apiKey = it }
-        settings.model = AppSettings.MODELS[modelSpinner.selectedItemPosition].second
-        settings.targetLang = AppSettings.TARGETS[targetSpinner.selectedItemPosition].second
         keyInput.text.clear()
-        if (!settings.apiKey.isNullOrBlank()) keyInput.hint = getString(R.string.key_saved_hint)
-        status.setText(R.string.saved)
+        refreshSteps()
+        Toast.makeText(this, R.string.saved, Toast.LENGTH_SHORT).show()
     }
 
     private fun test() {
-        save()
         val key = settings.apiKey
         if (key.isNullOrBlank()) {
             status.setText(R.string.err_no_key)

@@ -1,6 +1,7 @@
 package io.github.orms147.transsnip.screen
 
 import android.graphics.Bitmap
+import android.graphics.Rect
 import com.google.android.gms.tasks.Tasks
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
@@ -21,15 +22,24 @@ object Ocr {
      * Blocking — call off the main thread. One item per text block (a paragraph/caption).
      * [pad]: OCR boxes hug the glyphs; grow them so the cover hides anti-aliased edges too.
      */
-    fun recognize(bitmap: Bitmap, pad: Int = 0): List<ScreenItem> {
+    class Result(val blocks: List<ScreenItem>, val lines: List<Rect>)
+
+    fun recognize(bitmap: Bitmap, pad: Int = 0): Result {
         val result = Tasks.await(recognizer.process(InputImage.fromBitmap(bitmap, 0)), 15, TimeUnit.SECONDS)
-        return result.textBlocks.mapNotNull { block ->
+        val lineBoxes = result.textBlocks.flatMap { b -> b.lines.mapNotNull { it.boundingBox } }
+        val blocks = result.textBlocks.mapNotNull { block ->
             val box = block.boundingBox ?: return@mapNotNull null
             val lines = block.lines.map { it.text.trim() }.filter { it.isNotEmpty() }
+            val heights = block.lines.mapNotNull { it.boundingBox?.height() }.sorted()
             box.inset(-pad, -pad)
-            if (lines.isEmpty()) null else ScreenItem(joinLines(lines), box)
+            if (lines.isEmpty()) null
+            else ScreenItem(joinLines(lines), box, heights.getOrNull(heights.size / 2)?.let { it / GLYPH_TO_FONT })
         }
+        return Result(blocks, lineBoxes)
     }
+
+    /** An OCR line box is about this many times the font size tall. */
+    const val GLYPH_TO_FONT = 1.1f
 
     /** Loads the model (~2 s the first time) so the first real OCR doesn't pay for it. */
     fun warmUp() {

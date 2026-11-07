@@ -18,6 +18,10 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Long-press on the Quick Settings tile opens settings. -->
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
+            </intent-filter>
         </activity>
 
         <!-- "TransSnip" in every app's text-selection menu, and in Share. -->
@@ -58,6 +62,17 @@
             <meta-data
                 android:name="android.accessibilityservice"
                 android:resource="@xml/screen_service" />
+        </service>
+
+        <service
+            android:name=".screen.ScreenTile"
+            android:exported="true"
+            android:icon="@drawable/ic_tile"
+            android:label="@string/tile_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
         </service>
     </application>
 </manifest>

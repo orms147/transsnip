@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The service only acts when the bubble is tapped, then reads the window
-     tree once; it does not watch events. -->
+<!-- The service acts only when the bubble/tile is tapped: it reads the window
+     tree once. Scroll events matter only right after it replayed a swipe
+     (to re-translate once scrolling stops); gestures = that replay. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityEventTypes="typeViewScrolled"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagRetrieveInteractiveWindows|flagIncludeNotImportantViews"
+    android:canPerformGestures="true"
     android:canRetrieveWindowContent="true"
     android:canTakeScreenshot="true"
     android:description="@string/screen_service_desc"
-    android:notificationTimeout="1000" />
+    android:notificationTimeout="100" />

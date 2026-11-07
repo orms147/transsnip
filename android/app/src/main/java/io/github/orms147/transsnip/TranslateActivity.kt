@@ -74,6 +74,16 @@ class TranslateActivity : Activity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        io.github.orms147.transsnip.screen.ScreenService.instance?.ownUi(true)
+    }
+
+    override fun onStop() {
+        io.github.orms147.transsnip.screen.ScreenService.instance?.ownUi(false)
+        super.onStop()
+    }
+
     override fun onDestroy() {
         worker.shutdownNow()
         zhWorker.shutdownNow()
