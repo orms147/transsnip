@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">TransSnip</string>
+    <string name="header_lang">%1$s → %2$s</string>
+    <string name="copy">Sao chép</string>
+    <string name="retry">Thử lại</string>
+    <string name="settings">Cài đặt</string>
+    <string name="close">Đóng</string>
+    <string name="copied">Đã sao chép bản dịch</string>
+    <string name="err_no_text">Không có chữ để dịch.</string>
+    <string name="err_no_key">Chưa có API key OpenRouter — mở Cài đặt để nhập.</string>
+    <string name="how_to">Cách dùng: bôi đen chữ trong app bất kỳ → chọn \"TransSnip\" trong menu (cạnh Sao chép, hoặc trong ⋮). Hoặc Chia sẻ → TransSnip.</string>
+    <string name="api_key_label">API key OpenRouter</string>
+    <string name="api_key_hint">sk-or-…</string>
+    <string name="key_saved_hint">Đã lưu key (nhập để thay)</string>
+    <string name="model_label">Model dịch</string>
+    <string name="target_label">Dịch sang</string>
+    <string name="save">Lưu</string>
+    <string name="test">Dịch thử</string>
+    <string name="saved">Đã lưu.</string>
+    <string name="testing">Đang dịch thử…</string>
+    <string name="test_failed">Lỗi: %1$s</string>
+</resources>
