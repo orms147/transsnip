@@ -15,7 +15,8 @@ class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences("settings", Context.MODE_PRIVATE)
 
     var model: String
-        get() = prefs.getString("model", DEFAULT_MODEL) ?: DEFAULT_MODEL
+        // A model dropped from the list (older install) falls back to the default.
+        get() = prefs.getString("model", null)?.takeIf { m -> MODELS.any { it.second == m } } ?: DEFAULT_MODEL
         set(value) = prefs.edit().putString("model", value).apply()
 
     var targetLang: String
@@ -98,19 +99,15 @@ class AppSettings(context: Context) {
 
     companion object {
         const val KEY_BUBBLE = "bubble"
-        const val DEFAULT_MODEL = "tencent/hy-mt2-30b-a3b"
+        const val DEFAULT_MODEL = "deepseek/deepseek-v4.1-flash-1017"
         private const val KEY_ALIAS = "transsnip_api_key"
         private const val TRANSFORM = "AES/GCM/NoPadding"
 
-        // Same list as the desktop app; latency/cost measured there on zh→vi lines.
+        // Measured 2026-11-07 via OpenRouter (median: first sentence / 20-line screen).
         val MODELS = listOf(
-            "Hy-MT2 30B — nhanh nhất (0.7s, \$0.05/1k câu)" to "tencent/hy-mt2-30b-a3b",
-            "Gemini 2.5 Flash-Lite (1.0s, \$0.07/1k câu)" to "google/gemini-2.5-flash-lite",
-            "DeepSeek V4.1 Flash (1.3s, \$0.11/1k câu)" to "deepseek/deepseek-v4.1-flash",
-            "Qwen3.7 Flash — rẻ nhất (1.4s, \$0.02/1k câu)" to "qwen/qwen3.7-flash",
-            "Gemini 3.6 Flash" to "google/gemini-3.6-flash",
-            "Claude Haiku 5.5" to "anthropic/claude-haiku-5.5",
-            "Gemma 4 31B (miễn phí)" to "google/gemma-4-31b-it:free",
+            "DeepSeek V4.1 Flash 1017 — câu nhanh nhất (0.65s)" to "deepseek/deepseek-v4.1-flash-1017",
+            "Hy-MT2 30B — chuyên dịch (0.9s)" to "tencent/hy-mt2-30b-a3b",
+            "Gemini 2.5 Flash-Lite — cả màn hình nhanh nhất (1.6s)" to "google/gemini-2.5-flash-lite",
         )
 
         val TARGETS = listOf(
