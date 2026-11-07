@@ -185,6 +185,13 @@
                 android:text="@string/bubble_switch" />
 
             <Switch
+                android:id="@+id/frozen_default"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="@string/frozen_default" />
+
+            <Switch
                 android:id="@+id/zh_study"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

@@ -64,7 +64,8 @@ class ScreenService : AccessibilityService() {
     private val recapture = Runnable { if (session == null) start(delay = 0) }
     private var awaitingScroll = false
     private var live = false          // translations are on (✕ shows) — survives refreshes
-    private var lookup = false        // look-up mode: overlay takes touches
+    private var lookup = false        // still frame: screen frozen behind the boxes, overlay takes touches
+    private var startedLive = true    // still frame entered from live mode (tap empty → back to live)
     private var livePkg: String? = null
 
     override fun onServiceConnected() {
@@ -138,12 +139,14 @@ class ScreenService : AccessibilityService() {
         main.postDelayed({ if (gen == generation) capture(gen, key, quiet = true) }, 16)
     }
 
-    /** Hold ✕: look-up mode (tap boxes) ↔ live mode (touches go to the app). */
+    /** Hold ✕: still frame (read in peace, tap boxes) ↔ live (follows the screen, touches go to the app). */
     private fun setLookup(on: Boolean) {
         lookup = on
+        if (on) main.removeCallbacks(liveRecapture)
         bubble?.setActive(live, on)
         val s = session ?: return
         s.overlay.setInteractive(on)
+        s.overlay.setFrozen(if (on) s.frame else null)
         s.overlay.setStatus(getString(if (on) R.string.lookup_on else R.string.lookup_off), autoHideMs = 2500)
         if (!on) liveRefresh()   // the page may have changed while in look-up mode
     }
@@ -160,7 +163,9 @@ class ScreenService : AccessibilityService() {
         val b = bubble ?: return
         menu.show(b.bounds(), screenRect(), listOf(
             BubbleMenu.Item(getString(R.string.menu_select)) { startSelect() },
-            BubbleMenu.Item(getString(R.string.menu_lookup)) { lookup = true; start() },
+            // The mode a tap doesn't start.
+            if (settings.frozenDefault) BubbleMenu.Item(getString(R.string.menu_follow)) { begin(frozen = false) }
+            else BubbleMenu.Item(getString(R.string.menu_frozen)) { begin(frozen = true) },
             BubbleMenu.Item(getString(R.string.menu_hide)) { onBubbleDropped() },
             BubbleMenu.Item(getString(R.string.menu_settings)) {
                 startActivity(Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -262,7 +267,7 @@ class ScreenService : AccessibilityService() {
     }
 
     private fun onOverlayTapEmpty() {
-        if (lookup) setLookup(false) else dismiss()
+        if (lookup && startedLive) setLookup(false) else dismiss()
     }
 
     override fun onInterrupt() {}
@@ -304,7 +309,13 @@ class ScreenService : AccessibilityService() {
 
     private fun onBubbleTap() {
         if (menu.isShown) return menu.dismiss()
-        if (live) dismiss() else { lookup = false; start() }
+        if (live) dismiss() else begin(frozen = settings.frozenDefault)
+    }
+
+    private fun begin(frozen: Boolean) {
+        lookup = frozen
+        startedLive = !frozen
+        start()
     }
 
     private fun onOwnUiChanged() {
@@ -357,6 +368,8 @@ class ScreenService : AccessibilityService() {
             if (gen != generation) return@takeScreenshot
             overlay.attach()
             overlay.setInteractive(lookup)
+            s.frame = shot
+            if (lookup) overlay.setFrozen(shot)
             bubble?.setActive(true, lookup)
             if (ownUi == 0) bubble?.bringToFront()   // the ✕ sits above the overlay
             s.shot = shot
@@ -395,8 +408,7 @@ class ScreenService : AccessibilityService() {
                 }
                 val range = s.add(extra)
                 s.showBoxes(range)
-                s.shot = null
-                shot.recycle()
+                s.shot = null   // kept as s.frame (still-frame background), not recycled
                 if (range.isEmpty()) s.waveDone(found.exceptionOrNull()) else translate(s, key, range)
             }
         }
@@ -586,6 +598,8 @@ class ScreenService : AccessibilityService() {
         private val translated = HashMap<String, String>()
         private val shown = HashSet<Int>()
         var shot: Bitmap? = null
+        /** The screenshot these translations were made from (still-frame mode shows it). */
+        var frame: Bitmap? = null
         var waves = 0
         private var error: Throwable? = null
         private var hintShownThisRun = false
@@ -741,7 +755,7 @@ class ScreenService : AccessibilityService() {
                 translated.isEmpty() -> overlay.setStatus(getString(R.string.screen_no_text), autoHideMs = 2500)
                 hintShownThisRun -> overlay.setStatus(
                     getString(R.string.screen_done, shown.count { isTranslated(it) }, ms / 1000.0) + "\n" +
-                        getString(R.string.screen_hint), autoHideMs = 5000)
+                        getString(if (lookup) R.string.frozen_hint else R.string.screen_hint), autoHideMs = 5000)
                 else -> {
                     var done = getString(R.string.screen_done, shown.count { isTranslated(it) }, ms / 1000.0)
                     // Slow: was it the wait for the first answer, or the tail?
@@ -750,7 +764,7 @@ class ScreenService : AccessibilityService() {
                     if (settings.hintsShown < 3) {
                         settings.hintsShown += 1
                         hintShownThisRun = true
-                        overlay.setStatus(done + "\n" + getString(R.string.screen_hint), autoHideMs = 5000)
+                        overlay.setStatus(done + "\n" + getString(if (lookup) R.string.frozen_hint else R.string.screen_hint), autoHideMs = 5000)
                     } else {
                         overlay.setStatus(done, autoHideMs = 1800)
                     }

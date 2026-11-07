@@ -24,6 +24,11 @@ class AppSettings(context: Context) {
         set(value) = prefs.edit().putString("target", value).apply()
 
     /** Chinese study aids in the popup: pinyin, Hán-Việt, tap a word → word card. */
+    /** Tap on the bubble = translate one still frame (no auto-refresh) instead of following the screen. */
+    var frozenDefault: Boolean
+        get() = prefs.getBoolean("frozen_default", false)
+        set(value) = prefs.edit().putBoolean("frozen_default", value).apply()
+
     var zhStudy: Boolean
         get() = prefs.getBoolean("zh_study", true)
         set(value) = prefs.edit().putBoolean("zh_study", value).apply()

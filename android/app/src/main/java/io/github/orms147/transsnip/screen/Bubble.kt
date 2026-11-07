@@ -216,7 +216,7 @@ class Bubble(
 
     private fun sleepLater() {
         main.removeCallbacks(fade)
-        main.postDelayed(fade, 3000)
+        main.postDelayed(fade, 2000)
     }
 
     private fun showTarget() {
@@ -262,6 +262,6 @@ class Bubble(
     }
 
     companion object {
-        private const val IDLE_ALPHA = 0.45f
+        private const val IDLE_ALPHA = 0.25f
     }
 }

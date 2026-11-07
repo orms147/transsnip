@@ -52,6 +52,10 @@ class MainActivity : Activity() {
             }
         }
 
+        findViewById<Switch>(R.id.frozen_default).apply {
+            isChecked = settings.frozenDefault
+            setOnCheckedChangeListener { _, on -> settings.frozenDefault = on }
+        }
         findViewById<Switch>(R.id.zh_study).apply {
             isChecked = settings.zhStudy
             setOnCheckedChangeListener { _, on -> settings.zhStudy = on }

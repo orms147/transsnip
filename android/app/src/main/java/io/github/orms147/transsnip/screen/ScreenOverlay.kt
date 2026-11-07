@@ -2,6 +2,8 @@ package io.github.orms147.transsnip.screen
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.PixelFormat
@@ -115,6 +117,17 @@ class ScreenOverlay(
         val flag = WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
         p.flags = if (on) p.flags and flag.inv() else p.flags or flag
         if (attached) runCatching { wm.updateViewLayout(root, p) }
+    }
+
+    /**
+     * Still-frame mode: the screenshot the translations were made from is
+     * shown behind them, so the app moving underneath (livestream comments,
+     * video) can't run away from what you're reading. null → see-through.
+     */
+    fun setFrozen(frame: Bitmap?) {
+        root.animate().cancel()
+        root.alpha = 1f
+        root.background = frame?.takeIf { !it.isRecycled }?.let { BitmapDrawable(context.resources, it) }
     }
 
     /** The page moved under the translations: get them out of the way at once. */

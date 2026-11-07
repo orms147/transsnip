@@ -58,9 +58,13 @@
     <string name="screen_no_text">Không thấy chữ nào cần dịch trên màn hình.</string>
     <string name="screen_done">Đã dịch %1$d đoạn · %2$.1f s</string>
     <string name="screen_slow"> (dòng đầu sau %1$.1f s)</string>
-    <string name="screen_hint">Vuốt, chạm như bình thường — bản dịch tự cập nhật · Giữ ✕: chạm ô để tra từ · Chạm ✕: tắt</string>
-    <string name="lookup_on">Chế độ tra: chạm ô để xem pinyin, thẻ từ · giữ ô: chữ gốc · chạm chỗ trống để quay lại</string>
-    <string name="lookup_off">Đã quay lại — vuốt, chạm như bình thường</string>
+    <string name="screen_hint">Vuốt, chạm như bình thường — bản dịch tự cập nhật · Giữ ✕: đóng băng khung hình để đọc · Chạm ✕: tắt</string>
+    <string name="lookup_on">Đã đóng băng khung hình — đọc thoải mái · chạm ô: chi tiết · giữ ô: chữ gốc · chạm chỗ trống: dịch theo màn hình lại</string>
+    <string name="lookup_off">Dịch theo màn hình — tự cập nhật khi màn hình đổi</string>
+    <string name="frozen_hint">Khung hình tĩnh — không tự đổi · chạm ô: chi tiết · vuốt: cuộn rồi dịch lại · chạm chỗ trống / ✕: tắt</string>
+    <string name="menu_frozen">Dịch khung hình tĩnh</string>
+    <string name="menu_follow">Dịch theo màn hình</string>
+    <string name="frozen_default">Chạm bong bóng = dịch khung hình tĩnh (không tự cập nhật — hợp xem livestream, bình luận chạy liên tục)</string>
     <string name="menu_select">Chọn chữ (sao chép)</string>
     <string name="select_hint">Chạm hoặc kéo qua chữ</string>
     <string name="select_reading">Đang đọc chữ trong ảnh…</string>
