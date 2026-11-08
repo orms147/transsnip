@@ -184,7 +184,7 @@ class _AsrLoop(QThread):
     def run(self) -> None:
         from transsnip.asr.whisper import is_silent
 
-        self.status.emit("Đang tải model Whisper…")
+        self.status.emit("Đang nạp model Whisper…")
         try:
             self._transcriber.load()   # downloads on first ever use
         except Exception as exc:  # noqa: BLE001

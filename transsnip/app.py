@@ -338,7 +338,7 @@ class AppController(QObject):
         Pressing Alt+A IS the opt-in — no separate enable flag. If the optional
         audio deps aren't installed, the controller emits a clear error toast.
         """
-        from transsnip.asr.whisper import WhisperTranscriber
+        from transsnip.asr.whisper import WhisperTranscriber, is_model_cached
         if self._transcriber is None:
             # Use the configured source language as the Whisper hint — a FIXED
             # language is more accurate than per-chunk auto-detect (no zh→ru→en
@@ -355,8 +355,11 @@ class AppController(QObject):
         self._subtitle_bar.set_two_lines(True)   # audio: previous + newest utterance
         self._subtitle_bar.start_anchored(active_monitor_logical_rect())
         self._audio.start(self._transcriber, self._translation_pipeline, self._translation_ctx)
-        mb = self._transcriber.expected_download_mb()
-        self._notify(f"Audio subtitle: đang nghe… (lần đầu tải model ~{mb}MB). Bấm Alt+A để dừng.")
+        if is_model_cached(self._settings.audio.whisper_tier):
+            self._notify("Audio subtitle: đang nghe… Bấm Alt+A để dừng.")
+        else:
+            mb = self._transcriber.expected_download_mb()
+            self._notify(f"Audio subtitle: lần đầu dùng — đang tải model ~{mb}MB… Bấm Alt+A để dừng.")
 
     def _on_audio_text(self, text: str) -> None:
         log.info("audio subtitle → %r", text)   # visible: translated line reaching the bar
@@ -712,6 +715,8 @@ class AppController(QObject):
         self._warm_up_ocr()
         # Drop the cached transcriber so a changed Whisper tier / source-lang
         # takes effect on the next Alt+A (rebuilt lazily in _start_audio).
+        # Cheap: the loaded model itself is cached in transsnip.asr.whisper and
+        # reused when the tier is unchanged — no reload from disk.
         self._transcriber = None
         # Frozen-crop reuse on Retry only makes sense while gaming mode is on
         # (the game may be minimized); once it's off, Retry should re-capture

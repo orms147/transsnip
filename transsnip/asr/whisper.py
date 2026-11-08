@@ -18,6 +18,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -187,6 +188,36 @@ def whisper_cache_dir() -> Path:
     return app_data_dir("whisper-models")
 
 
+# --- Loaded-model cache (process-wide) -----------------------------------------
+# A loaded model outlives the WhisperTranscriber that loaded it: Settings
+# reload builds a new transcriber (source language may have changed), and
+# reloading ~500 MB from disk — or worse, re-trying the GPU — on every save was
+# what made Alt+A "download the model again" each time. Keyed by
+# (model dir, device, compute type); only the latest one is kept (RAM).
+_MODELS: dict[tuple[str, str, str], object] = {}
+_LOAD_LOCK = threading.Lock()
+# Once the GPU path has failed in this process, never try it again: a second
+# CUDA attempt after a failed cuBLAS load can hang forever inside CTranslate2
+# (seen in the log: warmup started, never returned, each Alt+A stacked another
+# stuck loader thread).
+_GPU_FAILED = False
+
+
+def _model_dir(tier: str, local_only: bool) -> str:
+    """Local directory of `tier`'s model. `local_only` → no network (raises if not cached)."""
+    from faster_whisper.utils import download_model
+    return download_model(tier, cache_dir=str(whisper_cache_dir()), local_files_only=local_only)
+
+
+def is_model_cached(tier: str) -> bool:
+    """True if `tier` is already on disk — no download (and no network) needed."""
+    try:
+        _model_dir(tier, local_only=True)
+        return True
+    except Exception:  # noqa: BLE001 — not cached / faster-whisper missing
+        return False
+
+
 def is_silent(pcm: np.ndarray, rms_threshold: float = 0.005) -> bool:
     """Pure-numpy VAD gate: True when the chunk's RMS is below `rms_threshold`.
 
@@ -270,36 +301,60 @@ class WhisperTranscriber:
         """
         if self._model is not None:
             return
-        _add_cuda_dll_dirs()   # let pip-installed CUDA wheels be found (Windows)
-        from faster_whisper import WhisperModel
+        global _GPU_FAILED
+        with _LOAD_LOCK:   # two Alt+A in a row must not load twice
+            _add_cuda_dll_dirs()   # let pip-installed CUDA wheels be found (Windows)
+            from faster_whisper import WhisperModel
 
-        device, compute = self._resolve_device()
-        try:
-            model = WhisperModel(
-                self._tier, device=device, compute_type=compute,
-                download_root=str(whisper_cache_dir()), cpu_threads=_CPU_THREADS,
-            )
-            if device != "cpu":
-                self._warmup(model)            # forces cuBLAS/cuDNN load — may raise
-        except Exception as exc:
-            if device == "cpu":
-                raise
-            log.warning(
-                "Whisper GPU unavailable (%s) — falling back to CPU/int8. "
-                "To enable GPU: pip install nvidia-cublas-cu12 nvidia-cudnn-cu12",
-                exc,
-            )
-            device, compute = "cpu", "int8"
-            model = WhisperModel(
-                self._tier, device=device, compute_type=compute,
-                download_root=str(whisper_cache_dir()), cpu_threads=_CPU_THREADS,
-            )
+            # Already on disk → load it straight from there: no Hugging Face
+            # round-trip on every start (and works offline). First use only:
+            # download.
+            try:
+                path = _model_dir(self._tier, local_only=True)
+            except Exception:  # noqa: BLE001
+                log.info("Whisper model %s not cached — downloading (~%d MB)",
+                         self._tier, self.expected_download_mb())
+                path = _model_dir(self._tier, local_only=False)
+
+            device, compute = self._resolve_device()
+            if device != "cpu" and _GPU_FAILED:
+                device, compute = "cpu", self._cpu_compute()
+
+            def build(dev: str, comp: str):
+                key = (path, dev, comp)
+                if key in _MODELS:
+                    return _MODELS[key]
+                m = WhisperModel(path, device=dev, compute_type=comp, cpu_threads=_CPU_THREADS)
+                if dev != "cpu":
+                    self._warmup(m)            # forces cuBLAS/cuDNN load — may raise
+                _MODELS.clear()                # keep one model in RAM, not every tier tried
+                _MODELS[key] = m
+                return m
+
+            try:
+                model = build(device, compute)
+            except Exception as exc:
+                if device == "cpu":
+                    raise
+                _GPU_FAILED = True
+                log.warning(
+                    "Whisper GPU unavailable (%s) — falling back to CPU/int8 for this run. "
+                    "To enable GPU: pip install nvidia-cublas-cu12 nvidia-cudnn-cu12",
+                    exc,
+                )
+                device, compute = "cpu", self._cpu_compute()
+                model = build(device, compute)
         self._model = model
         self._device, self._compute_type = device, compute
         log.info(
             "Whisper model loaded: tier=%s device=%s compute=%s",
             self._tier, device, compute,
         )
+
+    def _cpu_compute(self) -> str:
+        """Compute type on CPU: int8 unless one was explicitly requested."""
+        req = self._requested_compute
+        return req if req and req != "auto" and req != "float16" else "int8"
 
     @staticmethod
     def _warmup(model) -> None:
