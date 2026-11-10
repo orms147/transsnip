@@ -29,6 +29,11 @@ class AppSettings(context: Context) {
         get() = prefs.getBoolean("frozen_default", false)
         set(value) = prefs.edit().putBoolean("frozen_default", value).apply()
 
+    /** Last "video subtitles" box, as "l,t,r,b@screenW x screenH" (only valid for that screen size). */
+    var subtitleRegion: String?
+        get() = prefs.getString("subtitle_region", null)
+        set(value) = prefs.edit().putString("subtitle_region", value).apply()
+
     var zhStudy: Boolean
         get() = prefs.getBoolean("zh_study", true)
         set(value) = prefs.edit().putBoolean("zh_study", value).apply()

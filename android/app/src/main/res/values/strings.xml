@@ -75,6 +75,11 @@
     <string name="select_translate">Dịch</string>
     <string name="select_copy_all">Chép hết</string>
     <string name="text_copied">Đã sao chép</string>
+    <string name="menu_subtitle">Phụ đề video (chọn vùng)</string>
+    <string name="subtitle_pick_hint">Kéo khung quanh vùng phụ đề</string>
+    <string name="subtitle_use_last">Dùng khung cũ</string>
+    <string name="subtitle_started">Đang dịch phụ đề trong khung · chạm ✕ để tắt · giữ ✕ để chọn lại khung</string>
+    <string name="subtitle_rotated">Màn hình đã xoay — chọn lại khung phụ đề</string>
     <string name="menu_lookup">Dịch &amp; tra từ</string>
     <string name="menu_hide">Tắt (bật lại bằng 1 chạm)</string>
     <string name="tile_on">Đang bật</string>

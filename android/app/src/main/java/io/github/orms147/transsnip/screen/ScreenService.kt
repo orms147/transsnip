@@ -164,10 +164,12 @@ class ScreenService : AccessibilityService() {
      * off, settings.
      */
     private fun onBubbleLongPress() {
+        if (subtitle != null) return pickSubtitleRegion()   // hold ✕: choose the box again
         if (live) return setLookup(!lookup)
         val b = bubble ?: return
         menu.show(b.bounds(), screenRect(), listOf(
             BubbleMenu.Item(getString(R.string.menu_select)) { startSelect() },
+            BubbleMenu.Item(getString(R.string.menu_subtitle)) { pickSubtitleRegion() },
             // The mode a tap doesn't start.
             // Switches the mode from now on (the other one is offered next time), and translates in it.
             BubbleMenu.Item(getString(if (settings.frozenDefault) R.string.menu_follow else R.string.menu_frozen)) {
@@ -192,6 +194,7 @@ class ScreenService : AccessibilityService() {
      * unless the user taps "Translate".
      */
     private fun startSelect() {
+        stopSubtitle(showBubble = false)
         dismiss(showBubble = false)
         bubble?.hide()
         val gen = generation
@@ -270,6 +273,7 @@ class ScreenService : AccessibilityService() {
     /** Off for real: the accessibility service disables itself (Android 7+). */
     fun turnOff() {
         closeSelect()
+        stopSubtitle(showBubble = false)
         dismiss(showBubble = false)
         menu.dismiss()
         Toast.makeText(this, R.string.turned_off, Toast.LENGTH_LONG).show()
@@ -286,6 +290,7 @@ class ScreenService : AccessibilityService() {
         if (instance === this) instance = null
         main.post { stateListener?.invoke() }
         if (::settings.isInitialized) {
+            stopSubtitle(showBubble = false)
             select?.detach()
             select = null
             dismiss(showBubble = false)
@@ -319,6 +324,7 @@ class ScreenService : AccessibilityService() {
 
     private fun onBubbleTap() {
         if (menu.isShown) return menu.dismiss()
+        if (subtitle != null) return stopSubtitle()
         if (live) dismiss() else begin(frozen = settings.frozenDefault)
     }
 
@@ -340,6 +346,7 @@ class ScreenService : AccessibilityService() {
     }
 
     private fun start(delay: Long = 50) {
+        stopSubtitle(showBubble = false)
         awaitingScroll = false
         main.removeCallbacks(recapture)
         val key = settings.apiKey
@@ -607,6 +614,149 @@ class ScreenService : AccessibilityService() {
         next(0)
     }
 
+    // ── Video subtitles: one box, read again and again ─────────────────────
+    //
+    // Only the box the user drew is read (OCR of a small crop: fast), nothing
+    // else on screen. When its text changes, the translation is shown centred
+    // just under it. Our translation never covers the box, so a plain
+    // full-screen shot works in every app (incl. Telegram's video window)
+    // without hiding anything.
+
+    private inner class SubtitleRun(val region: Rect, val screen: Rect, val overlay: SubtitleOverlay) {
+        var lastSrc = ""
+        var emptySince = 0L
+        var stopped = false
+    }
+
+    private var subtitle: SubtitleRun? = null
+    private var picker: RegionPicker? = null
+
+    private fun pickSubtitleRegion() {
+        val key = settings.apiKey
+        if (key.isNullOrBlank()) {
+            Toast.makeText(this, R.string.err_no_key, Toast.LENGTH_LONG).show()
+            return
+        }
+        stopSubtitle(showBubble = false)
+        dismiss(showBubble = false)
+        closeSelect()
+        bubble?.hide()
+        val screen = screenRect()
+        picker?.detach()
+        picker = RegionPicker(this, wm, screen, statusBarHeight(), savedRegion(screen),
+            onPicked = { r ->
+                picker?.detach(); picker = null
+                settings.subtitleRegion = "${r.left},${r.top},${r.right},${r.bottom}@${screen.width()}x${screen.height()}"
+                startSubtitle(r, screen)
+            },
+            onCancel = {
+                picker?.detach(); picker = null
+                if (session == null && ownUi == 0) bubble?.show()
+            }).also { it.attach() }
+    }
+
+    private fun savedRegion(screen: Rect): Rect? {
+        val (box, size) = settings.subtitleRegion?.split('@')?.takeIf { it.size == 2 } ?: return null
+        if (size != "${screen.width()}x${screen.height()}") return null   // other orientation
+        val n = box.split(',').mapNotNull { it.toIntOrNull() }
+        return if (n.size == 4) Rect(n[0], n[1], n[2], n[3]) else null
+    }
+
+    private fun startSubtitle(region: Rect, screen: Rect) {
+        val overlay = SubtitleOverlay(this, wm, screen, region)
+        overlay.attach()
+        subtitle = SubtitleRun(region, screen, overlay)
+        bubble?.show()
+        bubble?.setActive(true)
+        if (ownUi == 0) bubble?.bringToFront()
+        Toast.makeText(this, R.string.subtitle_started, Toast.LENGTH_SHORT).show()
+        main.removeCallbacks(subtitleTick)
+        main.postDelayed(subtitleTick, 300)
+    }
+
+    private fun stopSubtitle(showBubble: Boolean = true) {
+        picker?.detach(); picker = null
+        val r = subtitle ?: return
+        r.stopped = true
+        subtitle = null
+        main.removeCallbacks(subtitleTick)
+        r.overlay.detach()
+        bubble?.setActive(false)
+        if (showBubble && session == null && ownUi == 0) bubble?.show()
+    }
+
+    private val subtitleTick = Runnable { tickSubtitle() }
+
+    private fun nextSubtitleTick(r: SubtitleRun) {
+        if (!r.stopped && subtitle === r) main.postDelayed(subtitleTick, SUBTITLE_TICK_MS)
+    }
+
+    private fun tickSubtitle() {
+        val r = subtitle ?: return
+        if (screenRect() != r.screen) {
+            stopSubtitle()
+            Toast.makeText(this, R.string.subtitle_rotated, Toast.LENGTH_LONG).show()
+            return
+        }
+        takeScreenshot { shot -> readSubtitle(r, shot) }
+    }
+
+    private fun readSubtitle(r: SubtitleRun, shot: Bitmap?) {
+        if (r.stopped) return
+        if (shot == null) return nextSubtitleTick(r)
+        pool.execute {
+            val read = readBox(shot, r.region)
+            shot.recycle()
+            main.post {
+                if (r.stopped || subtitle !== r) return@post
+                onSubtitleText(r, read.first, read.second)
+                nextSubtitleTick(r)
+            }
+        }
+    }
+
+    /** OCR of just the box: its lines in reading order, joined; and the text size. */
+    private fun readBox(shot: Bitmap, region: Rect): Pair<String, Float?> {
+        val r = Rect(region)
+        if (!r.intersect(0, 0, shot.width, shot.height) || r.width() < 8 || r.height() < 8) return "" to null
+        val crop = runCatching { Bitmap.createBitmap(shot, r.left, r.top, r.width(), r.height()) }.getOrNull() ?: return "" to null
+        val ocr = runCatching { Ocr.recognize(crop) }.getOrNull() ?: return "" to null
+        val lines = ocr.lines.filter { it.text.isNotBlank() }.sortedWith(compareBy({ it.box.top / 8 }, { it.box.left }))
+        if (lines.isEmpty()) return "" to null
+        val heights = lines.map { it.box.height() }.sorted()
+        return Ocr.joinLines(lines.map { it.text.trim() }) to heights[heights.size / 2] / Ocr.GLYPH_TO_FONT
+    }
+
+    private fun onSubtitleText(r: SubtitleRun, text: String, fontPx: Float?) {
+        val target = settings.targetLang
+        if (text.isBlank() || !Prompts.needsTranslation(text, target)) {
+            // Subtitle gone: keep the last line a moment (OCR misses a frame now and then).
+            if (r.lastSrc.isNotEmpty()) {
+                val now = SystemClock.uptimeMillis()
+                if (r.emptySince == 0L) r.emptySince = now
+                if (now - r.emptySince > SUBTITLE_GONE_MS) { r.overlay.clear(); r.lastSrc = "" }
+            }
+            return
+        }
+        r.emptySince = 0L
+        if (r.lastSrc.isNotEmpty() && sameText(text, r.lastSrc)) return
+        r.lastSrc = text
+        val key = settings.apiKey ?: return
+        val model = settings.model
+        val ck = "$model|$target|$text"
+        synchronized(cache) { cache[ck] }?.let { return r.overlay.show(it, fontPx) }
+        pool.execute {
+            val result = runCatching {
+                Translator.forModel(OpenRouterClient(key, model), model).translate(text, target) { partial ->
+                    main.post { if (!r.stopped && r.lastSrc == text && partial.isNotBlank()) r.overlay.show(partial, fontPx) }
+                }.translation
+            }.getOrNull()
+            if (result.isNullOrBlank()) return@execute
+            synchronized(cache) { cache[ck] = result }
+            main.post { if (!r.stopped && r.lastSrc == text) r.overlay.show(result, fontPx) }
+        }
+    }
+
     /** Share of [a]'s area covered by [b]. */
     private fun overlap(a: Rect, b: Rect): Double {
         val r = Rect()
@@ -754,6 +904,8 @@ class ScreenService : AccessibilityService() {
         private const val PAD_OCR = 6
         private const val SLOW_MS = 3000L
         private const val POLL_MS = 1000L
+        private const val SUBTITLE_TICK_MS = 600L
+        private const val SUBTITLE_GONE_MS = 900L
         private const val CAPTURE_HIDE_MS = 50L
         private const val POLL_UNKNOWN = 0
         private const val POLL_WINDOW = 1
