@@ -444,31 +444,93 @@ class ScreenService : AccessibilityService() {
         if (Build.VERSION.SDK_INT >= 34 && live && !lookup && s.ocrIdx.isNotEmpty()) main.postDelayed(pollRunnable, POLL_MS)
     }
 
+    /**
+     * How [poll] looks at the screen. Shooting the app's window(s) never
+     * shows our boxes and doesn't flicker — but some apps draw video in a
+     * window accessibility doesn't list (Telegram's player sits in a second
+     * window over the chat), so that shot misses the very text we watch.
+     * The first poll of a session takes both shots and compares what OCR
+     * reads: anything new only in the full-screen one → full screen it is
+     * (our layer hidden for a frame each time), else window shots.
+     */
     private fun poll() {
         val s = session ?: return
         val key = settings.apiKey ?: return
         if (Build.VERSION.SDK_INT < 34 || !live || lookup) return
         val screen = screenRect()
-        appShot(screen) { shot ->
-            if (shot == null || s.gen != generation) return@appShot schedulePoll()
-            val pad = (4 * resources.displayMetrics.density).toInt()
-            pool.execute {
-                val ocr = runCatching { Ocr.recognize(shot, pad) }.getOrNull()
-                post(s) {
-                    if (ocr != null && live && !lookup) applyPoll(s, key, ocr, shot)
-                    schedulePoll()
-                }
+        when (s.pollMode) {
+            POLL_FULL -> fullShot(s) { shot -> pollWith(s, key, shot) }
+            POLL_WINDOW -> appShot(screen) { shot -> pollWith(s, key, shot) }
+            else -> appShot(screen) { win ->
+                if (s.gen != generation) return@appShot
+                fullShot(s) { full -> decidePollMode(s, key, win, full) }
             }
         }
     }
 
-    private fun applyPoll(s: Session, key: String, ocr: Ocr.Result, shot: Bitmap) {
+    private fun pollWith(s: Session, key: String, shot: Bitmap?) {
+        if (shot == null || s.gen != generation) return schedulePoll()
+        pool.execute {
+            val ocr = runCatching { Ocr.recognize(shot, ocrPad()) }.getOrNull()
+            post(s) {
+                if (ocr != null && live && !lookup) applyPoll(s, key, ocr, shot)
+                schedulePoll()
+            }
+        }
+    }
+
+    private fun decidePollMode(s: Session, key: String, win: Bitmap?, full: Bitmap?) {
+        if (s.gen != generation) return
+        if (full == null) {   // full-screen shot failed: window shots are all we have
+            s.pollMode = POLL_WINDOW
+            return pollWith(s, key, win)
+        }
+        pool.execute {
+            val fromFull = runCatching { Ocr.recognize(full, ocrPad()) }.getOrNull()
+            val fromWin = win?.let { runCatching { Ocr.recognize(it, ocrPad()) }.getOrNull() }
+            post(s) {
+                if (fromFull == null) return@post schedulePoll()
+                val inFull = pollBlocks(s, fromFull)
+                val inWin = fromWin?.let { pollBlocks(s, it) }.orEmpty()
+                val missing = inFull.count { f ->
+                    inWin.none { w -> overlap(f.bounds, w.bounds) > 0.4 && sameText(f.text, w.text) }
+                }
+                s.pollMode = if (fromWin == null || missing > 0) POLL_FULL else POLL_WINDOW
+                if (BuildConfig.DEBUG) android.util.Log.d("TransSnip", "poll mode: " +
+                    "${if (s.pollMode == POLL_FULL) "full screen" else "app window"} " +
+                    "(full ${inFull.size} blocks, window ${inWin.size}, missing $missing)")
+                if (live && !lookup) applyPoll(s, key, fromFull, full)
+                schedulePoll()
+            }
+        }
+    }
+
+    /** Full-screen shot with our translation layer hidden for it (one frame of flicker). */
+    private fun fullShot(s: Session, done: (Bitmap?) -> Unit) {
+        s.overlay.hideForCapture(true)
+        // Let one frame without our layer reach the screen before shooting it.
+        main.postDelayed({
+            takeScreenshot { shot ->
+                s.overlay.hideForCapture(false)
+                done(shot)
+            }
+        }, CAPTURE_HIDE_MS)
+    }
+
+    private fun ocrPad() = (4 * resources.displayMetrics.density).toInt()
+
+    /** OCR blocks [poll] cares about: text to translate, not the status bar, not accessibility text. */
+    private fun pollBlocks(s: Session, ocr: Ocr.Result): List<ScreenItem> {
         val target = settings.targetLang
         val top = statusBarHeight()
-        val now = ocr.blocks.filter { b ->
+        return ocr.blocks.filter { b ->
             b.bounds.centerY() > top && Prompts.needsTranslation(b.text, target) &&
                 s.exposedVisible.none { overlap(b.bounds, it) > 0.3 }
         }
+    }
+
+    private fun applyPoll(s: Session, key: String, ocr: Ocr.Result, shot: Bitmap) {
+        val now = pollBlocks(s, ocr)
         // Same text at the same place (OCR wobbles a little frame to frame) → keep.
         val kept = HashSet<Int>()
         val fresh = ArrayList<ScreenItem>()
@@ -692,6 +754,10 @@ class ScreenService : AccessibilityService() {
         private const val PAD_OCR = 6
         private const val SLOW_MS = 3000L
         private const val POLL_MS = 1000L
+        private const val CAPTURE_HIDE_MS = 50L
+        private const val POLL_UNKNOWN = 0
+        private const val POLL_WINDOW = 1
+        private const val POLL_FULL = 2
         private const val GESTURE_DELAY_MS = 120L
     }
 
@@ -746,6 +812,9 @@ class ScreenService : AccessibilityService() {
             }
             return from until items.size
         }
+
+        /** How [poll] shoots the screen for this session: POLL_UNKNOWN / POLL_WINDOW / POLL_FULL. */
+        var pollMode = POLL_UNKNOWN
 
         /** Items that came from OCR (pixels) — the ones [poll] keeps up to date. */
         val ocrIdx = LinkedHashSet<Int>()

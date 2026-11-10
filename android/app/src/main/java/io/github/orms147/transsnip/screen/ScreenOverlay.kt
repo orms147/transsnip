@@ -130,8 +130,18 @@ class ScreenOverlay(
         root.background = frame?.takeIf { !it.isRecycled }?.let { BitmapDrawable(context.resources, it) }
     }
 
+    /** Invisible for a screenshot of what's underneath (no layout change, touches unaffected). */
+    fun hideForCapture(hide: Boolean) {
+        if (fading) return   // already on its way out (the page moved) — leave it gone
+        root.animate().cancel()
+        root.alpha = if (hide) 0f else 1f
+    }
+
+    private var fading = false
+
     /** The page moved under the translations: get them out of the way at once. */
     fun fadeOut() {
+        fading = true
         root.animate().cancel()
         root.animate().alpha(0f).setDuration(80).start()
     }
