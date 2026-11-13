@@ -67,7 +67,7 @@ TransSnip lives in the system tray and stays out of your way until you call it.
 
 ## Install (end users)
 
-Download **`TransSnip-Setup-0.4.2.exe`** from the [latest release](../../releases/latest) and run it.
+Download **`TransSnip-Setup-0.4.3.exe`** from the [latest release](../../releases/latest) and run it.
 
 - Per-user install (`%LOCALAPPDATA%\Programs\TransSnip`) — **no administrator rights needed**.
 - Bundles everything (Python runtime + OCR models). No separate downloads.

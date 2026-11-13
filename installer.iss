@@ -8,7 +8,7 @@
 ;   3. Result: dist\installer\TransSnip-Setup.exe
 
 #define MyAppName "TransSnip"
-#define MyAppVersion "0.4.2"
+#define MyAppVersion "0.4.3"
 #define MyAppPublisher "Bach Nguyen"
 #define MyAppExeName "TransSnip.exe"
 
@@ -24,7 +24,7 @@ DisableProgramGroupPage=yes
 OutputDir=dist\installer
 ; Versioned name so this audio-bundled build sits ALONGSIDE the old lean
 ; TransSnip-Setup.exe instead of overwriting it (dist/ is gitignored).
-OutputBaseFilename=TransSnip-Setup-0.4.2
+OutputBaseFilename=TransSnip-Setup-0.4.3
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
