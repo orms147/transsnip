@@ -103,6 +103,7 @@ class VideoSubtitleController(PipelineControllerBase):
 
     text_ready = Signal(str)
     status = Signal(str)
+    problem = Signal(str)   # a line couldn't be translated (shown on the bar)
     error = Signal(str)
     stopped = Signal()
 
@@ -125,6 +126,7 @@ class VideoSubtitleController(PipelineControllerBase):
         self.stop()
         worker = TranslateWorker(translator, ctx)
         worker.text_ready.connect(self.text_ready)
+        worker.problem.connect(self.problem)
         capture = _CaptureLoop(region, dpr, ocr, ctx)
         # new_source → worker.submit runs on the controller's (main) thread;
         # the lock guards the handoff to the worker thread.

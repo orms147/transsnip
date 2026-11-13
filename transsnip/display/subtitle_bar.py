@@ -140,6 +140,16 @@ class SubtitleBar(QWidget):
         self._status = status
         self.update()
 
+    def set_problem(self, message: str) -> None:
+        """A line couldn't be translated: say so instead of leaving a stale
+        translation up (or nothing at all). The next translation replaces it."""
+        self._text = ""
+        self._prev = ""
+        self._reset_pacing()
+        self._status = message
+        self._relayout()
+        self.update()
+
     def set_text(self, text: str) -> None:
         """Queue a freshly translated line, respecting the current line's dwell.
 

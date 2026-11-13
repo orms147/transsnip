@@ -114,6 +114,7 @@ class AppController(QObject):
         self._video = VideoSubtitleController(self)
         self._video.text_ready.connect(self._subtitle_bar.set_text)
         self._video.status.connect(self._subtitle_bar.set_status)
+        self._video.problem.connect(self._subtitle_bar.set_problem)
         self._video.error.connect(lambda msg: self._notify(f"Video subtitle: {msg}"))
         self._video.stopped.connect(self._subtitle_bar.stop)
         self._region_target = "translate"
@@ -128,6 +129,7 @@ class AppController(QObject):
         self._audio = AudioSubtitleController(self)
         self._audio.text_ready.connect(self._on_audio_text)
         self._audio.status.connect(self._subtitle_bar.set_status)
+        self._audio.problem.connect(self._subtitle_bar.set_problem)
         self._audio.error.connect(lambda msg: self._notify(f"Audio subtitle: {msg}"))
         self._audio.stopped.connect(self._subtitle_bar.stop)
         self._app.aboutToQuit.connect(self._audio.stop)

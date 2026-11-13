@@ -233,6 +233,7 @@ class AudioSubtitleController(PipelineControllerBase):
 
     text_ready = Signal(str)
     status = Signal(str)
+    problem = Signal(str)   # a line couldn't be translated (shown on the bar)
     error = Signal(str)
     stopped = Signal()
 
@@ -257,6 +258,7 @@ class AudioSubtitleController(PipelineControllerBase):
         buffer = _AudioBuffer()
         worker = OrderedTranslateWorker(translator, ctx)
         worker.text_ready.connect(self.text_ready)
+        worker.problem.connect(self.problem)
         capture_thread = _CaptureThread(LoopbackCapture(), buffer)
         capture_thread.error.connect(self.error)
         # Queued: the error comes from the capture thread; stop() must run on
